@@ -578,12 +578,12 @@ tr.selected td{background:rgba(37,99,235,.04)}
     <div class="wiz-q-num">Question 2 of 5</div>
     <div class="wiz-q">Which GPU are you targeting?</div>
     <div class="wiz-opts">
-      <button class="wiz-opt" onclick="wizPickGpu('A100',40,15000,1.10,this)"><span>A100 40GB</span><span class="wiz-opt-sub">$15K &middot; $1.10/hr</span></button>
-      <button class="wiz-opt" onclick="wizPickGpu('A100',80,17000,1.80,this)"><span>A100 80GB</span><span class="wiz-opt-sub">$17K &middot; $1.80/hr</span></button>
-      <button class="wiz-opt on" onclick="wizPickGpu('H100',80,25000,3.10,this)"><span>H100 80GB</span><span class="wiz-opt-sub">$25K &middot; $3.10/hr</span></button>
-      <button class="wiz-opt" onclick="wizPickGpu('H200',141,35000,4.20,this)"><span>H200 141GB</span><span class="wiz-opt-sub">$35K &middot; $4.20/hr</span></button>
-      <button class="wiz-opt" onclick="wizPickGpu('B200',192,48000,5.50,this)"><span>B200 192GB</span><span class="wiz-opt-sub">$48K &middot; $5.50/hr</span></button>
-      <button class="wiz-opt" onclick="wizPickGpu('L40S',48,12000,1.50,this)"><span>L40S 48GB</span><span class="wiz-opt-sub">$12K &middot; $1.50/hr</span></button>
+      <button class="wiz-opt" onclick="wizPickGpu('A100-40',this)"><span>A100 40GB</span><span class="wiz-opt-sub">$15K &middot; $1.10/hr</span></button>
+      <button class="wiz-opt" onclick="wizPickGpu('A100-80',this)"><span>A100 80GB</span><span class="wiz-opt-sub">$17K &middot; $1.80/hr</span></button>
+      <button class="wiz-opt on" onclick="wizPickGpu('H100',this)"><span>H100 80GB</span><span class="wiz-opt-sub">$25K &middot; $3.10/hr</span></button>
+      <button class="wiz-opt" onclick="wizPickGpu('H200',this)"><span>H200 141GB</span><span class="wiz-opt-sub">$35K &middot; $4.20/hr</span></button>
+      <button class="wiz-opt" onclick="wizPickGpu('B200',this)"><span>B200 192GB</span><span class="wiz-opt-sub">$48K &middot; $5.50/hr</span></button>
+      <button class="wiz-opt" onclick="wizPickGpu('L40S',this)"><span>L40S 48GB</span><span class="wiz-opt-sub">$12K &middot; $1.50/hr</span></button>
     </div>
     <div class="wiz-nav"><button class="wiz-back" onclick="wizBack()">&larr; Back</button><button class="wiz-next" onclick="wizNext()">Next &rarr;</button></div>
   </div>
@@ -636,7 +636,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
         <div class="wiz-ans-row" onclick="wizGoTo(4)"><span class="wiz-ans-label">Precision</span><span class="wiz-ans-val" id="wans-prec">&mdash;<span class="wiz-edit">edit</span></span></div>
         <div style="margin-top:14px;display:flex;flex-direction:column;gap:5px">
           <button class="wiz-restart" onclick="wizRestart()">&#8635; Start over</button>
-          <button class="wiz-restart" onclick="switchPage('calc',document.querySelectorAll('.ntab')[2])">Full calculator &rarr;</button>
+          <button class="wiz-restart" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:500" onclick="wizOpenAdvanced()">&#9881; Open in Advanced calculator &rarr;</button>
         </div>
       </div>
       <div class="wiz-result-panel">
@@ -873,6 +873,12 @@ tr.selected td{background:rgba(37,99,235,.04)}
     <div class="rp" id="rp">
 
       <div class="rp-ph" id="rp-ph">&#8592; Configure your model and workload to see sizing results</div>
+      <!-- Wizard back pill — only visible when coming from Quick Size -->
+      <div id="wiz-back-pill" style="display:none;margin-bottom:8px">
+        <button onclick="switchPage('wizard',document.querySelectorAll('.ntab')[1])" style="display:flex;align-items:center;gap:6px;padding:5px 12px;background:var(--bdim);border:1px solid var(--bbord);border-radius:20px;font-family:var(--mono);font-size:10px;color:var(--blue);cursor:pointer">
+          &#8592; Back to Quick Size results
+        </button>
+      </div>
 
       <div id="rp-results" style="display:none">
 
@@ -2069,6 +2075,9 @@ function switchPage(id, elem) {
   el('page-' + id).classList.add('on');
   if (id === 'explorer') { expRenderChart(); expRenderTable(); }
   if (id === 'wizard') { wizUpdateProgress(); }
+  // Show/hide "back to wizard" pill in Advanced
+  var pill = document.getElementById('wiz-back-pill');
+  if (pill) pill.style.display = id === 'calc' ? '' : 'none';
 }
 function switchE(id, elem) {
   document.querySelectorAll('.etab').forEach(function(t) { t.classList.remove('on'); });
@@ -2448,54 +2457,176 @@ var sl=JSON.parse(localStorage.getItem('gpu-calc-locs')||'{}');
 if(Object.keys(sl).length)renderGeo(sl);
 renderResult();
 
-// ===== WIZARD =====
-var WS={step:0,params:8,paramsLabel:'~8B',gpuVram:80,gpuName:'H100',gpuPrice:25000,gpuCloud:3.10,ctx:8,users:100,prec:2,precLabel:'BF16'};
-function wizPickModel(p,lbl,el){WS.params=p;WS.paramsLabel=lbl;el.closest('.wiz-opts').querySelectorAll('.wiz-opt').forEach(function(o){o.classList.remove('on');});el.classList.add('on');}
-function wizPickGpu(name,vram,price,cloud,el){WS.gpuName=name;WS.gpuVram=vram;WS.gpuPrice=price;WS.gpuCloud=cloud;el.closest('.wiz-opts').querySelectorAll('.wiz-opt').forEach(function(o){o.classList.remove('on');});el.classList.add('on');}
-function wizPickCtx(v,el){WS.ctx=v;el.closest('.wiz-opts').querySelectorAll('.wiz-opt').forEach(function(o){o.classList.remove('on');});el.classList.add('on');}
-function wizSetUsers(v){WS.users=v;document.getElementById('wiz-users-inp').value=v;}
-function wizPickPrec(v,lbl,el){WS.prec=v;WS.precLabel=lbl;el.closest('.wiz-opts').querySelectorAll('.wiz-opt').forEach(function(o){o.classList.remove('on');});el.classList.add('on');}
-function wizUpdateProgress(){for(var i=0;i<5;i++){var d=document.getElementById('wdot-'+i);d.className='wiz-step-dot'+(i<WS.step?' done':i===WS.step?' cur':'');}document.getElementById('wiz-step-label').textContent='Step '+(WS.step+1)+' of 5';}
-function wizBack(){if(WS.step===0)return;document.getElementById('wstep-'+WS.step).style.display='none';WS.step--;document.getElementById('wstep-'+WS.step).style.display='';wizUpdateProgress();}
-function wizNext(){WS.users=+(document.getElementById('wiz-users-inp').value)||100;if(WS.step>=4){wizShowResults();return;}document.getElementById('wstep-'+WS.step).style.display='none';WS.step++;document.getElementById('wstep-'+WS.step).style.display='';wizUpdateProgress();}
-function wizGoTo(step){WS.step=step;document.getElementById('wstep-results').style.display='none';for(var i=0;i<5;i++)document.getElementById('wstep-'+i).style.display=i===step?'':'none';wizUpdateProgress();}
-function wizRestart(){WS.step=0;document.getElementById('wstep-results').style.display='none';for(var i=1;i<5;i++)document.getElementById('wstep-'+i).style.display='none';document.getElementById('wstep-0').style.display='';wizUpdateProgress();}
-function wizShowResults(){
-  WS.users=+(document.getElementById('wiz-users-inp').value)||100;
-  for(var i=0;i<5;i++)document.getElementById('wstep-'+i).style.display='none';
-  document.getElementById('wstep-results').style.display='';
-  for(var i=0;i<5;i++)document.getElementById('wdot-'+i).className='wiz-step-dot done';
-  document.getElementById('wiz-step-label').textContent='Results';
-  wizCalc();
+// ===== WIZARD — shares S with Advanced, one engine =====
+// WS tracks wizard UI step only. All model/gpu/ctx/users state lives in S.
+var WS = { step: 0 };
+
+// GPU lookup table matching Advanced calc pickGpu args: (name, vram, awsHr, opPrice)
+var WIZ_GPUS = {
+  'A100-40': {name:'A100',  vram:40,  aws:1.10, op:15000},
+  'A100-80': {name:'A100',  vram:80,  aws:1.80, op:17000},
+  'H100':    {name:'H100',  vram:80,  aws:3.10, op:25000},
+  'H200':    {name:'H200',  vram:141, aws:4.20, op:35000},
+  'B200':    {name:'B200',  vram:192, aws:5.50, op:48000},
+  'L40S':    {name:'L40S',  vram:48,  aws:1.50, op:12000},
+};
+
+// Map WS.gpuKey → S fields and sync Advanced GPU card UI
+function wizApplyGpu(key) {
+  var g = WIZ_GPUS[key]; if (!g) return;
+  WS.gpuKey = key;
+  S.gpuName = g.name; S.gpu = g.vram; S.awsHr = g.aws; S.onpremYr = g.op;
 }
-function wizCalc(){
-  function nP2(n){var p=1;while(p<n)p*=2;return p;}
+
+// Map params → S.model and clear exact KV (will use approx until HF lookup)
+function wizApplyModel(params, label) {
+  WS.paramsLabel = label;
+  S.model = params; S.modelLabel = label;
+  S.numKvHeads = null; S.headDim = null; S.numLayers = null; S.hfId = null;
+}
+
+function wizPickModel(p, lbl, el) {
+  wizApplyModel(p, lbl);
+  el.closest('.wiz-opts').querySelectorAll('.wiz-opt').forEach(function(o){o.classList.remove('on');});
+  el.classList.add('on');
+}
+function wizPickGpu(key, el) {
+  wizApplyGpu(key);
+  el.closest('.wiz-opts').querySelectorAll('.wiz-opt').forEach(function(o){o.classList.remove('on');});
+  el.classList.add('on');
+}
+function wizPickCtx(v, el) {
+  S.ctx = v;
+  el.closest('.wiz-opts').querySelectorAll('.wiz-opt').forEach(function(o){o.classList.remove('on');});
+  el.classList.add('on');
+}
+function wizSetUsers(v) { S.users = v; document.getElementById('wiz-users-inp').value = v; }
+function wizPickPrec(bytes, lbl, el) {
+  S.wp = bytes; WS.precLabel = lbl;
+  el.closest('.wiz-opts').querySelectorAll('.wiz-opt').forEach(function(o){o.classList.remove('on');});
+  el.classList.add('on');
+}
+
+function wizUpdateProgress() {
+  for (var i = 0; i < 5; i++) {
+    var d = document.getElementById('wdot-' + i);
+    d.className = 'wiz-step-dot' + (i < WS.step ? ' done' : i === WS.step ? ' cur' : '');
+  }
+  document.getElementById('wiz-step-label').textContent = 'Step ' + (WS.step + 1) + ' of 5';
+}
+function wizBack() {
+  if (WS.step === 0) return;
+  document.getElementById('wstep-' + WS.step).style.display = 'none';
+  WS.step--;
+  document.getElementById('wstep-' + WS.step).style.display = '';
+  wizUpdateProgress();
+}
+function wizNext() {
+  var uinp = document.getElementById('wiz-users-inp');
+  if (uinp) S.users = +(uinp.value) || 100;
+  if (WS.step >= 4) { wizShowResults(); return; }
+  document.getElementById('wstep-' + WS.step).style.display = 'none';
+  WS.step++;
+  document.getElementById('wstep-' + WS.step).style.display = '';
+  wizUpdateProgress();
+}
+function wizGoTo(step) {
+  WS.step = step;
+  document.getElementById('wstep-results').style.display = 'none';
+  for (var i = 0; i < 5; i++) {
+    document.getElementById('wstep-' + i).style.display = i === step ? '' : 'none';
+  }
+  wizUpdateProgress();
+}
+function wizRestart() {
+  WS.step = 0;
+  document.getElementById('wstep-results').style.display = 'none';
+  for (var i = 1; i < 5; i++) document.getElementById('wstep-' + i).style.display = 'none';
+  document.getElementById('wstep-0').style.display = '';
+  wizUpdateProgress();
+}
+function wizShowResults() {
+  var uinp = document.getElementById('wiz-users-inp');
+  if (uinp) S.users = +(uinp.value) || 100;
+  for (var i = 0; i < 5; i++) document.getElementById('wstep-' + i).style.display = 'none';
+  document.getElementById('wstep-results').style.display = '';
+  for (var i = 0; i < 5; i++) document.getElementById('wdot-' + i).className = 'wiz-step-dot done';
+  document.getElementById('wiz-step-label').textContent = 'Results';
+  wizRenderResults();
+}
+
+// Render wizard results using calcTiers() — same engine as Advanced
+function wizRenderResults() {
   function f$(n){return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1000?'$'+Math.round(n/1000)+'K':'$'+Math.round(n);}
   function fGB(n){return n>=10?Math.round(n)+' GB':n.toFixed(1)+' GB';}
-  var wt=WS.params*WS.prec,usable=WS.gpuVram*0.92;
-  var kvBpt=0.02*WS.params*WS.prec,kvB=kvBpt*WS.ctx;
-  var MAX_TP=8,tpW=nP2(Math.max(1,Math.ceil(wt/Math.max(0.1,usable))));
-  var bestTp=tpW,bestTotal=Infinity,tp=tpW;
-  while(tp<=MAX_TP){var av=(usable*tp-wt)*0.95;if(av>0){var u=Math.max(1,Math.floor(av/Math.max(0.001,kvB)));var tot=Math.ceil(WS.users/u)*tp;if(tot<bestTotal){bestTotal=tot;bestTp=tp;}}tp*=2;}
-  var tpMin=bestTp,aPA=(usable*tpMin-wt)*0.95;
-  var upr=Math.max(1,Math.floor(aPA/Math.max(0.001,kvB)));
-  var reps=Math.ceil(WS.users/upr),t1=reps*tpMin;
-  var opTot=t1*WS.gpuPrice,clMo=t1*WS.gpuCloud*720,clTot=0,mo=clMo;
-  for(var y=0;y<5;y++){clTot+=mo*12;mo*=1.03;}
-  document.getElementById('wres-gpus').textContent=t1;
-  document.getElementById('wres-sub').textContent=t1+' × '+WS.gpuName+' · TP='+tpMin+' · '+reps+' replica'+(reps!==1?'s':'')+' · '+WS.ctx+'K ctx';
-  document.getElementById('wm-kv').textContent=fGB(kvB);document.getElementById('wm-kv-sub').textContent=(kvBpt*1000).toFixed(2)+' MB/tok';
-  document.getElementById('wm-upr').textContent=upr;document.getElementById('wm-upr-sub').textContent=reps+' replica'+(reps!==1?'s':'')+' × '+tpMin+' GPU'+(tpMin!==1?'s':'');
-  document.getElementById('wm-tp').textContent='TP='+tpMin;document.getElementById('wm-tp-sub').textContent=tpMin===1?'no TP':tpMin+' GPUs/replica';
-  document.getElementById('wm-pool').textContent=fGB(aPA);
-  document.getElementById('wc-op').textContent=f$(opTot);document.getElementById('wc-op-sub').textContent=t1+' GPUs × $'+Math.round(WS.gpuPrice/1000)+'K · '+f$(Math.round(opTot/60))+'/mo';
-  document.getElementById('wc-cl').textContent=f$(Math.round(clTot));document.getElementById('wc-cl-sub').textContent='$'+Math.round(clMo).toLocaleString()+'/mo today · +3%/yr';
-  document.getElementById('wans-model').innerHTML=WS.paramsLabel+' <span class="wiz-edit">edit</span>';
-  document.getElementById('wans-gpu').innerHTML=WS.gpuName+' '+WS.gpuVram+'GB <span class="wiz-edit">edit</span>';
-  document.getElementById('wans-ctx').innerHTML=WS.ctx+'K tokens <span class="wiz-edit">edit</span>';
-  document.getElementById('wans-users').innerHTML=WS.users+' concurrent <span class="wiz-edit">edit</span>';
-  document.getElementById('wans-prec').innerHTML=WS.precLabel+' <span class="wiz-edit">edit</span>';
+
+  var r = calcTiers(); // ← SAME ENGINE as Advanced
+
+  document.getElementById('wres-gpus').textContent = r.t1;
+  document.getElementById('wres-sub').textContent = r.t1 + ' \xd7 ' + S.gpuName
+    + ' \u00b7 TP=' + r.tpMin
+    + ' \u00b7 ' + Math.ceil(S.users / r.upr) + ' replica' + (Math.ceil(S.users/r.upr)!==1?'s':'')
+    + ' \u00b7 ' + S.ctx + 'K ctx';
+
+  document.getElementById('wm-kv').textContent = fGB(r.kvB);
+  document.getElementById('wm-kv-sub').textContent = (r.kvBpt*1000).toFixed(3) + ' MB/tok';
+  document.getElementById('wm-upr').textContent = r.upr;
+  document.getElementById('wm-upr-sub').textContent = Math.ceil(S.users/r.upr) + ' replica' + (Math.ceil(S.users/r.upr)!==1?'s':'') + ' \xd7 ' + r.tpMin + ' GPU' + (r.tpMin!==1?'s':'');
+  document.getElementById('wm-tp').textContent = 'TP=' + r.tpMin;
+  document.getElementById('wm-tp-sub').textContent = r.tpMin === 1 ? 'no tensor parallel' : r.tpMin + ' GPUs/replica';
+  document.getElementById('wm-pool').textContent = fGB(r.aPA);
+
+  // Cost — use same formulas as Advanced
+  var yrs = S.amortYrs, opTot = r.t1 * S.onpremYr;
+  var clMo = r.t1 * S.awsHr * 720, clTot = 0, mo = clMo;
+  for (var y = 0; y < yrs; y++) { clTot += mo * 12; mo *= (1 + S.cloudHike/100); }
+
+  document.getElementById('wc-op').textContent = f$(opTot);
+  document.getElementById('wc-op-sub').textContent = r.t1 + ' GPUs \xd7 $' + Math.round(S.onpremYr/1000) + 'K \u00b7 ' + f$(Math.round(opTot/(yrs*12))) + '/mo';
+  document.getElementById('wc-cl').textContent = f$(Math.round(clTot));
+  document.getElementById('wc-cl-sub').textContent = '$' + Math.round(clMo).toLocaleString() + '/mo today \u00b7 +' + S.cloudHike + '%/yr \u00b7 ' + yrs + 'yrs';
+
+  // Answer summary — read from S
+  document.getElementById('wans-model').innerHTML = S.modelLabel + ' (' + S.model + 'B) <span class="wiz-edit">edit</span>';
+  document.getElementById('wans-gpu').innerHTML = S.gpuName + ' ' + S.gpu + 'GB <span class="wiz-edit">edit</span>';
+  document.getElementById('wans-ctx').innerHTML = S.ctx + 'K tokens <span class="wiz-edit">edit</span>';
+  document.getElementById('wans-users').innerHTML = S.users + ' concurrent <span class="wiz-edit">edit</span>';
+  document.getElementById('wans-prec').innerHTML = (WS.precLabel||'BF16') + ' <span class="wiz-edit">edit</span>';
 }
+
+// Push wizard state into Advanced calc UI and navigate there
+function wizOpenAdvanced() {
+  // Sync GPU cards
+  document.querySelectorAll('#gpu-cards .gcard').forEach(function(c) { c.classList.remove('on'); });
+  document.querySelectorAll('#gpu-cards .gcard').forEach(function(c) {
+    if (c.onclick && c.onclick.toString().indexOf("'" + S.gpuName + "'") >= 0
+        && c.onclick.toString().indexOf(S.gpu + ',') >= 0) {
+      c.classList.add('on');
+    }
+  });
+  // Sync model slider
+  el('s-params').value = Math.min(S.model, 405);
+  el('sv-params').textContent = S.model + 'B';
+  // Sync users
+  setU(S.users);
+  // Sync context
+  setC(S.ctx);
+  // Sync precision chips
+  document.querySelectorAll('#wp-chips .chip').forEach(function(c) {
+    c.classList.toggle('on', +c.dataset.v === S.wp);
+  });
+  // Sync cost assumptions
+  syncAssumptions();
+  // Clear HF status (model set manually via wizard)
+  el('hf-inp').value = S.hfId || '';
+  el('hf-st').textContent = S.hfId ? '\u2713 Loaded from wizard' : '';
+  el('hf-st').className = S.hfId ? 'hfst ok' : 'hfst';
+  // Navigate
+  var advTab = document.querySelectorAll('.ntab')[2];
+  switchPage('calc', advTab);
+  renderResult();
+}
+
 
 // ===== EXPLORER =====
 var EXP={nv:true,amd:true,cloud:true,axX:'vram',axY:'tpp',axR:'tpp_per_100'};
