@@ -1,0 +1,2576 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gpu.calc — LLM Inference Sizing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;500;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f5f6f8;--bg2:#ffffff;--bg3:#eef0f4;--bg4:#e2e5ec;
+  --border:rgba(0,0,0,0.07);--border2:rgba(0,0,0,0.13);
+  --text:#0f1117;--text2:#505666;--text3:#9098aa;
+  --blue:#2563eb;--bdim:rgba(37,99,235,0.08);--bbord:rgba(37,99,235,0.22);
+  --green:#15803d;--gdim:rgba(21,128,61,0.08);
+  --amber:#92400e;--adim:rgba(146,64,14,0.08);--abord:rgba(146,64,14,0.18);
+  --red:#b91c1c;
+  --mono:'DM Mono',monospace;--display:'Syne',sans-serif;--body:'DM Sans',sans-serif;
+}
+html.dark{
+  --bg:#0d0f12;--bg2:#141720;--bg3:#1c1f2a;--bg4:#242836;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.11);
+  --text:#e8eaf0;--text2:#8b90a0;--text3:#555b6e;
+  --blue:#4f8ef7;--bdim:rgba(79,142,247,0.12);--bbord:rgba(79,142,247,0.28);
+  --green:#3ecf8e;--gdim:rgba(62,207,142,0.1);
+  --amber:#f7a94f;--adim:rgba(247,169,79,0.1);--abord:rgba(247,169,79,0.25);
+  --red:#f76f6f;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg);color:var(--text);font-family:var(--body);transition:background .25s,color .25s}
+body{min-height:100vh;display:flex;flex-direction:column}
+input,button{font-family:var(--body)}
+
+/* NAV */
+.nav{display:flex;align-items:center;justify-content:space-between;padding:10px 24px;
+  border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:100;gap:8px;flex-wrap:wrap}
+.brand{font-family:var(--display);font-size:16px;font-weight:700;letter-spacing:-.02em}
+.brand span{color:var(--blue)}
+.ntabs{display:flex;gap:2px;background:var(--bg3);border-radius:8px;padding:3px}
+.ntab{padding:5px 16px;border-radius:6px;font-size:12px;cursor:pointer;color:var(--text2);border:none;background:none;font-family:var(--body);transition:all .12s}
+.ntab.on{background:var(--bg4);color:var(--text);font-weight:500}
+.nright{display:flex;align-items:center;gap:7px}
+.tbtn{display:flex;align-items:center;gap:5px;padding:5px 12px;background:var(--bg3);
+  border:1px solid var(--border2);border-radius:20px;cursor:pointer;font-size:11px;color:var(--text2);font-family:var(--body)}
+.tbtn:hover{background:var(--bg4)}
+.apill{display:flex;align-items:center;gap:7px;padding:5px 12px;background:var(--bg3);
+  border-radius:20px;border:1px solid var(--border2);font-size:11px;color:var(--text3)}
+.tw{display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+.tt{width:26px;height:15px;border-radius:8px;background:var(--bg4);position:relative;
+  transition:background .18s;border:1px solid var(--border2);flex-shrink:0}
+.tt.on{background:var(--blue);border-color:var(--blue)}
+.th{width:11px;height:11px;border-radius:50%;background:#fff;position:absolute;top:1px;left:1px;transition:transform .18s}
+.tt.on .th{transform:translateX(11px)}
+.tlbl{font-size:11px;color:var(--text2)}
+
+/* MAIN */
+.main{flex:1;max-width:1160px;margin:0 auto;width:100%;padding:18px 20px}
+.page{display:none}.page.on{display:block}
+
+/* DISCLAIMER */
+.disc-top{display:flex;align-items:flex-start;gap:8px;padding:9px 14px;
+  background:var(--adim);border:1px solid var(--abord);border-radius:8px;
+  font-size:11px;color:var(--amber);margin-bottom:16px;line-height:1.5}
+.disc-top svg{flex-shrink:0;margin-top:1px}
+.bug-link{margin-left:auto;white-space:nowrap;font-family:var(--mono);font-size:10px;
+  color:var(--amber);border:1px solid var(--abord);border-radius:4px;padding:2px 8px;
+  text-decoration:none;flex-shrink:0}
+.bug-link:hover{background:var(--adim)}
+
+/* TWO-COLUMN */
+.layout{display:grid;grid-template-columns:310px 1fr;gap:16px;align-items:start}
+@media(max-width:780px){.layout{grid-template-columns:1fr}}
+
+/* INPUT CARDS */
+.ic{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px}
+.ict{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.08em;margin-bottom:10px;text-transform:uppercase}
+.divider{height:1px;background:var(--border);margin:10px 0}
+
+/* HF */
+.hfrow{display:flex;gap:6px;margin-bottom:5px}
+.hfinp{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;
+  color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 10px;outline:none}
+.hfinp:focus{border-color:var(--blue)}
+.hfinp::placeholder{color:var(--text3);font-size:11px}
+.hfbtn{padding:7px 14px;background:var(--blue);border:none;border-radius:7px;
+  color:#fff;font-size:12px;cursor:pointer;font-weight:500;white-space:nowrap}
+.hfbtn:disabled{opacity:.4;cursor:default}
+.hfst{font-family:var(--mono);font-size:10px;min-height:14px;margin-bottom:6px}
+.hfst.ok{color:var(--green)}.hfst.err{color:var(--red)}.hfst.spin{color:var(--text3)}
+.qpicks{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.qchip{padding:3px 9px;border-radius:10px;border:1px solid var(--border2);
+  font-size:10px;cursor:pointer;background:var(--bg3);color:var(--text2);font-family:var(--mono)}
+.qchip:hover{border-color:var(--bbord);color:var(--blue)}
+.minfo{background:var(--bg3);border-radius:6px;padding:7px 10px;margin-bottom:6px;
+  font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.9;display:none}
+.minfo.show{display:block}
+
+/* SLIDERS */
+.srow{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.srow label{font-size:11px;color:var(--text2);width:118px;flex-shrink:0;line-height:1.4}
+.srow input[type=range]{flex:1;accent-color:var(--blue);cursor:pointer}
+.sval{font-family:var(--mono);font-size:11px;font-weight:500;min-width:42px;text-align:right;color:var(--text)}
+.ninp{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;
+  color:var(--text);font-family:var(--mono);font-size:12px;padding:5px 8px;
+  text-align:center;outline:none;width:72px}
+.ninp:focus{border-color:var(--blue)}
+.chips{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:7px}
+.chip{padding:3px 10px;border-radius:14px;border:1px solid var(--border2);
+  font-size:11px;cursor:pointer;background:var(--bg2);color:var(--text2);transition:all .12s}
+.chip.on{background:var(--bdim);color:var(--blue);border-color:var(--bbord)}
+.clbl{font-size:11px;color:var(--text2);margin-bottom:5px;margin-top:6px}
+
+/* GPU CARDS */
+.ggrid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px}
+.gcard{border:1px solid var(--border2);border-radius:8px;padding:8px 10px;
+  cursor:pointer;background:var(--bg2);transition:all .12s}
+.gcard:hover{border-color:var(--bbord)}.gcard.on{border:1.5px solid var(--blue);background:var(--bdim)}
+.gcn{font-size:12px;font-weight:500;margin-bottom:1px}.gcard.on .gcn{color:var(--blue)}
+.gcs{font-size:10px;color:var(--text3);font-family:var(--mono)}
+
+/* DRAWER */
+.drawer{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:10px}
+.dhd{display:flex;align-items:center;padding:9px 13px;cursor:pointer;background:var(--bg2)}
+.dhd:hover{background:var(--bg3)}
+.dt{font-size:12px;font-weight:500;flex:1}.ds{font-size:10px;color:var(--text3)}
+.da{font-family:var(--mono);font-size:10px;color:var(--text3);transition:transform .2s;margin-left:8px}
+.da.open{transform:rotate(180deg)}
+.dbd{display:none;border-top:1px solid var(--border)}.dbd.open{display:block}
+.dsec{padding:11px 13px;border-bottom:1px solid var(--border)}.dsec:last-child{border-bottom:none}
+.dstitle{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.07em;margin-bottom:7px;text-transform:uppercase}
+.aprow{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.aprow label{font-size:11px;color:var(--text2);width:165px;flex-shrink:0;line-height:1.4}
+.aprow input[type=range]{flex:1;accent-color:var(--blue)}
+.apval{font-family:var(--mono);font-size:11px;color:var(--text);min-width:80px;text-align:right}
+.costnote{font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.5;
+  padding:6px 8px;background:var(--bg3);border-radius:5px;margin-bottom:7px}
+
+/* RIGHT PANEL */
+.rp{display:flex;flex-direction:column;gap:11px}
+.rp-ph{color:var(--text3);font-size:13px;text-align:center;padding:52px 20px;
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px}
+
+/* WARNINGS */
+.wbox{padding:10px 13px;border-radius:8px;font-size:11px;line-height:1.5;display:none}
+.wbox.show{display:block}
+.wbox.amber{background:var(--adim);border:1px solid var(--abord);color:var(--amber)}
+.wbox.blue{background:var(--bdim);border:1px solid var(--bbord);color:var(--blue)}
+.wtitle{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.04em;margin-bottom:3px}
+
+/* RESULT HEADER */
+.rcard{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+.mode-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;
+  background:var(--bdim);border:1px solid var(--bbord);border-radius:20px;
+  font-family:var(--mono);font-size:10px;color:var(--blue);margin-bottom:12px}
+.mdot{width:5px;height:5px;border-radius:50%;background:var(--blue);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.bignum{font-family:var(--display);font-size:58px;font-weight:700;color:var(--blue);line-height:1}
+.bignumlbl{font-size:14px;color:var(--text2);margin-top:4px}
+.rctxline{font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:5px}
+
+/* KV METRICS */
+.kvm{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.kvc{background:var(--bg3);border-radius:8px;padding:10px 12px}
+.kvlbl{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.06em;margin-bottom:4px;text-transform:uppercase}
+.kvval{font-size:17px;font-weight:600}
+.kvsub{font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:2px}
+
+/* HEADROOM */
+.hroom{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.htitle{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.07em;margin-bottom:8px;text-transform:uppercase}
+.hrow{display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid var(--border)}
+.hrow:last-child{border-bottom:none}
+.hctx{font-family:var(--mono);font-size:11px;color:var(--text2);width:44px;flex-shrink:0}
+.hbar{flex:1;height:5px;background:var(--bg4);border-radius:3px;overflow:hidden}
+.hfill{height:100%;border-radius:3px;transition:width .45s cubic-bezier(.4,0,.2,1)}
+.husers{font-family:var(--mono);font-size:11px;font-weight:500;min-width:96px;text-align:right}
+.hrow.cur .hctx{color:var(--blue);font-weight:500}.hrow.cur .husers{color:var(--blue)}
+
+/* BALLOON */
+.bwrap{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.btitle{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.07em;margin-bottom:10px;text-transform:uppercase}
+.bviz{display:flex;align-items:flex-end;gap:6px;height:88px}
+.bcol{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.bbar{width:100%;border-radius:4px 4px 1px 1px;position:relative;min-height:3px;transition:height .55s cubic-bezier(.4,0,.2,1)}
+.btlbl{position:absolute;top:-17px;left:50%;transform:translateX(-50%);
+  font-family:var(--mono);font-size:9px;font-weight:500;white-space:nowrap;color:var(--text)}
+.bxlbl{font-size:9px;color:var(--text3);text-align:center;margin-top:4px;line-height:1.3;font-family:var(--mono)}
+
+/* COST */
+.cost2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.ccol{border-radius:10px;overflow:hidden}
+.ccol.op{border:1px solid rgba(21,128,61,.2)}.ccol.aw{border:1px solid rgba(146,64,14,.2)}
+html.dark .ccol.op{border-color:rgba(62,207,142,.2)}.html.dark .ccol.aw{border-color:rgba(247,169,79,.2)}
+.cchead{padding:7px 12px;display:flex;justify-content:space-between;align-items:baseline}
+.cchead.op{background:rgba(21,128,61,.07)}.cchead.aw{background:rgba(146,64,14,.07)}
+html.dark .cchead.op{background:rgba(62,207,142,.07)}.html.dark .cchead.aw{background:rgba(247,169,79,.07)}
+.cctn{font-family:var(--display);font-size:12px;font-weight:600}
+.cchead.op .cctn{color:var(--green)}.cchead.aw .cctn{color:var(--amber)}
+.ccnote{font-family:var(--mono);font-size:10px;color:var(--text3)}
+.ccbody{padding:11px 12px;background:var(--bg2)}
+.upill{font-family:var(--mono);font-size:10px;color:var(--text3);background:var(--bg3);
+  border-radius:4px;padding:2px 6px;margin-bottom:7px;display:inline-block}
+.cbig{font-family:var(--display);font-size:22px;font-weight:700;line-height:1}
+.cbig.op{color:var(--green)}.cbig.aw{color:var(--amber)}
+.cper{font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:2px;margin-bottom:7px}
+.cdiv{height:1px;background:var(--border);margin:7px 0}
+.coptlbl{font-size:11px;color:var(--text2);margin-bottom:2px}
+.coptval{font-family:var(--display);font-size:15px;font-weight:600}
+.coptval.op{color:var(--green);opacity:.7}.coptval.aw{color:var(--amber);opacity:.7}
+.csub{font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:1px}
+.svbadge{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:500;
+  padding:2px 8px;border-radius:14px;margin-top:5px}
+.svbadge.op{background:rgba(21,128,61,.1);color:var(--green);border:1px solid rgba(21,128,61,.18)}
+.svbadge.aw{background:var(--adim);color:var(--amber);border:1px solid var(--abord)}
+html.dark .svbadge.op{background:rgba(62,207,142,.1);border-color:rgba(62,207,142,.2)}
+html.dark .svbadge.aw{border-color:rgba(247,169,79,.2)}
+
+/* TIERS */
+.tlist{display:flex;flex-direction:column;gap:5px}
+.trow{display:flex;align-items:flex-start;gap:9px;padding:10px 12px;
+  background:var(--bg2);border:1px solid var(--border);border-radius:9px;transition:opacity .2s}
+.tdot{width:9px;height:9px;border-radius:2px;flex-shrink:0;margin-top:2px}
+.tbody2{flex:1;min-width:0}
+.tmain{font-size:12px;font-weight:500}
+.tsub{font-size:11px;color:var(--text2);margin-top:2px}
+.ttech{font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:2px}
+.twarn{font-family:var(--mono);font-size:10px;color:var(--amber);margin-top:3px}
+.tcost{font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:2px}
+.tgpus{font-family:var(--display);font-size:16px;font-weight:600;flex-shrink:0;align-self:center;margin-left:8px}
+.itag{font-family:var(--mono);font-size:9px;padding:1px 6px;border-radius:4px;
+  font-weight:500;letter-spacing:.04em;margin-left:6px;vertical-align:middle}
+.itag.amber{background:var(--adim);color:var(--amber)}
+
+/* CHART */
+.cwrap{position:relative;width:100%;height:185px}
+.cnote{font-family:var(--mono);font-size:10px;color:var(--text3);text-align:center;margin-top:4px}
+
+/* TOPOLOGY */
+.topo{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.topo-title{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.07em;margin-bottom:9px;text-transform:uppercase}
+.tnodes{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}
+.tnode{border:1px solid var(--border2);border-radius:7px;padding:7px 8px;background:var(--bg3)}
+.tnlbl{font-family:var(--mono);font-size:9px;color:var(--text3);margin-bottom:4px}
+.tgs{display:flex;flex-wrap:wrap;gap:2px}
+.tg{width:24px;height:16px;border-radius:3px;display:flex;align-items:center;
+  justify-content:center;font-size:7px;font-weight:500;border:1px solid;font-family:var(--mono)}
+.tg.std{background:rgba(37,99,235,.1);color:#5b8ef0;border-color:rgba(37,99,235,.2)}
+.tg.pre{background:rgba(146,64,14,.1);color:#d97706;border-color:rgba(146,64,14,.2)}
+.tg.dec{background:rgba(21,128,61,.1);color:#16a34a;border-color:rgba(21,128,61,.2)}
+.tg.idle{background:var(--bg4);color:var(--text3);border-color:var(--border)}
+html.dark .tg.std{background:rgba(79,142,247,.12);color:#7aabff;border-color:rgba(79,142,247,.22)}
+html.dark .tg.pre{background:rgba(247,169,79,.12);color:#f7c47a;border-color:rgba(247,169,79,.22)}
+html.dark .tg.dec{background:rgba(62,207,142,.12);color:#7ad9b2;border-color:rgba(62,207,142,.22)}
+.tconn{font-family:var(--mono);font-size:10px;color:var(--text3);padding:0 2px;align-self:center}
+.tleg{display:flex;gap:10px;margin-top:7px;flex-wrap:wrap}
+.tli{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text3)}
+.tld{width:9px;height:9px;border-radius:2px;border:1px solid}
+
+/* DISC ITEMS */
+.di{padding:9px 13px;border-bottom:1px solid var(--border)}.di:last-child{border-bottom:none}
+.dih{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+.dtag{font-family:var(--mono);font-size:9px;padding:1px 6px;border-radius:4px;font-weight:500;letter-spacing:.04em}
+.dtag.w{background:var(--adim);color:var(--amber)}.dtag.i{background:var(--bdim);color:var(--blue)}
+.diname{font-size:11px;font-weight:500}
+.dibody{font-size:11px;color:var(--text2);line-height:1.5}
+.didir{font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:4px;padding:4px 8px;background:var(--bg3);border-radius:4px}
+
+/* BATCH */
+.bcard{border:1px dashed var(--border2);border-radius:10px;padding:14px;text-align:center}
+.btag{font-family:var(--mono);font-size:10px;color:var(--green);letter-spacing:.05em;margin-bottom:3px}
+
+/* RNAV */
+.rnav{display:flex;gap:7px;flex-wrap:wrap;padding-top:4px}
+.btn{padding:7px 16px;border-radius:7px;border:1px solid var(--border2);font-size:12px;
+  cursor:pointer;background:var(--bg2);color:var(--text);transition:background .12s}
+.btn:hover{background:var(--bg3)}
+.btn.p{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.p:hover{opacity:.85}
+.btn.danger{border-color:rgba(185,28,28,.2);color:var(--red)}
+.btn.danger:hover{background:rgba(185,28,28,.06)}
+
+/* EXPLORER */
+.etabs{display:flex;gap:2px;background:var(--bg3);border-radius:8px;padding:3px;margin-bottom:14px;width:fit-content}
+.etab{padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer;color:var(--text2);border:none;background:none;font-family:var(--body)}
+.etab.on{background:var(--bg4);color:var(--text)}
+.epane{display:none}.epane.on{display:block}
+.frow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:11px;align-items:center}
+.flbl{font-family:var(--mono);font-size:10px;color:var(--text3)}
+.fchip{padding:3px 10px;border-radius:14px;border:1px solid var(--border2);font-size:11px;cursor:pointer;background:var(--bg2);color:var(--text2)}
+.fchip.on.nv{background:rgba(118,185,0,.1);color:#5a9600;border-color:rgba(118,185,0,.25)}
+.fchip.on.amd{background:rgba(220,38,38,.07);color:var(--red);border-color:rgba(220,38,38,.2)}
+.fchip.on.cld{background:var(--bdim);color:var(--blue);border-color:var(--bbord)}
+html.dark .fchip.on.nv{color:#76b900}html.dark .fchip.on.amd{color:#f76f6f}
+.axrow{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:9px}
+.axlbl{font-family:var(--mono);font-size:10px;color:var(--text3)}
+.axcs{display:flex;gap:3px}
+.axc{padding:3px 9px;border-radius:10px;border:1px solid var(--border);font-size:11px;cursor:pointer;background:var(--bg3);color:var(--text2)}
+.axc.on{background:var(--bdim);color:var(--blue);border-color:var(--bbord)}
+.scwrap{position:relative;width:100%;height:360px}
+.ptable{width:100%;border-collapse:collapse;font-size:12px}
+.ptable th{text-align:left;padding:7px 9px;font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.05em;border-bottom:1px solid var(--border)}
+.ptable th.s{cursor:pointer}.ptable th.s:hover{color:var(--text2)}
+.ptable td{padding:8px 9px;border-bottom:1px solid var(--border);vertical-align:middle}
+.ptable tr:hover td{background:var(--bg3)}
+.ptable .sh td{background:var(--bg3);font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.05em;padding:5px 9px}
+.cnvb{background:rgba(118,185,0,.1);color:#5a9600;border-radius:3px;padding:1px 5px;font-size:10px;font-family:var(--mono)}
+.camdb{background:rgba(220,38,38,.07);color:var(--red);border-radius:3px;padding:1px 5px;font-size:10px;font-family:var(--mono)}
+.ccldb{background:var(--bdim);color:var(--blue);border-radius:3px;padding:1px 5px;font-size:10px;font-family:var(--mono)}
+html.dark .cnvb{color:#76b900}.html.dark .camdb{color:#f76f6f}
+.bc{display:flex;align-items:center;gap:5px}.bbg{flex:1;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;min-width:28px}.bf{height:100%;border-radius:2px}
+.vm{font-family:var(--mono);font-size:11px}.vg{color:var(--green)}.va{color:var(--amber)}
+
+/* LINKEDIN */
+.liwrap{position:fixed;bottom:14px;right:14px;z-index:200;transition:all .3s}
+.liwrap.h{opacity:0;pointer-events:none;transform:translateY(5px)}
+.licard{background:var(--bg2);border:1px solid var(--border2);border-radius:11px;padding:12px 14px;width:220px;position:relative;box-shadow:0 4px 20px rgba(0,0,0,.12)}
+.liav{width:36px;height:36px;border-radius:50%;background:var(--bdim);border:2px solid var(--bbord);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:13px;font-weight:700;color:var(--blue)}
+.libtn{display:flex;align-items:center;justify-content:center;gap:5px;width:100%;margin-top:9px;padding:7px;background:#0a66c2;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:500;cursor:pointer;font-family:var(--body);text-decoration:none}
+.libtn:hover{opacity:.88}
+.lidis{position:absolute;top:7px;right:9px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;line-height:1}
+
+/* COUNTER BAR */
+.cbar{background:var(--bg2);border-top:1px solid var(--border);padding:6px 22px;
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:7px}
+.citems{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.ci{display:flex;align-items:center;gap:4px;font-family:var(--mono);font-size:11px;color:var(--text3)}
+.cnum{font-size:12px;font-weight:500;color:var(--text2)}
+.cdot{width:5px;height:5px;border-radius:50%;background:var(--green)}
+.gcs2{display:flex;gap:4px;flex-wrap:wrap}
+.gc2{padding:2px 6px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--text3)}
+
+@keyframes slideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* LANDING */
+.page-landing{padding:28px 16px}
+.landing-eyebrow{font-family:var(--mono);font-size:10px;color:var(--blue);letter-spacing:.15em;text-transform:uppercase;margin-bottom:8px}
+.landing-title{font-family:var(--display);font-size:clamp(26px,5vw,44px);font-weight:800;letter-spacing:-.03em;line-height:1.05;margin-bottom:10px}
+.landing-title em{font-style:normal;color:var(--blue)}
+.landing-sub{font-size:13px;color:var(--text2);line-height:1.6;max-width:440px;margin-bottom:28px}
+.module-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:840px}
+@media(max-width:680px){.module-grid{grid-template-columns:1fr}}
+.mod-card{background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:18px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden;text-align:left;width:100%;color:inherit}
+.mod-card:hover{border-color:var(--bbord);box-shadow:0 3px 12px rgba(0,0,0,.06)}
+.mod-acct{position:absolute;top:0;left:0;right:0;height:2px;opacity:0;transition:opacity .2s}
+.mod-card:hover .mod-acct{opacity:1}
+.mod-num{font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:10px;letter-spacing:.08em}
+.mod-icon{font-size:20px;margin-bottom:7px;display:block}
+.mod-title{font-family:var(--display);font-size:15px;font-weight:700;margin-bottom:5px}
+.mod-desc{font-size:11px;color:var(--text2);line-height:1.55;margin-bottom:10px}
+.mod-cta{font-family:var(--mono);font-size:10px;color:var(--blue)}
+.mod-advanced{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;flex-wrap:wrap}
+.mod-advanced .mod-title{font-size:13px;margin-bottom:2px}
+.mod-advanced .mod-desc{margin-bottom:0;font-size:11px}
+/* WIZARD */
+.wiz-progress{display:flex;align-items:center;gap:6px;padding:14px 16px 0;flex-wrap:wrap}
+.wiz-step-dot{width:6px;height:6px;border-radius:50%;background:var(--bg4);transition:all .2s}
+.wiz-step-dot.done{background:var(--green)}.wiz-step-dot.cur{background:var(--blue);transform:scale(1.4)}
+.wiz-step-label{font-family:var(--mono);font-size:10px;color:var(--text3);margin-left:6px}
+.wiz-body{padding:32px 20px;max-width:600px}
+.wiz-q-num{font-family:var(--mono);font-size:10px;color:var(--blue);letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px}
+.wiz-q{font-family:var(--display);font-size:clamp(20px,3.5vw,30px);font-weight:800;letter-spacing:-.03em;margin-bottom:20px;line-height:1.1}
+.wiz-opts{display:flex;flex-direction:column;gap:6px;margin-bottom:20px}
+.wiz-opt{padding:11px 14px;background:var(--bg2);border:1.5px solid var(--border2);border-radius:9px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:space-between;font-size:13px;text-align:left;width:100%}
+.wiz-opt:hover{border-color:var(--bbord);background:var(--bdim)}
+.wiz-opt.on{border-color:var(--blue);background:var(--bdim);font-weight:500}
+.wiz-opt-sub{font-family:var(--mono);font-size:10px;color:var(--text3)}
+.wiz-opt.on .wiz-opt-sub{color:var(--blue);opacity:.6}
+.wiz-num-wrap{margin-bottom:16px}
+.wiz-big-inp{font-family:var(--display);font-size:32px;font-weight:800;background:var(--bg2);border:2px solid var(--border2);border-radius:9px;padding:10px 16px;color:var(--text);outline:none;width:150px;text-align:center;letter-spacing:-.03em}
+.wiz-big-inp:focus{border-color:var(--blue)}
+.wiz-shortcuts{display:flex;gap:5px;flex-wrap:wrap}
+.wiz-shortcut{padding:4px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:12px;font-family:var(--mono);font-size:11px;color:var(--text2);cursor:pointer;transition:all .12s}
+.wiz-shortcut:hover{border-color:var(--bbord);color:var(--blue)}
+.wiz-nav{display:flex;align-items:center;gap:7px;margin-top:18px}
+.wiz-next{padding:9px 20px;background:var(--blue);border:none;border-radius:7px;color:#fff;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--body)}
+.wiz-next:hover{opacity:.85}
+.wiz-back{padding:9px 13px;background:var(--bg2);border:1px solid var(--border2);border-radius:7px;color:var(--text2);font-size:13px;cursor:pointer;font-family:var(--body)}
+.wiz-back:hover{background:var(--bg3)}
+/* Wizard results */
+.wiz-results{display:grid;grid-template-columns:240px 1fr;gap:0;min-height:calc(100vh - 130px)}
+@media(max-width:720px){.wiz-results{grid-template-columns:1fr}}
+.wiz-answers{padding:18px;border-right:1px solid var(--border);background:var(--bg2)}
+.wiz-ans-title{font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px}
+.wiz-ans-row{display:flex;align-items:center;justify-content:space-between;padding:7px 5px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:4px;margin:0 -5px;transition:background .12s}
+.wiz-ans-row:hover{background:var(--bg3)}
+.wiz-ans-label{font-size:11px;color:var(--text2)}
+.wiz-ans-val{font-family:var(--mono);font-size:11px;color:var(--text);font-weight:500;display:flex;align-items:center;gap:4px}
+.wiz-edit{font-family:var(--mono);font-size:9px;color:var(--text3);padding:1px 5px;border-radius:3px;border:1px solid var(--border)}
+.wiz-ans-row:hover .wiz-edit{color:var(--blue);border-color:var(--bbord)}
+.wiz-result-panel{padding:24px;overflow-y:auto}
+.wiz-big-result{font-family:var(--display);font-size:clamp(52px,9vw,84px);font-weight:800;line-height:1;letter-spacing:-.05em;color:var(--blue);margin-bottom:5px}
+.wiz-result-sub{font-size:12px;color:var(--text2);margin-bottom:20px;line-height:1.5}
+.wiz-metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin-bottom:16px}
+.wiz-metric{background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:10px 12px}
+.wiz-metric-lbl{font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.wiz-metric-val{font-family:var(--display);font-size:18px;font-weight:700}
+.wiz-metric-sub{font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:2px}
+.wiz-cost-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:14px}
+.wiz-cost-card{border:1px solid var(--border);border-radius:9px;padding:12px;background:var(--bg2);position:relative;overflow:hidden}
+.wiz-cost-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.wiz-cost-card.op::before{background:var(--green)}.wiz-cost-card.cl::before{background:var(--amber)}
+.wiz-cost-title{font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.wiz-cost-big{font-family:var(--display);font-size:24px;font-weight:800;letter-spacing:-.03em}
+.wiz-cost-big.op{color:var(--green)}.wiz-cost-big.cl{color:var(--amber)}
+.wiz-cost-sub{font-family:var(--mono);font-size:10px;color:var(--text2);margin-top:3px}
+.wiz-restart{padding:7px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;font-size:12px;cursor:pointer;font-family:var(--body);margin-bottom:6px;display:block;width:100%;text-align:left}
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+
+
+/* NAV */
+
+.nav-logo{font-family:var(--mono);font-size:14px;color:var(--text2);text-decoration:none}.nav-logo span{color:var(--blue)}
+.nav-title{font-family:var(--display);font-size:16px;font-weight:700}
+.nav-back{font-family:var(--mono);font-size:11px;color:var(--text3);text-decoration:none;transition:color .15s}.nav-back:hover{color:var(--text)}
+
+/* LAYOUT */
+.page{max-width:1280px;margin:0 auto;padding:32px 32px 64px}
+
+/* HEADER */
+.header{margin-bottom:28px}
+.header h1{font-family:var(--display);font-size:32px;font-weight:800;letter-spacing:-.03em;margin-bottom:6px}
+.header p{font-size:13px;color:var(--text2);max-width:560px;line-height:1.6}
+
+/* CONTROLS BAR */
+.controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;padding:14px 18px;background:var(--bg2);border:1px solid var(--border);border-radius:10px}
+.ctrl-group{display:flex;align-items:center;gap:6px}
+.ctrl-label{font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
+.filter-btn{padding:5px 12px;border-radius:20px;border:1px solid var(--border2);background:var(--bg3);font-family:var(--mono);font-size:11px;color:var(--text2);cursor:pointer;transition:all .15s;white-space:nowrap}
+.filter-btn:hover{border-color:var(--blue);color:var(--blue)}
+.filter-btn.nv.on{background:rgba(59,130,246,.1);border-color:var(--nv);color:var(--nv)}
+.filter-btn.amd.on{background:rgba(239,68,68,.1);border-color:var(--amd);color:var(--amd)}
+.filter-btn.cloud.on{background:rgba(139,92,246,.1);border-color:var(--cloud);color:var(--cloud)}
+.sep{width:1px;height:20px;background:var(--border2);flex-shrink:0}
+.ax-btn{padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;font-family:var(--mono);font-size:10px;color:var(--text3);cursor:pointer;transition:all .15s}
+.ax-btn:hover{border-color:var(--border2);color:var(--text2)}
+.ax-btn.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.tab-bar{display:flex;gap:2px;background:var(--bg3);border-radius:8px;padding:3px;margin-left:auto}
+.tab-btn{padding:5px 16px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:none;font-family:var(--body);background:none;color:var(--text3);transition:all .15s}
+.tab-btn.on{background:var(--bg2);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+
+/* CHART */
+.chart-section{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px}
+.chart-desc{font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.chart-legend{display:flex;gap:14px;flex-wrap:wrap}
+.chart-legend span{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)}
+.chart-legend span::before{content:'';width:9px;height:9px;border-radius:50%}
+.chart-legend .l-nv::before{background:var(--nv)}
+.chart-legend .l-amd::before{background:var(--amd)}
+.canvas-wrap{position:relative;height:400px}
+
+/* TABLE */
+.table-section{background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.table-scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{padding:10px 14px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--bg3);white-space:nowrap;cursor:pointer;user-select:none;transition:color .15s}
+th:hover{color:var(--blue)}
+th.sorted{color:var(--blue)}
+th .sort-arr{margin-left:4px;opacity:.5}
+th.sorted .sort-arr{opacity:1}
+td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;font-size:13px}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(0,0,0,.015)}
+.section-head td{background:var(--bg3);font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding:6px 14px;border-bottom:1px solid var(--border)}
+
+/* Badges */
+.badge{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:500;padding:2px 6px;border-radius:4px;vertical-align:middle;margin-right:4px}
+.badge-nv{background:rgba(59,130,246,.1);color:var(--nv)}
+.badge-amd{background:rgba(239,68,68,.1);color:var(--amd)}
+.badge-aws{background:rgba(245,158,11,.1);color:var(--amber)}
+.badge-cw{background:rgba(139,92,246,.1);color:var(--cloud)}
+
+/* Bar cells */
+.bar-cell{display:flex;align-items:center;gap:8px}
+.bar-bg{flex:1;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden;min-width:60px}
+.bar-fill{height:100%;border-radius:3px;transition:width .3s}
+.bar-val{font-family:var(--mono);font-size:11px;color:var(--text);min-width:48px;text-align:right;white-space:nowrap}
+
+/* Highlight cells */
+.val-green{color:var(--green);font-weight:600;font-family:var(--mono);font-size:12px}
+.val-blue{color:var(--blue);font-weight:600;font-family:var(--mono);font-size:12px}
+.val-amber{color:var(--amber);font-weight:600;font-family:var(--mono);font-size:12px}
+.val-mono{font-family:var(--mono);font-size:12px;color:var(--text2)}
+
+/* Selected row */
+tr.selected td{background:rgba(37,99,235,.04)}
+
+/* Disclaimer */
+.disc{font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.7;padding:14px 18px;background:var(--bg3);border-top:1px solid var(--border)}
+.disc strong{color:var(--amber)}
+
+/* Axis selector inline */
+.ax-group{display:flex;align-items:center;gap:4px}
+.ax-lbl{font-family:var(--mono);font-size:10px;color:var(--text3);margin-right:2px}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="brand">gpu<span>.</span>calc</div>
+  <div class="ntabs">
+    <button class="ntab on" onclick="switchPage('home',this)">Home</button>
+    <button class="ntab" onclick="switchPage('wizard',this)">▶ Quick size</button>
+    <button class="ntab" onclick="switchPage('calc',this)">Advanced</button>
+    <button class="ntab" onclick="switchPage('explorer',this)">GPU Explorer</button>
+  </div>
+  <div class="nright">
+    <button class="tbtn" id="tbtn" onclick="toggleTheme()"><span id="ti">☾</span>&nbsp;<span id="tl">Dark</span></button>
+    <div class="apill">
+      <span>Admin</span>
+      <div class="tw" onclick="tog('cost')"><div class="tt on" id="t-cost"><div class="th"></div></div><span class="tlbl">Cost</span></div>
+      <div class="tw" onclick="tog('tech')"><div class="tt on" id="t-tech"><div class="th"></div></div><span class="tlbl">Tech</span></div>
+      <div class="tw" onclick="tog('onprem')"><div class="tt on" id="t-onprem"><div class="th"></div></div><span class="tlbl">On-prem</span></div>
+      <div class="tw" onclick="tog('aws')"><div class="tt on" id="t-aws"><div class="th"></div></div><span class="tlbl">AWS</span></div>
+      <div class="tw" onclick="tog('linkedin')"><div class="tt on" id="t-linkedin"><div class="th"></div></div><span class="tlbl">LinkedIn</span></div>
+    </div>
+  </div>
+</nav>
+
+<div class="main">
+
+<!-- CALCULATOR PAGE -->
+
+<div class="page on" id="page-home">
+<div class="page-landing">
+  <div class="landing-eyebrow">LLM Inference Sizing</div>
+  <h1 class="landing-title">Right-size your<br><em>GPU fleet.</em></h1>
+  <p class="landing-sub">Focused tools for engineers and financial analysts evaluating LLM inference infrastructure.</p>
+  <div class="module-grid">
+    <button class="mod-card" onclick="switchPage('wizard',document.querySelectorAll('.ntab')[1])">
+      <div class="mod-acct" style="background:linear-gradient(90deg,var(--blue),transparent)"></div>
+      <div class="mod-num">Quick</div><span class="mod-icon">&#9654;</span>
+      <div class="mod-title">Quick sizing</div>
+      <p class="mod-desc">5 questions. Get GPU count, cost comparison, and a shareable summary.</p>
+      <div class="mod-cta">Start &rarr;</div>
+    </button>
+    <button class="mod-card" onclick="switchPage('calc',document.querySelectorAll('.ntab')[2])">
+      <div class="mod-acct" style="background:linear-gradient(90deg,var(--green),transparent)"></div>
+      <div class="mod-num">Advanced</div><span class="mod-icon">&#9881;</span>
+      <div class="mod-title">Full calculator</div>
+      <p class="mod-desc">All inputs, HF model lookup, optimisation tiers (FP8, prefix cache, llm-d), cost model, formulas.</p>
+      <div class="mod-cta">Open &rarr;</div>
+    </button>
+    <button class="mod-card" onclick="switchPage('explorer',document.querySelectorAll('.ntab')[3])">
+      <div class="mod-acct" style="background:linear-gradient(90deg,var(--amber),transparent)"></div>
+      <div class="mod-num">Explore</div><span class="mod-icon">&#128269;</span>
+      <div class="mod-title">GPU Explorer</div>
+      <p class="mod-desc">Compare NVIDIA, AMD, and cloud GPUs by VRAM, price, and throughput. Bubble chart + pricing table.</p>
+      <div class="mod-cta">Explore &rarr;</div>
+    </button>
+  </div>
+</div>
+</div>
+
+<div class="page" id="page-wizard">
+  <div class="wiz-progress">
+    <div class="wiz-step-dot cur" id="wdot-0"></div><div class="wiz-step-dot" id="wdot-1"></div>
+    <div class="wiz-step-dot" id="wdot-2"></div><div class="wiz-step-dot" id="wdot-3"></div>
+    <div class="wiz-step-dot" id="wdot-4"></div>
+    <span class="wiz-step-label" id="wiz-step-label">Step 1 of 5</span>
+  </div>
+  <div class="wiz-body" id="wstep-0">
+    <div class="wiz-q-num">Question 1 of 5</div>
+    <div class="wiz-q">What model are you running?</div>
+    <div class="wiz-opts">
+      <button class="wiz-opt" onclick="wizPickModel(1,'~1B',this)"><span>~1B parameters</span><span class="wiz-opt-sub">Llama 3.2 1B &middot; Phi-3 mini</span></button>
+      <button class="wiz-opt" onclick="wizPickModel(3,'~3B',this)"><span>~3B parameters</span><span class="wiz-opt-sub">Llama 3.2 3B &middot; Phi-3.5 mini</span></button>
+      <button class="wiz-opt on" onclick="wizPickModel(8,'~8B',this)"><span>~7&ndash;8B parameters</span><span class="wiz-opt-sub">Llama 3.1 8B &middot; Mistral 7B &middot; Qwen 7B</span></button>
+      <button class="wiz-opt" onclick="wizPickModel(14,'~14B',this)"><span>~14B parameters</span><span class="wiz-opt-sub">Qwen2.5 14B &middot; Phi-4</span></button>
+      <button class="wiz-opt" onclick="wizPickModel(32,'~32B',this)"><span>~32B parameters</span><span class="wiz-opt-sub">Qwen2.5 32B &middot; QwQ-32B</span></button>
+      <button class="wiz-opt" onclick="wizPickModel(70,'~70B',this)"><span>~70B parameters</span><span class="wiz-opt-sub">Llama 3.1 70B &middot; Qwen 72B &middot; Nemotron 70B</span></button>
+      <button class="wiz-opt" onclick="wizPickModel(405,'405B',this)"><span>405B parameters</span><span class="wiz-opt-sub">Llama 3.1 405B</span></button>
+    </div>
+    <div class="wiz-nav"><button class="wiz-next" onclick="wizNext()">Next &rarr;</button></div>
+  </div>
+  <div class="wiz-body" id="wstep-1" style="display:none">
+    <div class="wiz-q-num">Question 2 of 5</div>
+    <div class="wiz-q">Which GPU are you targeting?</div>
+    <div class="wiz-opts">
+      <button class="wiz-opt" onclick="wizPickGpu('A100',40,15000,1.10,this)"><span>A100 40GB</span><span class="wiz-opt-sub">$15K &middot; $1.10/hr</span></button>
+      <button class="wiz-opt" onclick="wizPickGpu('A100',80,17000,1.80,this)"><span>A100 80GB</span><span class="wiz-opt-sub">$17K &middot; $1.80/hr</span></button>
+      <button class="wiz-opt on" onclick="wizPickGpu('H100',80,25000,3.10,this)"><span>H100 80GB</span><span class="wiz-opt-sub">$25K &middot; $3.10/hr</span></button>
+      <button class="wiz-opt" onclick="wizPickGpu('H200',141,35000,4.20,this)"><span>H200 141GB</span><span class="wiz-opt-sub">$35K &middot; $4.20/hr</span></button>
+      <button class="wiz-opt" onclick="wizPickGpu('B200',192,48000,5.50,this)"><span>B200 192GB</span><span class="wiz-opt-sub">$48K &middot; $5.50/hr</span></button>
+      <button class="wiz-opt" onclick="wizPickGpu('L40S',48,12000,1.50,this)"><span>L40S 48GB</span><span class="wiz-opt-sub">$12K &middot; $1.50/hr</span></button>
+    </div>
+    <div class="wiz-nav"><button class="wiz-back" onclick="wizBack()">&larr; Back</button><button class="wiz-next" onclick="wizNext()">Next &rarr;</button></div>
+  </div>
+  <div class="wiz-body" id="wstep-2" style="display:none">
+    <div class="wiz-q-num">Question 3 of 5</div>
+    <div class="wiz-q">What context length?</div>
+    <div class="wiz-opts">
+      <button class="wiz-opt" onclick="wizPickCtx(4,this)"><span>4K tokens</span><span class="wiz-opt-sub">Short Q&amp;A</span></button>
+      <button class="wiz-opt on" onclick="wizPickCtx(8,this)"><span>8K tokens</span><span class="wiz-opt-sub">Standard chat</span></button>
+      <button class="wiz-opt" onclick="wizPickCtx(16,this)"><span>16K tokens</span><span class="wiz-opt-sub">Long conversations</span></button>
+      <button class="wiz-opt" onclick="wizPickCtx(32,this)"><span>32K tokens</span><span class="wiz-opt-sub">Document analysis</span></button>
+      <button class="wiz-opt" onclick="wizPickCtx(64,this)"><span>64K tokens</span><span class="wiz-opt-sub">Long context</span></button>
+      <button class="wiz-opt" onclick="wizPickCtx(128,this)"><span>128K tokens</span><span class="wiz-opt-sub">RAG / full docs</span></button>
+    </div>
+    <div class="wiz-nav"><button class="wiz-back" onclick="wizBack()">&larr; Back</button><button class="wiz-next" onclick="wizNext()">Next &rarr;</button></div>
+  </div>
+  <div class="wiz-body" id="wstep-3" style="display:none">
+    <div class="wiz-q-num">Question 4 of 5</div>
+    <div class="wiz-q">How many concurrent users at peak?</div>
+    <div class="wiz-num-wrap">
+      <input class="wiz-big-inp" id="wiz-users-inp" type="number" value="100" min="1" oninput="WS.users=+this.value">
+    </div>
+    <div class="wiz-shortcuts">
+      <button class="wiz-shortcut" onclick="wizSetUsers(10)">10</button>
+      <button class="wiz-shortcut" onclick="wizSetUsers(30)">30</button>
+      <button class="wiz-shortcut" onclick="wizSetUsers(100)">100</button>
+      <button class="wiz-shortcut" onclick="wizSetUsers(500)">500</button>
+      <button class="wiz-shortcut" onclick="wizSetUsers(1000)">1,000</button>
+    </div>
+    <div class="wiz-nav" style="margin-top:16px"><button class="wiz-back" onclick="wizBack()">&larr; Back</button><button class="wiz-next" onclick="wizNext()">Next &rarr;</button></div>
+  </div>
+  <div class="wiz-body" id="wstep-4" style="display:none">
+    <div class="wiz-q-num">Question 5 of 5</div>
+    <div class="wiz-q">Weight precision?</div>
+    <div class="wiz-opts">
+      <button class="wiz-opt on" onclick="wizPickPrec(2,'BF16',this)"><span>BF16 &mdash; full precision</span><span class="wiz-opt-sub">Standard, best quality, highest memory</span></button>
+      <button class="wiz-opt" onclick="wizPickPrec(1,'FP8',this)"><span>FP8 &mdash; quantised</span><span class="wiz-opt-sub">Half the memory, minimal quality loss</span></button>
+      <button class="wiz-opt" onclick="wizPickPrec(1,'W8A8 (RedHatAI)',this)"><span>W8A8 &mdash; RedHatAI validated</span><span class="wiz-opt-sub">Validated quantised models, same memory as FP8</span></button>
+    </div>
+    <div class="wiz-nav"><button class="wiz-back" onclick="wizBack()">&larr; Back</button><button class="wiz-next" onclick="wizShowResults()">See results &rarr;</button></div>
+  </div>
+  <div id="wstep-results" style="display:none">
+    <div class="wiz-results">
+      <div class="wiz-answers">
+        <div class="wiz-ans-title">Your answers</div>
+        <div class="wiz-ans-row" onclick="wizGoTo(0)"><span class="wiz-ans-label">Model</span><span class="wiz-ans-val" id="wans-model">&mdash;<span class="wiz-edit">edit</span></span></div>
+        <div class="wiz-ans-row" onclick="wizGoTo(1)"><span class="wiz-ans-label">GPU</span><span class="wiz-ans-val" id="wans-gpu">&mdash;<span class="wiz-edit">edit</span></span></div>
+        <div class="wiz-ans-row" onclick="wizGoTo(2)"><span class="wiz-ans-label">Context</span><span class="wiz-ans-val" id="wans-ctx">&mdash;<span class="wiz-edit">edit</span></span></div>
+        <div class="wiz-ans-row" onclick="wizGoTo(3)"><span class="wiz-ans-label">Users</span><span class="wiz-ans-val" id="wans-users">&mdash;<span class="wiz-edit">edit</span></span></div>
+        <div class="wiz-ans-row" onclick="wizGoTo(4)"><span class="wiz-ans-label">Precision</span><span class="wiz-ans-val" id="wans-prec">&mdash;<span class="wiz-edit">edit</span></span></div>
+        <div style="margin-top:14px;display:flex;flex-direction:column;gap:5px">
+          <button class="wiz-restart" onclick="wizRestart()">&#8635; Start over</button>
+          <button class="wiz-restart" onclick="switchPage('calc',document.querySelectorAll('.ntab')[2])">Full calculator &rarr;</button>
+        </div>
+      </div>
+      <div class="wiz-result-panel">
+        <div class="wiz-big-result" id="wres-gpus">&mdash;</div>
+        <div class="wiz-result-sub" id="wres-sub"></div>
+        <div class="wiz-metrics">
+          <div class="wiz-metric"><div class="wiz-metric-lbl">KV / user</div><div class="wiz-metric-val" id="wm-kv">&mdash;</div><div class="wiz-metric-sub" id="wm-kv-sub"></div></div>
+          <div class="wiz-metric"><div class="wiz-metric-lbl">Users / replica</div><div class="wiz-metric-val" id="wm-upr">&mdash;</div><div class="wiz-metric-sub" id="wm-upr-sub"></div></div>
+          <div class="wiz-metric"><div class="wiz-metric-lbl">Tensor parallel</div><div class="wiz-metric-val" id="wm-tp">&mdash;</div><div class="wiz-metric-sub" id="wm-tp-sub"></div></div>
+          <div class="wiz-metric"><div class="wiz-metric-lbl">KV pool</div><div class="wiz-metric-val" id="wm-pool">&mdash;</div><div class="wiz-metric-sub">per replica (95% PA)</div></div>
+        </div>
+        <div class="wiz-cost-row">
+          <div class="wiz-cost-card op"><div class="wiz-cost-title">On-prem &middot; 5yr hardware</div><div class="wiz-cost-big op" id="wc-op">&mdash;</div><div class="wiz-cost-sub" id="wc-op-sub"></div></div>
+          <div class="wiz-cost-card cl"><div class="wiz-cost-title">Cloud on-demand &middot; 5yrs</div><div class="wiz-cost-big cl" id="wc-cl">&mdash;</div><div class="wiz-cost-sub" id="wc-cl-sub"></div></div>
+        </div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.7;padding:9px 12px;background:var(--bg3);border-radius:7px">On-prem = hardware purchase only. Cloud = on-demand &times;720hrs &times;12 &times;5yrs (+3%/yr). GPU-to-GPU comparison.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="page-calc">
+  <div class="disc-top">
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+      <circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1"/>
+      <line x1="7" y1="4" x2="7" y2="7.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      <circle cx="7" cy="10" r=".7" fill="currentColor"/>
+    </svg>
+    <span>Guidance estimates only — validate with benchmarks before procurement. Actual requirements vary with framework overhead, batch patterns, and hardware.</span>
+    <a class="bug-link" href="https://github.com/nb-qbits/gpu-calc/issues/new?title=Bug+Report&labels=bug" target="_blank">Report bug</a>
+  </div>
+
+  <div class="layout">
+
+    <!-- LEFT: INPUTS -->
+    <div id="left-panel">
+
+      <!-- MODEL -->
+      <div class="ic">
+        <div class="ict">Model — HuggingFace ID or manual</div>
+        <div class="hfrow">
+          <input class="hfinp" id="hf-inp" type="text" placeholder="meta-llama/Llama-3.1-8B" autocomplete="off"
+            oninput="onHFInput()" onkeydown="if(event.key==='Enter')fetchHF()">
+          <button class="hfbtn" id="hf-btn" onclick="fetchHF()">Lookup</button>
+        </div>
+        <div class="hfst" id="hf-st"></div>
+        <div class="qpicks" id="qpicks">
+          <div class="qchip" onclick="qm('meta-llama/Llama-3.1-8B')">Llama 3.1 8B</div>
+          <div class="qchip" onclick="qm('meta-llama/Llama-3.1-70B')">Llama 3.1 70B</div>
+          <div class="qchip" onclick="qm('Qwen/Qwen2.5-7B')">Qwen 2.5 7B</div>
+          <div class="qchip" onclick="qm('Qwen/Qwen2.5-72B')">Qwen 2.5 72B</div>
+          <div class="qchip" onclick="qm('mistralai/Mistral-7B-v0.3')">Mistral 7B</div>
+          <div class="qchip" onclick="qm('microsoft/phi-4')">Phi-4</div>
+        </div>
+        <div class="minfo" id="minfo"></div>
+        <div class="divider"></div>
+        <div class="clbl">Manual override</div>
+        <div class="srow">
+          <label>Parameters (B)</label>
+          <input type="range" min="1" max="405" step="1" value="8" id="s-params"
+            oninput="manualModel(+this.value)">
+          <span class="sval" id="sv-params">8B</span>
+        </div>
+        <div class="clbl">Attention type</div>
+        <div class="chips" id="attn-chips">
+          <div class="chip on" data-v="gqa" onclick="apc('attn','gqa',this)">GQA (Llama / Qwen / Mistral)</div>
+          <div class="chip" data-v="mha" onclick="apc('attn','mha',this)">MHA (older models)</div>
+        </div>
+      </div>
+
+      <!-- USERS -->
+      <div class="ic">
+        <div class="ict">Concurrent users (peak)</div>
+        <div class="srow">
+          <label>Peak users</label>
+          <input type="range" min="1" max="500" step="1" value="30" id="s-users" oninput="syncU(+this.value)">
+          <span class="sval" id="sv-users">30</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <input type="number" class="ninp" id="n-users" min="1" value="30" oninput="syncUN(+this.value)" placeholder="exact">
+          <span style="font-size:11px;color:var(--text3)">or type exact (no limit)</span>
+        </div>
+        <div class="chips" id="user-presets">
+          <div class="chip" onclick="setU(5)">5</div>
+          <div class="chip" onclick="setU(30)">30</div>
+          <div class="chip" onclick="setU(100)">100</div>
+          <div class="chip" onclick="setU(500)">500</div>
+          <div class="chip" onclick="setU(1000)">1000</div>
+        </div>
+      </div>
+
+      <!-- CONTEXT -->
+      <div class="ic">
+        <div class="ict">Context length</div>
+        <div class="srow">
+          <label>Context (K tokens)</label>
+          <input type="range" min="1" max="512" step="1" value="8" id="s-ctx" oninput="syncC(+this.value)">
+          <span class="sval" id="sv-ctx">8K</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <input type="number" class="ninp" id="n-ctx" min="1" value="8" oninput="syncCN(+this.value)" placeholder="K">
+          <span style="font-size:11px;color:var(--text3)">K tokens (any value)</span>
+        </div>
+        <div class="chips" id="ctx-presets">
+          <div class="chip" onclick="setC(4)">4K</div>
+          <div class="chip on" onclick="setC(8)">8K</div>
+          <div class="chip" onclick="setC(32)">32K</div>
+          <div class="chip" onclick="setC(64)">64K</div>
+          <div class="chip" onclick="setC(128)">128K</div>
+          <div class="chip" onclick="setC(256)">256K</div>
+        </div>
+      </div>
+
+      <!-- GPU -->
+      <div class="ic">
+        <div class="ict">GPU</div>
+        <div class="ggrid" id="gpu-cards">
+          <div class="gcard" onclick="pickGpu('A100',40,1.10,15000,this)">
+            <div class="gcn">A100 40GB</div><div class="gcs">40GB &middot; $1.10/hr</div></div>
+          <div class="gcard" onclick="pickGpu('A100-80',80,1.80,17000,this)">
+            <div class="gcn">A100 80GB</div><div class="gcs">80GB &middot; $1.80/hr</div></div>
+          <div class="gcard on" onclick="pickGpu('H100',80,3.10,25000,this)">
+            <div class="gcn">H100</div><div class="gcs">80GB &middot; $3.10/hr</div></div>
+          <div class="gcard" onclick="pickGpu('H200',141,4.20,35000,this)">
+            <div class="gcn">H200</div><div class="gcs">141GB &middot; $4.20/hr</div></div>
+          <div class="gcard" onclick="pickGpu('B200',192,5.50,48000,this)">
+            <div class="gcn">B200</div><div class="gcs">192GB &middot; $5.50/hr</div></div>
+          <div class="gcard" onclick="pickGpu('A10G',24,0.35,8000,this)">
+            <div class="gcn">A10G</div><div class="gcs">24GB &middot; $0.35/hr</div></div>
+        </div>
+        <div style="display:flex;gap:7px;align-items:center">
+          <input type="number" class="ninp" id="n-vram" min="8" placeholder="VRAM GB"
+            oninput="customVram(+this.value)" style="width:80px">
+          <span style="font-size:11px;color:var(--text3)">Custom VRAM (GB)</span>
+        </div>
+      </div>
+
+      <!-- ASSUMPTIONS DRAWER -->
+      <div class="drawer">
+        <div class="dhd" onclick="toggleD('assum')">
+          <div>
+            <div class="dt">Assumptions &amp; cost inputs</div>
+            <div class="ds">Precision &middot; Overhead &middot; Caching &middot; Costs</div>
+          </div>
+          <span class="da" id="da-assum">&#9660;</span>
+        </div>
+        <div class="dbd" id="dbd-assum">
+          <div class="dsec">
+            <div class="dstitle">Memory &amp; Precision</div>
+            <div class="clbl">Weight format</div>
+            <div class="chips" id="wp-chips">
+              <div class="chip on" data-v="2" onclick="apc('wp',2,this)">BF16 &mdash; 2 bytes/param</div>
+              <div class="chip" data-v="1" onclick="apc('wp',1,this)">FP8 &mdash; 1 byte/param</div>
+            </div>
+            <div class="clbl">KV cache format</div>
+            <div class="chips" id="kv-chips">
+              <div class="chip on" data-v="2" onclick="apc('kv',2,this)">FP16 &mdash; standard</div>
+              <div class="chip" data-v="1" onclick="apc('kv',1,this)">FP8 &mdash; halves KV memory</div>
+              <div class="chip" data-v="1" onclick="apcKvInt8(this)">INT8 &mdash; halves KV memory</div>
+            </div>
+            <div style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:4px;line-height:1.5">
+              FP8: vLLM 0.4.0+ · minimal quality impact · well validated<br>
+              INT8: experimental · framework support varies · check model sensitivity
+            </div>
+            <div class="clbl" style="margin-top:10px">CUDA + framework overhead</div>
+            <div style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-bottom:6px">GPU-specific presets (estimated — not yet validated on real hardware):</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+              <button onclick="setOverhead(7,this)" style="font-family:var(--mono);font-size:10px;padding:3px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--bg3);color:var(--text2);cursor:pointer">B200 7%</button>
+              <button onclick="setOverhead(8,this)" style="font-family:var(--mono);font-size:10px;padding:3px 8px;border:1px solid var(--blue);border-radius:5px;background:rgba(77,158,245,.1);color:var(--blue);cursor:pointer">H100 8%</button>
+              <button onclick="setOverhead(8,this)" style="font-family:var(--mono);font-size:10px;padding:3px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--bg3);color:var(--text2);cursor:pointer">H200 8%</button>
+              <button onclick="setOverhead(10,this)" style="font-family:var(--mono);font-size:10px;padding:3px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--bg3);color:var(--text2);cursor:pointer">L40S 10%</button>
+              <button onclick="setOverhead(9,this)" style="font-family:var(--mono);font-size:10px;padding:3px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--bg3);color:var(--text2);cursor:pointer">A100 9%</button>
+            </div>
+            <div class="aprow">
+              <label>Custom overhead %</label>
+              <input type="range" min="3" max="20" step="1" id="s-oh" value="8" oninput="aoh(+this.value)">
+              <span class="apval" id="v-oh">8%</span>
+            </div>
+          </div>
+          <div class="dsec">
+            <div class="dstitle">Caching</div>
+            <div class="clbl">Prefix cache hit rate (shared system prompts)</div>
+            <div class="chips" id="hr-chips">
+              <div class="chip on" data-v="0.1" onclick="apc('hitrate',0.1,this)">Low 10%</div>
+              <div class="chip" data-v="0.4" onclick="apc('hitrate',0.4,this)">Medium 40%</div>
+              <div class="chip" data-v="0.7" onclick="apc('hitrate',0.7,this)">High 70% (RAG)</div>
+            </div>
+          </div>
+          <div class="dsec">
+            <div class="dstitle">Cost Inputs</div>
+            <div class="costnote">On-prem = GPU purchase ÷ amortisation period. Cloud = hourly × 720 hrs × 12 months × years, with annual price increase applied.</div>
+            <div class="aprow">
+              <label>On-prem GPU purchase price<br>
+                <span id="op-hint" style="font-size:10px">H100 &#8776; $25K purchase price</span>
+              </label>
+              <input type="range" min="5000" max="100000" step="1000" id="s-op" value="25000" oninput="aop(+this.value)">
+              <span class="apval" id="v-op">$75,000</span>
+            </div>
+            <div class="aprow">
+              <label>Amortisation period</label>
+              <div class="chip-row" style="margin-top:4px">
+                <div class="chip" data-v="2" onclick="aAmort(2,this)">2 yrs</div>
+                <div class="chip" data-v="3" onclick="aAmort(3,this)">3 yrs</div>
+                <div class="chip" data-v="4" onclick="aAmort(4,this)">4 yrs</div>
+                <div class="chip on" data-v="5" onclick="aAmort(5,this)">5 yrs</div>
+                <div class="chip" data-v="6" onclick="aAmort(6,this)">6 yrs</div>
+              </div>
+            </div>
+            <div class="aprow" style="margin-top:12px">
+              <label>Cloud hourly rate/GPU<br>
+                <span id="aws-hint" style="font-size:10px">H100 &#8776; $3.10/hr on-demand</span>
+              </label>
+              <input type="range" min="0.5" max="12" step="0.25" id="s-aws" value="3.10" oninput="aaws(+this.value)">
+              <span class="apval" id="v-aws">$3.10/hr</span>
+            </div>
+            <div class="aprow">
+              <label>Annual cloud price increase</label>
+              <div class="chip-row" style="margin-top:4px">
+                <div class="chip" data-v="0" onclick="aHike(0,this)">0%</div>
+                <div class="chip" data-v="1" onclick="aHike(1,this)">1%</div>
+                <div class="chip" data-v="2" onclick="aHike(2,this)">2%</div>
+                <div class="chip on" data-v="3" onclick="aHike(3,this)">3%</div>
+                <div class="chip" data-v="4" onclick="aHike(4,this)">4%</div>
+                <div class="chip" data-v="5" onclick="aHike(5,this)">5%</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /left-panel -->
+
+    <!-- RIGHT: RESULTS (all DOM elements, JS just updates text/style) -->
+    <div class="rp" id="rp">
+
+      <div class="rp-ph" id="rp-ph">&#8592; Configure your model and workload to see sizing results</div>
+
+      <div id="rp-results" style="display:none">
+
+        <!-- WARNINGS -->
+        <div class="wbox amber" id="w-tp">
+          <div class="wtitle">TENSOR PARALLELISM REQUIRED</div>
+          <span id="w-tp-body"></span>
+        </div>
+        <div class="wbox amber" id="w-node">
+          <div class="wtitle">NODE BOUNDARY</div>
+          <span id="w-node-body"></span>
+        </div>
+        <div class="wbox blue" id="w-prefill">
+          <div class="wtitle">PREFILL COMPUTE BOTTLENECK</div>
+          <span id="w-prefill-body"></span>
+        </div>
+        <div class="wbox blue" id="w-kvtp">
+          <div class="wtitle">TP OPTIMISED FOR KV CAPACITY</div>
+          <span id="w-kvtp-body"></span>
+        </div>
+
+        <!-- HEADLINE -->
+        <div class="rcard">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <div class="mode-badge"><div class="mdot"></div>REAL-TIME INFERENCE ONLY</div>
+              <div id="exact-badge" style="display:none;font-family:var(--mono);font-size:10px;color:var(--green)">
+                &#10003; Exact KV from HuggingFace
+              </div>
+            </div>
+            <button onclick="showVllmConfig()" style="display:flex;align-items:center;gap:5px;padding:5px 12px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;cursor:pointer;font-size:11px;font-weight:500;color:var(--blue);font-family:var(--body);white-space:nowrap">
+              <span>&#128196;</span> vLLM config
+            </button>
+          </div>
+          <div class="bignum" id="r-bignum">—</div>
+          <div class="bignumlbl" id="r-lbl">—</div>
+          <div class="rctxline" id="r-ctx">—</div>
+        </div>
+
+        <!-- KV METRICS -->
+        <div class="kvm">
+          <div class="kvc">
+            <div class="kvlbl">Weight Memory</div>
+            <div class="kvval" id="kv-wt" style="color:var(--text)">—</div>
+            <div class="kvsub" id="kv-wt-sub">—</div>
+          </div>
+          <div class="kvc">
+            <div class="kvlbl">Avail for KV</div>
+            <div class="kvval" id="kv-avail" style="color:var(--blue)">—</div>
+            <div class="kvsub">per replica (95% PA)</div>
+          </div>
+          <div class="kvc">
+            <div class="kvlbl">KV per User</div>
+            <div class="kvval" id="kv-user" style="color:var(--amber)">—</div>
+            <div class="kvsub" id="kv-user-sub">—</div>
+          </div>
+          <div class="kvc">
+            <div class="kvlbl">Users / Replica</div>
+            <div class="kvval" id="kv-upr" style="color:var(--green)">—</div>
+            <div class="kvsub" id="kv-upr-sub">—</div>
+          </div>
+        </div>
+
+        <!-- HEADROOM TABLE -->
+        <div class="hroom">
+          <div class="htitle">KV Headroom &mdash; users per replica at different context lengths</div>
+          <div id="hroom-rows"></div>
+        </div>
+
+        <!-- BALLOON VIZ -->
+        <div class="bwrap">
+          <div class="btitle">KV Cache Memory Visualisation (GB)</div>
+          <div class="bviz" id="balloon-viz"></div>
+        </div>
+
+        <!-- COST COMPARISON -->
+        <div id="cost-wrap"></div>
+
+        <!-- OPTIMISATION TIERS -->
+        <div class="tlist" id="tier-list"></div>
+
+        <!-- CHART -->
+        <div class="cwrap"><canvas id="myChart"></canvas></div>
+        <div class="cnote" id="chart-note">—</div>
+
+        <!-- NODE TOPOLOGY -->
+        <div class="topo">
+          <div class="topo-title">Node Topology</div>
+          <div id="topo-nodes" class="tnodes"></div>
+          <div class="tleg">
+            <div class="tli"><div class="tld" style="background:rgba(37,99,235,.1);border-color:rgba(37,99,235,.2)"></div>Standard GPU</div>
+            <div class="tli"><div class="tld" style="background:rgba(146,64,14,.1);border-color:rgba(146,64,14,.2)"></div>Prefill (llm-d)</div>
+            <div class="tli"><div class="tld" style="background:rgba(21,128,61,.1);border-color:rgba(21,128,61,.2)"></div>Decode (llm-d)</div>
+            <div class="tli"><div class="tld" style="background:var(--bg4);border-color:var(--border)"></div>Idle</div>
+          </div>
+        </div>
+
+        <!-- DISCLAIMERS -->
+        <div class="drawer">
+          <div class="dhd" onclick="toggleD('disc')">
+            <div>
+              <div class="dt">What this doesn&apos;t account for</div>
+              <div class="ds">Factors that may increase real-world GPU count</div>
+            </div>
+            <span class="da" id="da-disc">&#9660;</span>
+          </div>
+          <div class="dbd" id="dbd-disc">
+            <div class="di">
+              <div class="dih"><span class="dtag w">CORRECTNESS</span><span class="diname">Activation memory during prefill</span></div>
+              <div class="dibody">Up to 10&ndash;20GB at 64K+ context. Activations are not held long-term but spike during prefill computation.</div>
+              <div class="didir">&#8594; Add 10&ndash;15% VRAM buffer for long-context workloads. Use chunked prefill in vLLM.</div>
+            </div>
+            <div class="di">
+              <div class="dih"><span class="dtag w">ACCURACY</span><span class="diname">Low-concurrency GPU utilisation</span></div>
+              <div class="dibody">At fewer than 20 users, GPU is 20&ndash;40% utilised. You may need fewer GPUs in practice.</div>
+              <div class="didir">&#8594; Measure actual utilisation with vLLM /metrics endpoint before scaling.</div>
+            </div>
+            <div class="di">
+              <div class="dih"><span class="dtag i">ADVANCED</span><span class="diname">Speculative decoding</span></div>
+              <div class="dibody">A draft model adds VRAM pressure but gives 2&ndash;3&#215; throughput. Not modelled here.</div>
+              <div class="didir">&#8594; Add draft model weight memory (typically 1&ndash;7B) to your VRAM budget.</div>
+            </div>
+            <div class="di">
+              <div class="dih"><span class="dtag i">ADVANCED</span><span class="diname">LoRA multi-adapter serving</span></div>
+              <div class="dibody">Each active LoRA adapter adds 16&ndash;256MB depending on rank and target modules.</div>
+              <div class="didir">&#8594; Use S-LoRA / punica kernel in vLLM for batched multi-adapter inference.</div>
+            </div>
+            <div class="di">
+              <div class="dih"><span class="dtag i">ADVANCED</span><span class="diname">Pipeline parallelism overhead</span></div>
+              <div class="dibody">Cross-node communication reduces effective throughput 10&ndash;30% on Ethernet vs NVLink.</div>
+              <div class="didir">&#8594; Prefer tensor parallelism within a node (NVLink) before pipeline parallelism across nodes.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MATH & VALIDATION PANEL -->
+        <div class="drawer">
+          <div class="dhd" onclick="toggleD('math')">
+            <div>
+              <div class="dt">&#402; Formulas &amp; validation</div>
+              <div class="ds">Core equations and theoretical vs reported actuals</div>
+            </div>
+            <span class="da" id="da-math">&#9660;</span>
+          </div>
+          <div class="dbd" id="dbd-math">
+
+            <!-- FORMULAS -->
+            <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Core equations</div>
+
+              <div style="margin-bottom:12px">
+                <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:4px">1. KV cache per user (exact)</div>
+                <div style="font-family:var(--mono);font-size:11px;color:var(--text2);background:var(--bg3);padding:8px 10px;border-radius:6px;line-height:1.8">
+                  KV_bytes = 2 &times; num_kv_heads &times; head_dim &times; num_layers &times; bytes_per_element &times; ctx_tokens<br>
+                  <span style="color:var(--text3)">// 2 = K tensor + V tensor &nbsp;|&nbsp; bytes: FP16=2, FP8=1, INT8=1</span>
+                </div>
+                <div style="font-size:10px;color:var(--text3);margin-top:4px;font-family:var(--mono)">Example Llama 3.1 8B FP16 8K: 2&times;8&times;128&times;32&times;2&times;8000 = 1.05 GB/user</div>
+              </div>
+
+              <div style="margin-bottom:12px">
+                <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:4px">2. KV pool available</div>
+                <div style="font-family:var(--mono);font-size:11px;color:var(--text2);background:var(--bg3);padding:8px 10px;border-radius:6px;line-height:1.8">
+                  KV_pool = (GPU_VRAM &times; TP &minus; model_weights) &times; (1 &minus; overhead%) &times; 0.95<br>
+                  <span style="color:var(--text3)">// overhead% covers CUDA graphs, activations, NCCL buffers</span><br>
+                  <span style="color:var(--text3)">// 0.95 = PagedAttention block efficiency</span>
+                </div>
+              </div>
+
+              <div style="margin-bottom:12px">
+                <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:4px">3. Users per replica &amp; GPU count</div>
+                <div style="font-family:var(--mono);font-size:11px;color:var(--text2);background:var(--bg3);padding:8px 10px;border-radius:6px;line-height:1.8">
+                  users_per_replica = floor(KV_pool / KV_per_user)<br>
+                  replicas = ceil(concurrent_users / users_per_replica)<br>
+                  total_GPUs = replicas &times; TP_degree<br>
+                  <span style="color:var(--text3)">// TP selected to minimise total_GPUs across TP=1,2,4,8</span>
+                </div>
+              </div>
+
+              <div style="margin-bottom:4px">
+                <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:4px">4. Weight memory</div>
+                <div style="font-family:var(--mono);font-size:11px;color:var(--text2);background:var(--bg3);padding:8px 10px;border-radius:6px;line-height:1.8">
+                  weight_GB = params_B &times; bytes_per_param &nbsp;(BF16=2, FP8=1)<br>
+                  <span style="color:var(--text3)">// Example: 70B &times; 2 = 140 GB &nbsp;|&nbsp; 70B FP8 = 70 GB</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- VALIDATION TABLE -->
+            <div style="padding:12px 14px">
+              <div style="font-family:var(--mono);font-size:10px;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Theoretical vs reported actuals</div>
+              <div style="font-size:10px;color:var(--amber);font-family:var(--mono);margin-bottom:10px">&#9888; Overhead values are estimates. Community data below — not yet validated on our hardware.</div>
+
+              <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px">
+                <thead>
+                  <tr style="border-bottom:1px solid var(--border2)">
+                    <th style="text-align:left;padding:4px 6px;color:var(--text3);font-weight:500">GPU / Model / TP</th>
+                    <th style="text-align:right;padding:4px 6px;color:var(--text3);font-weight:500">Theoretical KV</th>
+                    <th style="text-align:right;padding:4px 6px;color:var(--text3);font-weight:500">Reported KV</th>
+                    <th style="text-align:right;padding:4px 6px;color:var(--text3);font-weight:500">Gap</th>
+                    <th style="text-align:left;padding:4px 6px;color:var(--text3);font-weight:500">Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:5px 6px;color:var(--text2)">H100 80GB / 70B BF16 / TP=2</td>
+                    <td style="padding:5px 6px;color:var(--text2);text-align:right">6.8 GB</td>
+                    <td style="padding:5px 6px;color:var(--amber);text-align:right">~5.2 GB</td>
+                    <td style="padding:5px 6px;color:var(--red);text-align:right">&#8722;23%</td>
+                    <td style="padding:5px 6px;color:var(--text3)">vLLM #3562</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:5px 6px;color:var(--text2)">H100 80GB / 8B BF16 / TP=1</td>
+                    <td style="padding:5px 6px;color:var(--text2);text-align:right">54.7 GB</td>
+                    <td style="padding:5px 6px;color:var(--text3);text-align:right">TBD</td>
+                    <td style="padding:5px 6px;color:var(--text3);text-align:right">—</td>
+                    <td style="padding:5px 6px;color:var(--text3)">awaiting data</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:5px 6px;color:var(--text2)">H200 141GB / 8B BF16 / TP=1</td>
+                    <td style="padding:5px 6px;color:var(--text2);text-align:right">108.0 GB</td>
+                    <td style="padding:5px 6px;color:var(--text3);text-align:right">TBD</td>
+                    <td style="padding:5px 6px;color:var(--text3);text-align:right">—</td>
+                    <td style="padding:5px 6px;color:var(--text3)">awaiting data</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:5px 6px;color:var(--text2)">L40S 48GB / 8B BF16 / TP=1</td>
+                    <td style="padding:5px 6px;color:var(--text2);text-align:right">29.5 GB</td>
+                    <td style="padding:5px 6px;color:var(--text3);text-align:right">TBD</td>
+                    <td style="padding:5px 6px;color:var(--text3);text-align:right">—</td>
+                    <td style="padding:5px 6px;color:var(--text3)">awaiting data</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:5px 6px;color:var(--text2)">B200 192GB / 70B BF16 / TP=1</td>
+                    <td style="padding:5px 6px;color:var(--text2);text-align:right">148.6 GB</td>
+                    <td style="padding:5px 6px;color:var(--text3);text-align:right">TBD</td>
+                    <td style="padding:5px 6px;color:var(--text3);text-align:right">—</td>
+                    <td style="padding:5px 6px;color:var(--text3)">awaiting data</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:8px;line-height:1.6">
+                Have real numbers? &rarr; <a href="https://github.com/nb-qbits/gpu-calc/issues" target="_blank" style="color:var(--blue)">Submit via GitHub</a> and we'll update the table with your GPU model and credit.
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- BATCH PLACEHOLDER -->
+        <div class="bcard">
+          <div class="btag">COMING IN V2</div>
+          <div style="font-size:13px;font-weight:500;color:var(--text2)">Batch / offline inference sizing</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">
+            tokens/day &#8594; GPUs &middot; throughput-optimised &middot; spot-friendly &middot; $/million-token metric
+          </div>
+        </div>
+
+
+        <!-- NAV BUTTONS -->
+        <div class="rnav">
+          <button class="btn" onclick="switchPage('explorer',document.querySelectorAll('.ntab')[1])">GPU Explorer &#8594;</button>
+          <button class="btn p" id="tco-btn">3-year TCO &#8599;</button>
+          <a class="btn danger" id="bug-btn"
+            href="https://github.com/nb-qbits/gpu-calc/issues/new?title=Bug+Report&labels=bug"
+            target="_blank" style="text-decoration:none;display:inline-flex;align-items:center">Report bug</a>
+        </div>
+
+      </div><!-- /rp-results -->
+    </div><!-- /rp -->
+
+  </div><!-- /layout -->
+</div><!-- /page-calc -->
+
+<!-- VLLM CONFIG MODAL -->
+<div id="vllm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:300;align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:24px;width:min(680px,94vw);max-height:88vh;overflow-y:auto;position:relative">
+    <button onclick="closeVllmConfig()" style="position:absolute;top:12px;right:14px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px">&#215;</button>
+    <div style="font-family:var(--display);font-size:16px;font-weight:600;margin-bottom:4px">vLLM Configuration</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:16px" id="vllm-subtitle"></div>
+
+    <!-- TABS -->
+    <div style="display:flex;gap:2px;background:var(--bg3);border-radius:8px;padding:3px;width:fit-content;margin-bottom:14px">
+      <button class="vllm-tab on" onclick="switchVllmTab('cmd',this)" style="padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer;border:none;font-family:var(--body);background:var(--bg4);color:var(--text)">CLI command</button>
+      <button class="vllm-tab" onclick="switchVllmTab('py',this)" style="padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer;border:none;font-family:var(--body);background:none;color:var(--text2)">Python</button>
+      <button class="vllm-tab" onclick="switchVllmTab('yaml',this)" style="padding:5px 14px;border-radius:6px;font-size:12px;cursor:pointer;border:none;font-family:var(--body);background:none;color:var(--text2)">YAML (Kubernetes)</button>
+    </div>
+
+    <!-- CODE BLOCK -->
+    <div style="position:relative">
+      <pre id="vllm-code" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:var(--mono);font-size:12px;line-height:1.7;overflow-x:auto;white-space:pre;color:var(--text)"></pre>
+      <button onclick="copyVllmConfig()" id="copy-btn" style="position:absolute;top:8px;right:8px;background:var(--blue);border:none;border-radius:6px;color:#fff;font-size:11px;padding:4px 10px;cursor:pointer;font-family:var(--body)">Copy</button>
+    </div>
+
+    <!-- ASSUMPTIONS NOTE -->
+    <div style="margin-top:12px;padding:10px 12px;background:var(--adim);border:1px solid var(--abord);border-radius:8px;font-size:11px;color:var(--amber);line-height:1.6" id="vllm-notes"></div>
+  </div>
+</div>
+
+<!-- EXPLORER -->
+<div class="page" id="page-explorer">
+<div>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+    <div><div style="font-family:var(--display);font-size:18px;font-weight:700;margin-bottom:2px">GPU Explorer</div><div style="font-size:12px;color:var(--text2)">Compare NVIDIA, AMD, and cloud GPUs</div></div>
+    <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+      <div style="display:flex;gap:4px">
+        <button class="fchip on nv" onclick="expToggle('nv',this)">NVIDIA</button>
+        <button class="fchip on amd" onclick="expToggle('amd',this)">AMD</button>
+        <button class="fchip on cld" onclick="expToggle('cloud',this)">Cloud</button>
+      </div>
+      <div class="etabs" style="margin-bottom:0">
+        <button class="etab on" onclick="switchE('chart',this)">Bubble chart</button>
+        <button class="etab" onclick="switchE('pricing',this)">Pricing table</button>
+      </div>
+    </div>
+  </div>
+  <div class="axrow" id="exp-ax-row">
+    <span class="axlbl">X</span><div class="axcs">
+      <div class="axc on" data-ax="x" data-v="vram" onclick="expSetAx('x','vram',this)">VRAM</div>
+      <div class="axc" data-ax="x" data-v="price" onclick="expSetAx('x','price',this)">Price</div>
+      <div class="axc" data-ax="x" data-v="tpp" onclick="expSetAx('x','tpp',this)">TPP</div>
+    </div>
+    <span class="axlbl" style="margin-left:8px">Y</span><div class="axcs">
+      <div class="axc" data-ax="y" data-v="vram" onclick="expSetAx('y','vram',this)">VRAM</div>
+      <div class="axc" data-ax="y" data-v="price" onclick="expSetAx('y','price',this)">Price</div>
+      <div class="axc on" data-ax="y" data-v="tpp" onclick="expSetAx('y','tpp',this)">TPP</div>
+    </div>
+    <span class="axlbl" style="margin-left:8px">Bubble</span><div class="axcs">
+      <div class="axc" data-ax="r" data-v="vram" onclick="expSetAx('r','vram',this)">VRAM</div>
+      <div class="axc" data-ax="r" data-v="price" onclick="expSetAx('r','price',this)">Price</div>
+      <div class="axc on" data-ax="r" data-v="tpp_per_100" onclick="expSetAx('r','tpp_per_100',this)">$/100TPP</div>
+    </div>
+    <span class="axlbl" id="exp-ax-desc" style="margin-left:10px;color:var(--text3);font-size:10px"></span>
+  </div>
+  <div class="epane on" id="ep-chart" style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
+    <div class="scwrap"><canvas id="scatterChart"></canvas></div>
+  </div>
+  <div class="epane" id="ep-pricing">
+    <table class="ptable"><thead><tr>
+      <th class="s" onclick="sortP('name')">GPU &#8597;</th><th>VRAM</th>
+      <th class="s" onclick="sortP('price')">Purchase &#8597;</th>
+      <th class="s" onclick="sortP('onprem_mo')">On-prem/mo &#8597;</th>
+      <th>Cloud $/hr</th><th>Cloud $/mo</th>
+      <th class="s" onclick="sortP('tpp')">TPP &#8597;</th>
+      <th class="s" onclick="sortP('tpp_per_100')">$/100TPP &#8597;</th>
+    </tr></thead>
+    <tbody id="ptbody"></tbody></table>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);padding:8px 10px;line-height:1.7">Prices are indicative estimates. TPP = tokens/sec. Validate with vendors before procurement.</div>
+  </div>
+</div>
+</div>
+</div><!-- /main -->
+
+<!-- LINKEDIN -->
+<div class="liwrap" id="liwrap">
+  <div class="licard">
+    <button class="lidis" onclick="disLI()">&#215;</button>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div class="liav">VG</div>
+      <div>
+        <div style="font-size:12px;font-weight:500;color:var(--text)">Vikas Grover</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">AI Infrastructure</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);line-height:1.5">Building AI infra tools. Follow for LLM serving content.</div>
+    <a class="libtn" href="https://www.linkedin.com/in/vgrover1515/" target="_blank" rel="noopener">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+      </svg>
+      Follow on LinkedIn
+    </a>
+  </div>
+</div>
+
+<!-- COUNTER BAR -->
+<div class="cbar">
+  <div class="citems">
+    <div class="ci"><div class="cdot"></div><span>Visitors</span><span class="cnum" id="visit-count">—</span></div>
+    <div class="ci"><span>Today</span><span class="cnum" id="today-count">—</span></div>
+    <div class="ci" id="geo-item" style="display:none">
+      <span>Top:</span><div class="gcs2" id="geo-chips"></div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v5.0</span>
+    <a href="https://github.com/nb-qbits/gpu-calc" target="_blank"
+      style="font-family:var(--mono);font-size:10px;color:var(--text3);text-decoration:none">&#9733; GitHub</a>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">&#169; 2025 Vikas Grover &middot; <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" style="color:var(--text3)">CC BY-NC 4.0</a></span>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// ===== STATE =====
+var S = {
+  model:8, modelLabel:'8B',
+  numKvHeads:null, headDim:null, numLayers:null, hfId:null,
+  users:30, gpu:80, gpuName:'H100', ctx:8,
+  wp:2, kv:2, kvLabel:'fp16', attn:'gqa', hitrate:0.1, overhead:8,
+  onpremYr:25000, awsHr:3.10, amortYrs:5, cloudHike:3
+};
+var ADMIN = {cost:true, tech:true, onprem:true, aws:true, linkedin:true};
+var isDark = false;
+var chartInst = null, scatterInst = null;
+var axX='vram', axY='tpp', axR='price';
+var showNv=true, showAmd=true, pShowNv=true, pShowAmd=true, pShowCloud=true;
+var sortKey=null, sortDir=1, liDismissed=false;
+var PROFILE = {
+  ns:'nb-qbits', key:'gpu-calc-visits',
+  today:'gpu-calc-today-'+new Date().toISOString().slice(0,10).replace(/-/g,'')
+};
+
+// ===== HF API =====
+// ===== CLOUDFLARE WORKER URL =====
+// After deploying hf-proxy-worker.js, replace this with your worker URL:
+var HF_PROXY = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev';
+var MODEL_CONFIGS = {
+  'meta-llama/Llama-3.1-8B':   {params:8,  layers:32, kvHeads:8,  headDim:128, dtype:'bfloat16', maxCtx:131072, attn:'gqa'},
+  'meta-llama/Llama-3.1-8B-Instruct': {params:8, layers:32, kvHeads:8, headDim:128, dtype:'bfloat16', maxCtx:131072, attn:'gqa'},
+  'meta-llama/Llama-3.1-70B':  {params:70, layers:80, kvHeads:8,  headDim:128, dtype:'bfloat16', maxCtx:131072, attn:'gqa'},
+  'meta-llama/Llama-3.1-70B-Instruct':{params:70,layers:80,kvHeads:8,headDim:128,dtype:'bfloat16',maxCtx:131072,attn:'gqa'},
+  'meta-llama/Llama-3.2-3B':   {params:3,  layers:28, kvHeads:8,  headDim:64,  dtype:'bfloat16', maxCtx:131072, attn:'gqa'},
+  'meta-llama/Llama-3.3-70B-Instruct':{params:70,layers:80,kvHeads:8,headDim:128,dtype:'bfloat16',maxCtx:131072,attn:'gqa'},
+  'Qwen/Qwen2.5-7B':           {params:7,  layers:28, kvHeads:4,  headDim:128, dtype:'bfloat16', maxCtx:131072, attn:'gqa'},
+  'Qwen/Qwen2.5-7B-Instruct':  {params:7,  layers:28, kvHeads:4,  headDim:128, dtype:'bfloat16', maxCtx:131072, attn:'gqa'},
+  'Qwen/Qwen2.5-72B':          {params:72, layers:80, kvHeads:8,  headDim:128, dtype:'bfloat16', maxCtx:131072, attn:'gqa'},
+  'Qwen/Qwen2.5-72B-Instruct': {params:72, layers:80, kvHeads:8,  headDim:128, dtype:'bfloat16', maxCtx:131072, attn:'gqa'},
+  'mistralai/Mistral-7B-v0.3': {params:7,  layers:32, kvHeads:8,  headDim:128, dtype:'bfloat16', maxCtx:32768,  attn:'gqa'},
+  'mistralai/Mistral-7B-Instruct-v0.3':{params:7,layers:32,kvHeads:8,headDim:128,dtype:'bfloat16',maxCtx:32768,attn:'gqa'},
+  'mistralai/Mistral-Nemo-Instruct-2407':{params:12,layers:40,kvHeads:8,headDim:128,dtype:'bfloat16',maxCtx:131072,attn:'gqa'},
+  'microsoft/phi-4':            {params:14, layers:40, kvHeads:10, headDim:96,  dtype:'bfloat16', maxCtx:16384,  attn:'gqa'},
+  'microsoft/Phi-3.5-mini-instruct':{params:3.8,layers:32,kvHeads:32,headDim:96,dtype:'bfloat16',maxCtx:131072,attn:'mha'},
+  'google/gemma-2-9b':         {params:9,  layers:42, kvHeads:8,  headDim:256, dtype:'bfloat16', maxCtx:8192,   attn:'gqa'},
+  'google/gemma-2-27b':        {params:27, layers:46, kvHeads:16, headDim:256, dtype:'bfloat16', maxCtx:8192,   attn:'gqa'},
+  'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B':{params:7,layers:28,kvHeads:4,headDim:128,dtype:'bfloat16',maxCtx:131072,attn:'gqa'},
+  'deepseek-ai/DeepSeek-R1-Distill-Llama-70B':{params:70,layers:80,kvHeads:8,headDim:128,dtype:'bfloat16',maxCtx:131072,attn:'gqa'},
+};
+
+function applyModelConfig(id, cfg) {
+  S.hfId = id; S.modelLabel = id.split('/').pop();
+  S.numKvHeads = cfg.kvHeads; S.headDim = cfg.headDim; S.numLayers = cfg.layers;
+  S.attn = cfg.attn || 'gqa';
+  if (cfg.params) {
+    S.model = cfg.params;
+    document.getElementById('s-params').value = Math.min(cfg.params, 405);
+    document.getElementById('sv-params').textContent = cfg.params + 'B';
+  }
+  document.querySelectorAll('#attn-chips .chip').forEach(function(c) {
+    c.classList.toggle('on', c.dataset.v === S.attn);
+  });
+  var info = document.getElementById('minfo');
+  info.className = 'minfo show';
+  info.textContent = id + ' | ' + cfg.params + 'B | Layers: ' + cfg.layers
+    + ' | KV heads: ' + cfg.kvHeads + ' | Head dim: ' + cfg.headDim
+    + ' | dtype: ' + cfg.dtype
+    + (cfg.maxCtx ? ' | max ctx: ' + Math.round(cfg.maxCtx/1000) + 'K' : '');
+  document.getElementById('hf-st').className = 'hfst ok';
+  document.getElementById('hf-st').textContent = '\u2713 Exact KV loaded ('
+    + cfg.kvHeads + ' KV heads \u00d7 ' + cfg.headDim + ' dim \u00d7 ' + cfg.layers + ' layers)';
+  syncAssumptions();
+}
+
+function fetchHF() {
+  var id = document.getElementById('hf-inp').value.trim();
+  if (!id) return;
+  var btn = document.getElementById('hf-btn');
+  var st = document.getElementById('hf-st');
+
+  // Check pre-baked configs first (instant, no network)
+  if (MODEL_CONFIGS[id]) {
+    applyModelConfig(id, MODEL_CONFIGS[id]);
+    renderResult();
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = '...';
+  st.className = 'hfst spin'; st.textContent = 'Fetching from HuggingFace...';
+
+  // Use Cloudflare Worker proxy (bypasses CORS)
+  var workerReady = HF_PROXY.indexOf('YOUR-NAME') === -1;
+  var fetchUrl = workerReady
+    ? HF_PROXY + '/?id=' + encodeURIComponent(id)
+    : 'https://corsproxy.io/?' + encodeURIComponent('https://huggingface.co/' + id + '/raw/main/config.json');
+
+  if (!workerReady) {
+    st.textContent = 'Worker not configured \u2014 trying fallback proxy...';
+  }
+
+  fetch(fetchUrl)
+    .then(function(r) {
+      if (!r.ok) throw new Error('Model not found (' + r.status + ')');
+      return r.json();
+    })
+    .then(function(cfg) {
+      if (cfg.error) throw new Error(cfg.error);
+      var numLayers = cfg.num_hidden_layers || cfg.n_layer || null;
+      var numKvH = cfg.num_key_value_heads || cfg.num_attention_heads || null;
+      var numQH = cfg.num_attention_heads || cfg.n_head || null;
+      var hidden = cfg.hidden_size || cfg.n_embd || null;
+      var headDim = (hidden && numQH) ? Math.floor(hidden / numQH) : null;
+      var dtype = cfg.torch_dtype || cfg.dtype || 'bfloat16';
+      var maxCtx = cfg.max_position_embeddings || null;
+      S.hfId = id; S.numKvHeads = numKvH; S.headDim = headDim; S.numLayers = numLayers;
+      S.modelLabel = id.split('/').pop();
+      var attn = (numKvH && numQH && numKvH < numQH) ? 'gqa' : 'mha';
+      S.attn = attn;
+      document.querySelectorAll('#attn-chips .chip').forEach(function(c) {
+        c.classList.toggle('on', c.dataset.v === attn);
+      });
+      var info = document.getElementById('minfo');
+      info.className = 'minfo show';
+      info.textContent = id + ' | Layers: ' + (numLayers||'?') + ' | KV heads: ' + (numKvH||'?')
+        + ' | Head dim: ' + (headDim||'?') + ' | dtype: ' + dtype
+        + (maxCtx ? ' | max ctx: ' + Math.round(maxCtx/1000) + 'K' : '');
+      st.className = 'hfst ok';
+      st.textContent = (numKvH && headDim && numLayers)
+        ? '\u2713 Exact KV loaded \u2014 ' + numKvH + ' KV heads \u00d7 ' + headDim + ' dim \u00d7 ' + numLayers + ' layers'
+        : '\u2713 Loaded (some fields missing \u2014 using approximation)';
+      btn.disabled = false; btn.textContent = 'Lookup';
+      renderResult();
+    })
+    .catch(function(e) {
+      st.className = 'hfst err';
+      st.textContent = workerReady
+        ? 'Lookup failed: ' + e.message + ' \u2014 check model ID or use manual params'
+        : 'Worker not configured \u2014 deploy hf-proxy-worker.js to enable live lookup. Using manual params.';
+      btn.disabled = false; btn.textContent = 'Lookup';
+    });
+}
+
+function onHFInput() {
+  S.numKvHeads = null; S.headDim = null; S.numLayers = null; S.hfId = null;
+  document.getElementById('minfo').className = 'minfo';
+  document.getElementById('hf-st').textContent = '';
+}
+function qm(id) {
+  document.getElementById('hf-inp').value = id;
+  if (MODEL_CONFIGS[id]) {
+    applyModelConfig(id, MODEL_CONFIGS[id]);
+    renderResult();
+  } else {
+    fetchHF();
+  }
+}
+
+// ===== CALC =====
+function nP2(n) { var p=1; while(p<n) p*=2; return p; }
+
+function kvBytesPerToken() {
+  // ALWAYS returns GB per K-tokens (consistent unit for both paths)
+  var b = S.kv === 1 ? 1 : 2;
+  if (S.numKvHeads && S.headDim && S.numLayers) {
+    // exact: bytes/tok → GB/K-tok = bytes * 1000 / 1e9
+    return 2 * S.numKvHeads * S.headDim * S.numLayers * b * 1000 / 1e9;
+  }
+  // approx: already GB/K-tok
+  return (S.attn === 'gqa' ? 0.02 : 0.04) * S.model * b;
+}
+
+function kvFP8BytesPerToken() {
+  // ALWAYS returns GB per K-tokens
+  if (S.numKvHeads && S.headDim && S.numLayers) {
+    return 2 * S.numKvHeads * S.headDim * S.numLayers * 1 * 1000 / 1e9;
+  }
+  return (S.attn === 'gqa' ? 0.02 : 0.04) * S.model;
+}
+
+function calcTiers() {
+  var wt = S.model * S.wp;
+  var ohGB = S.gpu * (S.overhead / 100);
+  var usable = S.gpu - ohGB;
+
+  var kvBpt = kvBytesPerToken();   // GB per K-tokens
+  var kvB   = kvBpt * S.ctx;       // GB per user at chosen context
+  var kvF8bpt = kvFP8BytesPerToken();
+  var kvC   = kvB * (1 - S.hitrate);
+  var kvF   = kvF8bpt * S.ctx * (1 - S.hitrate);
+
+  // ── OPTIMAL TP DERIVATION ─────────────────────────────────────────────
+  // For each valid TP, compute total GPUs needed.
+  // Pick the TP that results in fewest total GPUs.
+  // This naturally handles the 8K vs 32K case — TP=4 at 32K wins
+  // because its larger KV pool serves more users per replica.
+  var MAX_TP = 8; // Max practical TP — NVLink within a single 8-GPU node
+  var tpWeights = nP2(Math.max(1, Math.ceil(wt / Math.max(0.1, usable))));
+  var bestTp = Math.min(tpWeights, MAX_TP), bestTotal = Infinity;
+  var tp = tpWeights;
+  while (tp <= MAX_TP) {
+    var gpuEff_t = usable * tp;
+    var avail_t  = Math.max(0.01, gpuEff_t - wt);
+    var aPA_t    = avail_t * 0.95;
+    if (aPA_t > 0) {
+      var upr_t   = Math.max(1, Math.floor(aPA_t / Math.max(0.001, kvB)));
+      var total_t = Math.ceil(S.users / upr_t) * tp;
+      if (total_t < bestTotal) { bestTotal = total_t; bestTp = tp; }
+    }
+    tp *= 2;
+  }
+  var tpMin = bestTp;
+
+  // Effective VRAM and KV budget for this TP group
+  var gpuEff = usable * tpMin;
+  var avail  = Math.max(0.1, gpuEff - wt);
+  var aPA    = avail * 0.95;
+
+  // ── TIERS ─────────────────────────────────────────────────────────────
+  // t1: baseline — one replica handles as many users as KV allows
+  var upr  = Math.max(1, Math.floor(aPA / Math.max(0.001, kvB)));
+  var reps = Math.ceil(S.users / upr);
+  var t1   = reps * tpMin;
+
+  var upr2 = Math.max(1, Math.floor(aPA / Math.max(0.001, kvC)));
+  var t2   = Math.min(t1, Math.ceil(S.users / upr2) * tpMin);
+
+  var upr3 = Math.max(1, Math.floor(aPA / Math.max(0.001, kvF)));
+  var t3   = Math.min(t2, Math.ceil(S.users / upr3) * tpMin);
+
+  // ── LLM-D P/D DISAGGREGATION ──────────────────────────────────────────
+  // Same inputs: concurrent users, context, GPU type.
+  // Assumption: 50% of concurrent users are actively decoding at any moment.
+  // The other 50% are in human think-time (just received a response).
+  // Prefill pool = 25% of decode GPUs (min 1 TP group).
+  // Both pools use same TP as baseline (model must still fit).
+  //
+  // Decode pool:
+  //   active_decode = users × 0.5  (50% actively generating)
+  //   decode_replicas = ceil(active_decode / upr)
+  //   decode_gpus = decode_replicas × tpMin
+  //
+  // Prefill pool:
+  //   prefill is compute-bound, fast relative to decode
+  //   size at 25% of decode GPUs, rounded up to tpMin boundary
+  //   min = 1 TP group (must fit the model)
+  //
+  // llm-d viable: only makes sense at scale where the
+  // prefill/decode split provides meaningful savings.
+  // Gate: users >= 50 OR ctx >= 32K (long prompts stress prefill).
+
+  var llmdOk = (S.users >= 50 || S.ctx >= 32) && t1 >= 4;
+
+  var activeDecodeUsers = Math.ceil(S.users * 0.5);
+  var decodeReps  = Math.max(1, Math.ceil(activeDecodeUsers / upr));
+  var decodeGpus  = decodeReps * tpMin;
+
+  // Prefill: 25% of decode, rounded up to tpMin, min tpMin
+  var prefillGpus = Math.max(tpMin, Math.ceil(decodeGpus * 0.25 / tpMin) * tpMin);
+
+  var llmdTotal   = decodeGpus + prefillGpus;
+
+  // t4: llm-d WITH FP8 KV on decode pool
+  // llm-d is complementary to FP8 KV — deploy both together
+  // Decode pool uses FP8 KV (kvF), prefill uses full precision
+  // Compare against t1 (baseline) not t3
+  var upr_llmd = Math.max(1, Math.floor(aPA / Math.max(0.001, kvF)));
+  var decReps_llmd = Math.max(1, Math.ceil(activeDecodeUsers / upr_llmd));
+  var decGpus_llmd = decReps_llmd * tpMin;
+  var preGpus_llmd = Math.max(tpMin, Math.ceil(decGpus_llmd * 0.25 / tpMin) * tpMin);
+  var llmdTotal_llmd = decGpus_llmd + preGpus_llmd;
+  var llmdRaw = Math.max(tpMin * 2, llmdTotal_llmd);
+  var t4 = (llmdOk && llmdRaw < t1) ? llmdRaw : t1;
+  var dec = decGpus_llmd;
+  var pre = preGpus_llmd;
+
+  var gpn   = 8;
+  var nodes = Math.ceil(t1 / gpn);
+  var idle  = nodes * gpn - t1;
+
+  // Headroom table — each context level uses optimal TP (same logic as main calc)
+  var ctxs = [4, 8, 16, 32, 64, 128, 256];
+  var headroom = ctxs.map(function(c) {
+    var kv_c = kvBpt * c;
+    // Find optimal TP for this context level (minimise total GPUs)
+    var tpW_c = nP2(Math.max(1, Math.ceil(wt / Math.max(0.1, usable))));
+    var bestTp_c = tpW_c, bestTotal_c = Infinity, tp_c = tpW_c;
+    while (tp_c <= MAX_TP) {
+      var av_c = (usable * tp_c - wt) * 0.95;
+      if (av_c > 0) {
+        var u_c = Math.max(1, Math.floor(av_c / Math.max(0.001, kv_c)));
+        var tot_c = Math.ceil(S.users / u_c) * tp_c;
+        if (tot_c < bestTotal_c) { bestTotal_c = tot_c; bestTp_c = tp_c; }
+      }
+      tp_c *= 2;
+    }
+    var avail_c = Math.max(0, (usable * bestTp_c - wt) * 0.95);
+    var u = Math.max(0, Math.floor(avail_c / Math.max(0.001, kv_c)));
+    return { ctx: c, users: u, tp: bestTp_c };
+  });
+
+  var exact   = !!(S.numKvHeads && S.headDim && S.numLayers);
+  var prefill = S.ctx >= 32 && S.model >= 30;
+  var ttft    = Math.round(S.ctx * 1000 * 2 * S.model / (15840 * 1000) * 10) / 10;
+  var kvTpOpt = tpMin > tpWeights; // TP was bumped beyond weights minimum for KV capacity
+
+  return { t1:t1, t2:t2, t3:t3, t4:t4, tpMin:tpMin, tpWeights:tpWeights, wt:wt, ohGB:ohGB, aPA:aPA,
+    upr:upr, reps:reps, kvB:kvB, kvBpt:kvBpt, llmdOk:llmdOk,
+    dec:dec, pre:pre, activeDecodeUsers:activeDecodeUsers,
+    nodes:nodes, idle:idle, gpn:gpn, headroom:headroom, exact:exact,
+    usable:usable, prefill:prefill, ttft:ttft, kvTpOpt:kvTpOpt };
+}
+
+var opMo  = function(g) { return Math.round(g * S.onpremYr / (S.amortYrs * 12)); };
+var awsMo = function(g) { return Math.round(g * S.awsHr * 720); };
+// 5-year cloud total with compound YoY price increase
+var cloudTotal = function(g) {
+  var total = 0;
+  var mo = g * S.awsHr * 720;
+  for (var y = 0; y < S.amortYrs; y++) {
+    total += mo * 12;
+    mo = mo * (1 + S.cloudHike / 100);
+  }
+  return Math.round(total);
+};
+var opTotal = function(g) { return Math.round(g * S.onpremYr); }; // hardware purchase only
+function fmt$(n) {
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+  if (n >= 1000) return '$' + (n/1000).toFixed(0) + 'K';
+  return '$' + Math.round(n);
+}
+function fmtGB(n) { return n >= 1 ? n.toFixed(2) + ' GB' : Math.round(n*1000) + ' MB'; }
+function fmtMBperTok(bpt) {
+  // bpt is GB/K-tok for both paths
+  // 1 GB/K-tok = 1e9 bytes / 1000 tok = 1e6 bytes/tok = 1 MB/tok
+  // So numerically: GB/K-tok == MB/tok
+  return bpt.toFixed(3) + ' MB/tok';
+}
+function el(id) { return document.getElementById(id); }
+function show(id) { el(id).style.display = ''; }
+function hide(id) { el(id).style.display = 'none'; }
+
+var BCOLORS = ['#4f8ef7', '#3ecf8e', '#f7a94f', '#d4537e'];
+var TIERS = [
+  { m:'Deploy today', s:'vLLM or SGLang, PagedAttention out of the box.', t:'vLLM / SGLang — PagedAttention, ~95% memory efficiency' },
+  { m:'Prefix caching', s:'Cache shared system prompts. Zero quality impact.', t:'vLLM RadixAttention / SGLang prefix cache' },
+  { m:'FP8 KV quantisation', s:'Halve conversation memory. One config flag.', t:'kv_cache_dtype=fp8 in vLLM' },
+  { m:'llm-d disaggregation', s:'Separate prefill & decode pools with FP8 KV on decode. Only 50% of users actively decoding at once; prefill pool = 25% of decode GPUs.', t:'llm-d (Red Hat) + NVIDIA Dynamo / SGLang P/D disagg' },
+];
+
+// ===== RENDER =====
+function renderResult() {
+  try { _renderResult(); } catch(e) {
+    el('r-bignum').textContent = 'ERR';
+    el('r-lbl').textContent = e.message;
+    el('r-ctx').textContent = e.stack ? e.stack.split('\n')[1] : '';
+    show('rp-results'); hide('rp-ph');
+    console.error('renderResult crash:', e);
+  }
+}
+function _renderResult() {
+  hide('rp-ph');
+  show('rp-results');
+  var r = calcTiers();
+  var vals = [r.t1, r.t2, r.t3, r.t4];
+  var dk = isDark;
+
+  // Warnings
+  setWarn('w-tp', r.tpMin > 1,
+    S.model + 'B @ ' + (S.wp===2?'BF16':'FP8') + ' = ' + r.wt + 'GB. '
+    + S.gpuName + ' has ' + S.gpu + 'GB - ' + r.ohGB.toFixed(1) + 'GB overhead = '
+    + r.usable.toFixed(0) + 'GB usable. Each replica needs ' + r.tpMin + ' GPUs (power-of-2 TP).');
+  setWarn('w-node', r.nodes > 1 && r.idle > 0,
+    r.t1 + ' GPUs = ' + r.nodes + ' nodes x ' + r.gpn + ' GPUs. '
+    + r.idle + ' GPU' + (r.idle!==1?'s':'') + ' idle. Consider '
+    + (r.nodes * r.gpn) + ' (full nodes) or ' + ((r.nodes-1)*r.gpn) + ' (one fewer node).');
+  setWarn('w-prefill', r.prefill,
+    S.ctx + 'K context + ' + S.model + 'B model. Est ~' + r.ttft + 's TTFT on H100-class. '
+    + 'Use chunked prefill (vLLM) or dedicated prefill pool (llm-d).');
+  setWarn('w-kvtp', r.kvTpOpt,
+    'TP=' + r.tpMin + ' selected to maximise KV pool, not just fit weights (weights need TP=' + r.tpWeights + '). '
+    + r.tpMin + 'x GPUs per replica gives ' + r.aPA.toFixed(0) + 'GB KV vs ' + ((r.usable*r.tpWeights-r.wt)*0.95).toFixed(0) + 'GB at TP=' + r.tpWeights + '. '
+    + 'Trade-off: fewer replicas, higher NVLink utilisation per replica.');
+
+  // Headline
+  el('exact-badge').style.display = r.exact ? '' : 'none';
+  el('r-bignum').textContent = r.t1;
+  el('r-lbl').textContent = S.gpuName + ' GPU' + (r.t1!==1?'s':'') + ' to get started'
+    + (r.tpMin > 1 ? ' \u00b7 ' + r.tpMin + 'x tensor parallel' : '');
+  el('r-ctx').textContent = S.modelLabel + ' \u00b7 ' + S.users + ' users \u00b7 '
+    + S.gpuName + ' ' + S.gpu + 'GB \u00b7 ' + S.ctx + 'K ctx \u00b7 TP=' + r.tpMin;
+
+  // KV metrics
+  el('kv-wt').textContent = r.wt + ' GB';
+  el('kv-wt-sub').textContent = '+' + r.ohGB.toFixed(1) + 'GB overhead';
+  el('kv-avail').textContent = r.aPA.toFixed(1) + ' GB';
+  el('kv-user').textContent = fmtGB(r.kvB);
+  el('kv-user-sub').textContent = fmtMBperTok(r.kvBpt) + ' \u00b7 ' + S.ctx + 'K ctx';
+  el('kv-upr').textContent = r.upr;
+  el('kv-upr-sub').textContent = r.reps + ' replica' + (r.reps!==1?'s':'') + ' x ' + r.tpMin + 'GPU';
+
+  // Headroom table
+  var maxU = Math.max.apply(null, r.headroom.map(function(x) { return x.users; }).concat([1]));
+  var hrHTML = '';
+  r.headroom.forEach(function(x) {
+    var cur = x.ctx === S.ctx;
+    var pct = x.users === 0 ? 3 : Math.min(100, Math.round(x.users / maxU * 100));
+    var col = x.users === 0 ? 'var(--red)' : cur ? 'var(--blue)' : 'var(--text3)';
+    var tpNote = x.tp > r.tpMin ? ' [TP=' + x.tp + ']' : '';
+    var tpColor = x.tp > r.tpMin ? 'var(--amber)' : col;
+    hrHTML += '\x3cdiv class="hrow' + (cur?' cur':'') + '"\x3e'
+      + '\x3cdiv class="hctx"\x3e' + x.ctx + 'K\x3c/div\x3e'
+      + '\x3cdiv class="hbar"\x3e\x3cdiv class="hfill" style="width:' + pct + '%;background:' + col + '"\x3e\x3c/div\x3e\x3c/div\x3e'
+      + '\x3cdiv class="husers" style="color:' + (x.tp > r.tpMin ? 'var(--amber)' : col) + '"\x3e'
+      + (x.users === 0 ? "0 \u2014 won't fit" : x.users + ' user' + (x.users!==1?'s':''))
+      + (cur ? ' \u2190 you' : '') + tpNote + '\x3c/div\x3e\x3c/div\x3e';
+  });
+  el('hroom-rows').innerHTML = hrHTML;
+
+  // Balloon
+  var bals = [
+    { l:'Weight\nmem', v:r.wt, c:'#888780' },
+    { l:'Overhead\n(CUDA)', v:r.ohGB, c:'#B4B2A9' },
+    { l:'Avail\nfor KV', v:r.aPA, c:'#378ADD' },
+    { l:'KV/user\n(' + S.ctx + 'K)', v:r.kvB, c:'#f7a94f' },
+    { l:'All users\nKV total', v:r.kvB * S.users, c:'#D85A30' },
+    { l:'GPU\nVRAM', v:S.gpu, c:'#5F5E5A' },
+  ];
+  var maxB = Math.max.apply(null, bals.map(function(b) { return b.v; }));
+  var bviz = el('balloon-viz');
+  bviz.innerHTML = '';
+  bals.forEach(function(b) {
+    var bh = Math.max(3, Math.round(b.v / maxB * 82));
+    var lbl = b.v >= 100 ? Math.round(b.v) : b.v >= 1 ? b.v.toFixed(1) : b.v.toFixed(2);
+    var col = document.createElement('div'); col.className = 'bcol';
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'width:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%';
+    var bar = document.createElement('div'); bar.className = 'bbar';
+    bar.style.cssText = 'height:' + bh + 'px;background:' + b.c + ';width:100%';
+    var tlbl = document.createElement('div'); tlbl.className = 'btlbl';
+    tlbl.textContent = lbl; bar.appendChild(tlbl); wrap.appendChild(bar); col.appendChild(wrap);
+    var xlbl = document.createElement('div'); xlbl.className = 'bxlbl';
+    xlbl.textContent = b.l; col.appendChild(xlbl);
+    bviz.appendChild(col);
+  });
+
+  // Cost
+  var cw = el('cost-wrap');
+  cw.innerHTML = '';
+  if (ADMIN.cost) {
+    var cols = [];
+    var yrs = S.amortYrs;
+    var mos = yrs * 12;
+
+    if (ADMIN.onprem) {
+      var mo1 = opMo(r.t1), mo4 = opMo(r.t4), sv = mo1 - mo4;
+      var tot1 = opTotal(r.t1), tot4 = opTotal(r.t4), tsv = tot1 - tot4;
+      cols.push('\x3cdiv class="ccol op">'
+        + '\x3cdiv class="cchead op">\x3cspan class="cctn">On-prem\x3c/span>\x3cspan class="ccnote">' + S.gpuName + '\x3c/span>\x3c/div>'
+        + '\x3cdiv class="ccbody">'
+        + '\x3cdiv class="upill">$' + (S.onpremYr/1000).toFixed(0) + 'K/GPU &divide; ' + (yrs*12) + ' months = ' + fmt$(Math.round(S.onpremYr/(yrs*12))) + '/GPU/mo\x3c/div>'
+        + '\x3cdiv class="cbig op">' + fmt$(tot1) + '\x3cspan style="font-size:13px;font-weight:400"> / ' + yrs + 'yrs\x3c/span>\x3c/div>'
+        + '\x3cdiv class="cper">' + r.t1 + ' GPU' + (r.t1!==1?'s':'') + ' &middot; ' + fmt$(mo1) + '/mo &middot; ' + fmt$(mo1*12) + '/yr\x3c/div>'
+        + (r.llmdOk && r.t4 < r.t1 ? '\x3cdiv class="cdiv">\x3c/div>'
+          + '\x3cdiv class="coptlbl">With llm-d (' + r.t4 + ' GPUs)\x3c/div>'
+          + '\x3cdiv class="coptval op">' + fmt$(tot4) + ' / ' + yrs + 'yrs\x3c/div>'
+          + '\x3cdiv class="csub">' + fmt$(mo4) + '/mo\x3c/div>'
+          + (sv > 0 ? '\x3cdiv class="svbadge op">Save ' + fmt$(tsv) + ' over ' + yrs + 'yrs\x3c/div>' : '') : '')
+        + '\x3c/div>\x3c/div>');
+    }
+
+    if (ADMIN.aws) {
+      var amo1 = awsMo(r.t1), amo4 = awsMo(r.t4), asv = amo1 - amo4;
+      var atot1 = cloudTotal(r.t1), atot4 = cloudTotal(r.t4), atsv = atot1 - atot4;
+      var hikeNote = S.cloudHike > 0 ? ' (+' + S.cloudHike + '%/yr)' : ' (flat)';
+      cols.push('\x3cdiv class="ccol aw">'
+        + '\x3cdiv class="cchead aw">\x3cspan class="cctn">Cloud on-demand\x3c/span>\x3cspan class="ccnote">' + S.gpuName + '\x3c/span>\x3c/div>'
+        + '\x3cdiv class="ccbody">'
+        + '\x3cdiv class="upill">$' + S.awsHr.toFixed(2) + '/hr today' + hikeNote + ' over ' + yrs + ' yrs\x3c/div>'
+        + '\x3cdiv class="cbig aw">' + fmt$(atot1) + '\x3cspan style="font-size:13px;font-weight:400"> / ' + yrs + 'yrs\x3c/span>\x3c/div>'
+        + '\x3cdiv class="cper">' + r.t1 + ' GPU' + (r.t1!==1?'s':'') + ' &middot; ' + fmt$(amo1) + '/mo today &middot; ' + fmt$(amo1*12) + '/yr\x3c/div>'
+        + (r.llmdOk && r.t4 < r.t1 ? '\x3cdiv class="cdiv">\x3c/div>'
+          + '\x3cdiv class="coptlbl">With llm-d (' + r.t4 + ' GPUs)\x3c/div>'
+          + '\x3cdiv class="coptval aw">' + fmt$(atot4) + ' / ' + yrs + 'yrs\x3c/div>'
+          + '\x3cdiv class="csub">' + fmt$(amo4) + '/mo today\x3c/div>'
+          + (asv > 0 ? '\x3cdiv class="svbadge aw">Save ' + fmt$(atsv) + ' over ' + yrs + 'yrs\x3c/div>' : '') : '')
+        + '\x3c/div>\x3c/div>');
+    }
+
+    if (cols.length) {
+      var cg = document.createElement('div');
+      cg.className = 'cost2';
+      cg.style.gridTemplateColumns = 'repeat(' + cols.length + ',1fr)';
+      cg.innerHTML = cols.join('');
+      cw.appendChild(cg);
+
+      // Disclaimer
+      var disc = document.createElement('div');
+      disc.style.cssText = 'margin-top:8px;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:10px;color:var(--text3);font-family:var(--mono);line-height:1.7';
+      disc.innerHTML = '\x3cspan style="color:var(--text2);font-weight:500">How we calculate\x3c/span> &mdash; '
+        + 'On-prem = GPU purchase price &divide; ' + yrs + ' years (hardware only, no power/ops/staff). '
+        + 'Cloud = hourly &times; 720 hrs &times; 12 months &times; ' + yrs + ' years'
+        + (S.cloudHike > 0 ? ', with ' + S.cloudHike + '% annual price increase compounded.' : '.') + ' '
+        + '\x3cspan style="color:var(--amber)">Not included in on-prem:\x3c/span> '
+        + 'power &amp; cooling (~$500-800/GPU/yr), ops staff ($200-400K/person/yr), '
+        + 'networking for multi-node (InfiniBand ~$10K/node). '
+        + 'Not included in cloud: reserved pricing saves 35-55%, enterprise discounts vary. '
+        + 'GPU-to-GPU comparison only &mdash; full TCO requires a separate financial model.';
+      cw.appendChild(disc);
+    }
+  }
+
+  // Tiers
+  var tl = el('tier-list');
+  tl.innerHTML = '';
+  vals.forEach(function(v, i) {
+    var t = TIERS[i], dimmed = i===3 && (!r.llmdOk || r.t4 >= r.t1), bc = dimmed ? '#888' : BCOLORS[i];
+    var op = opMo(v), aw = awsMo(v);
+    var div = document.createElement('div');
+    div.className = 'trow';
+    div.style.opacity = dimmed ? '0.38' : '';
+    var dotEl = document.createElement('div'); dotEl.className = 'tdot'; dotEl.style.background = bc; div.appendChild(dotEl);
+    var bodyEl = document.createElement('div'); bodyEl.className = 'tbody2';
+    var mainEl = document.createElement('div'); mainEl.className = 'tmain'; mainEl.textContent = t.m;
+    if (dimmed) { var tag = document.createElement('span'); tag.className = 'itag amber'; tag.textContent = 'LOW SCALE'; mainEl.appendChild(tag); }
+    bodyEl.appendChild(mainEl);
+    var subEl = document.createElement('div'); subEl.className = 'tsub'; subEl.textContent = t.s; bodyEl.appendChild(subEl);
+    if (ADMIN.tech) { var techEl = document.createElement('div'); techEl.className = 'ttech'; techEl.textContent = t.t; bodyEl.appendChild(techEl); }
+    if (dimmed) { var warnEl = document.createElement('div'); warnEl.className = 'twarn'; warnEl.textContent = 'No GPU saving at this scale — llm-d saves when multiple replicas are needed (try 500+ users)'; bodyEl.appendChild(warnEl); }
+    if (ADMIN.cost && !dimmed) {
+      var costEl = document.createElement('div'); costEl.className = 'tcost';
+      var parts = [];
+      if (ADMIN.onprem) parts.push('On-prem ' + fmt$(op) + '/mo');
+      if (ADMIN.aws) parts.push('Cloud ' + fmt$(aw) + '/mo');
+      costEl.textContent = parts.join(' \u00b7 '); bodyEl.appendChild(costEl);
+    }
+    div.appendChild(bodyEl);
+    var gpusEl = document.createElement('div'); gpusEl.className = 'tgpus'; gpusEl.style.color = bc;
+    if (dimmed) {
+      gpusEl.textContent = '—';
+    } else {
+      gpusEl.textContent = v;
+      var gpuSub = document.createElement('span'); gpuSub.style.cssText = 'font-size:12px;font-weight:400;color:var(--text3)';
+      gpuSub.textContent = ' GPU' + (v!==1?'s':''); gpusEl.appendChild(gpuSub);
+    }
+    div.appendChild(gpusEl);
+    tl.appendChild(div);
+  });
+
+  // Chart
+  var gc = dk ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.05)';
+  var tc = dk ? '#555b6e' : '#9098aa', lc = dk ? '#8b90a0' : '#555b6e';
+  var bc2 = vals.map(function(v,i) { return i===3&&(!r.llmdOk||r.t4>=r.t1) ? 'rgba(136,136,136,.28)' : BCOLORS[i]; });
+  if (chartInst) { chartInst.destroy(); chartInst = null; }
+  chartInst = new Chart(el('myChart'), {
+    type: 'bar',
+    data: {
+      labels: [['Deploy','today'],['Prefix','caching'],['FP8 KV','quant'],['llm-d','disagg']],
+      datasets: [{ data:vals, backgroundColor:bc2, borderRadius:5, borderSkipped:false, barPercentage:.55 }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: { legend:{display:false}, tooltip:{
+        callbacks: { title:function(){return'';}, label:function(ctx){
+          var v=ctx.raw, lines=[' ' + v + ' GPU' + (v!==1?'s':'')];
+          if (ctx.dataIndex===3 && !r.llmdOk) lines.push(' Not recommended at this scale');
+          if (ADMIN.cost) {
+            if (ADMIN.onprem) lines.push(' On-prem: ' + fmt$(opMo(v)) + '/mo');
+            if (ADMIN.aws) lines.push(' AWS: ' + fmt$(awsMo(v)) + '/mo');
+          }
+          return lines;
+        }},
+        backgroundColor: dk?'#1c1f2a':'#fff',
+        borderColor: dk?'rgba(255,255,255,.1)':'rgba(0,0,0,.1)',
+        borderWidth:1, bodyColor:lc, padding:9
+      }},
+      scales: {
+        x: { grid:{display:false}, border:{display:false}, ticks:{color:lc,font:{size:11},maxRotation:0,autoSkip:false} },
+        y: { beginAtZero:true, suggestedMax:Math.max.apply(null,vals)*1.3+1,
+          grid:{color:gc}, border:{display:false},
+          ticks:{color:tc, font:{size:11}, stepSize:Math.max(1,Math.ceil(Math.max.apply(null,vals)/5)),
+            callback:function(v){return Number.isInteger(v)?v:'';}}}
+      },
+      animation:{duration:280, easing:'easeOutQuart'}
+    }
+  });
+
+  el('chart-note').textContent = r.llmdOk && r.t4 < r.t1
+    ? 'Optimisations reduce ' + r.t1 + ' \u2192 ' + r.t4 + ' GPUs'
+    : 'Same GPU count across all tiers at this scale';
+
+  // Topology
+  renderTopo(r);
+
+  // TCO button
+  el('tco-btn').onclick = function() { window.open('tco.html', '_blank'); };
+  el('bug-btn').href = 'https://github.com/nb-qbits/gpu-calc/issues/new?title=Bug+Report&labels=bug'
+    + '&body=' + encodeURIComponent('Config: ' + S.modelLabel + ', ' + S.users + ' users, '
+      + S.gpuName + ' ' + S.gpu + 'GB, ' + S.ctx + 'K ctx');
+  syncAssumptions();
+}
+
+function setWarn(id, show, msg) {
+  var w = el(id);
+  w.className = 'wbox ' + (id==='w-prefill'?'blue':'amber') + (show?' show':'');
+  el(id + '-body').textContent = msg;
+}
+
+function renderTopo(r) {
+  var cont = el('topo-nodes');
+  cont.innerHTML = '';
+  var gpn = 8;
+  for (var n = 0; n < r.nodes; n++) {
+    var active = Math.min(gpn, r.t1 - n*gpn);
+    var idle = gpn - active;
+    var node = document.createElement('div'); node.className = 'tnode';
+    var lbl = document.createElement('div'); lbl.className = 'tnlbl';
+    lbl.textContent = 'Node ' + (n+1) + ' \u00b7 ' + S.gpuName + '\xd7' + gpn;
+    node.appendChild(lbl);
+    var gs = document.createElement('div'); gs.className = 'tgs';
+    for (var g = 0; g < active; g++) {
+      var tg = document.createElement('div'); tg.className = 'tg std';
+      tg.textContent = S.gpuName.slice(0,3); gs.appendChild(tg);
+    }
+    for (var g = 0; g < idle; g++) {
+      var tg = document.createElement('div'); tg.className = 'tg idle';
+      tg.textContent = '\u2014'; gs.appendChild(tg);
+    }
+    node.appendChild(gs);
+    if (r.tpMin > 1) {
+      var tp = document.createElement('div');
+      tp.style.cssText = 'font-family:var(--mono);font-size:9px;color:var(--blue);margin-top:3px';
+      tp.textContent = 'NVLink TP=' + r.tpMin;
+      node.appendChild(tp);
+    }
+    cont.appendChild(node);
+    if (n < r.nodes - 1) {
+      var conn = document.createElement('div'); conn.className = 'tconn';
+      conn.textContent = '\u2014IB\u2192'; cont.appendChild(conn);
+    }
+  }
+
+  // llm-d topology
+  if (r.llmdOk && r.t4 < r.t1 && r.t4 >= r.tpMin * 2) {
+    // Need at least tpMin GPUs for each pool (prefill + decode)
+    // If t4 < tpMin*2, can't meaningfully split — show as shared pool
+    var canSplit = r.t4 >= r.tpMin * 2;
+    var actualPre = canSplit ? r.tpMin : 0;
+    var actualDec = canSplit ? r.t4 - actualPre : r.t4;
+
+    var sep = document.createElement('div');
+    sep.style.cssText = 'width:100%;border-top:1px solid var(--border);padding-top:8px;margin-top:8px';
+    var lbl2 = document.createElement('div');
+    lbl2.style.cssText = 'font-family:var(--mono);font-size:9px;color:var(--text3);margin-bottom:5px';
+    lbl2.textContent = canSplit
+      ? 'With llm-d (' + r.t4 + ' GPUs = ' + actualPre + ' prefill + ' + actualDec + ' decode, assumption: 50% active decode):'
+      : 'With llm-d (' + r.t4 + ' GPUs — shared prefill/decode pool, TP=' + r.tpMin + '):';
+    sep.appendChild(lbl2);
+    var lnodes2 = document.createElement('div'); lnodes2.className = 'tnodes';
+    var lnc = Math.ceil(r.t4 / gpn), gi = 0;
+    for (var n = 0; n < lnc; n++) {
+      var lnode = document.createElement('div'); lnode.className = 'tnode';
+      var llbl = document.createElement('div'); llbl.className = 'tnlbl';
+      llbl.textContent = 'Node ' + (n+1); lnode.appendChild(llbl);
+      var lgs = document.createElement('div'); lgs.className = 'tgs';
+      for (var g = 0; g < gpn && gi < r.t4; g++, gi++) {
+        var ltg = document.createElement('div');
+        var isPre = canSplit && gi < actualPre;
+        ltg.className = 'tg ' + (isPre ? 'pre' : 'dec');
+        ltg.textContent = isPre ? 'PRE' : 'DEC';
+        lgs.appendChild(ltg);
+      }
+      lnode.appendChild(lgs); lnodes2.appendChild(lnode);
+      if (n < lnc - 1) {
+        var lconn = document.createElement('div'); lconn.className = 'tconn';
+        lconn.textContent = '\u2192'; lnodes2.appendChild(lconn);
+      }
+    }
+    sep.appendChild(lnodes2);
+    cont.appendChild(sep);
+  }
+}
+
+// ===== INPUT HANDLERS =====
+function manualModel(v) {
+  if (!v) return;
+  S.model = v; S.modelLabel = v + 'B';
+  S.numKvHeads = null; S.headDim = null; S.numLayers = null;
+  document.getElementById('sv-params').textContent = v + 'B';
+  renderResult();
+}
+function syncU(v) { S.users=v; el('sv-users').textContent=v; el('n-users').value=v; renderResult(); }
+function syncUN(v) { if(!v||v<1)return; S.users=v; el('s-users').value=Math.min(v,500); el('sv-users').textContent=v; renderResult(); }
+function setU(v) { S.users=v; el('s-users').value=Math.min(v,500); el('sv-users').textContent=v; el('n-users').value=v; renderResult(); }
+function syncC(v) { S.ctx=v; el('sv-ctx').textContent=v+'K'; el('n-ctx').value=v; hlCtx(v); renderResult(); }
+function syncCN(v) { if(!v||v<1)return; S.ctx=v; el('s-ctx').value=Math.min(v,512); el('sv-ctx').textContent=v+'K'; hlCtx(v); renderResult(); }
+function setC(v) { S.ctx=v; el('s-ctx').value=Math.min(v,512); el('sv-ctx').textContent=v+'K'; el('n-ctx').value=v; hlCtx(v); renderResult(); }
+function hlCtx(v) {
+  document.querySelectorAll('#ctx-presets .chip').forEach(function(c) {
+    c.classList.toggle('on', c.textContent === v + 'K');
+  });
+}
+function pickGpu(name, vram, aws, op, el2) {
+  document.querySelectorAll('#gpu-cards .gcard').forEach(function(c) { c.classList.remove('on'); });
+  el2.classList.add('on');
+  S.gpuName=name; S.gpu=vram; S.awsHr=aws; S.onpremYr=op;
+  el('s-aws').value=aws; el('v-aws').textContent='$'+aws.toFixed(2)+'/hr';
+  el('s-op').value=op; el('v-op').textContent='$'+op.toLocaleString()+' (3yr)';
+  el('n-vram').value='';
+  renderResult();
+}
+function customVram(v) { if(!v||v<8)return; S.gpu=v; S.gpuName='Custom'; renderResult(); }
+function apc(k, v, e2) {
+  if (!e2) return;
+  var g = e2.closest('.chips');
+  if (g) g.querySelectorAll('.chip').forEach(function(c) { c.classList.remove('on'); });
+  e2.classList.add('on');
+  S[k] = typeof v === 'string' ? v : +v;
+  if (k === 'kv') S.kvLabel = v === 1 ? 'fp8' : 'fp16';
+  renderResult();
+}
+function syncAssumptions() {
+  // Sync weight format chips
+  document.querySelectorAll('#wp-chips .chip').forEach(function(c) {
+    c.classList.toggle('on', +c.dataset.v === S.wp);
+  });
+  // Sync KV format chips
+  document.querySelectorAll('#kv-chips .chip').forEach(function(c) {
+    c.classList.toggle('on', +c.dataset.v === S.kv);
+  });
+  // Sync attention chips
+  document.querySelectorAll('#attn-chips .chip').forEach(function(c) {
+    c.classList.toggle('on', c.dataset.v === S.attn);
+  });
+  // Sync prefix cache chips
+  document.querySelectorAll('#hr-chips .chip').forEach(function(c) {
+    c.classList.toggle('on', Math.abs(+c.dataset.v - S.hitrate) < 0.01);
+  });
+  // Sync cost sliders AND update hint labels to reflect current GPU
+  el('s-op').value = S.onpremYr;
+  el('v-op').textContent = '$' + Number(S.onpremYr).toLocaleString();
+  el('s-aws').value = S.awsHr;
+  el('v-aws').textContent = '$' + S.awsHr.toFixed(2) + '/hr';
+  // Update the hint labels to show current GPU name + values
+  var opHint = el('op-hint');
+  var awsHint = el('aws-hint');
+  if (opHint) opHint.textContent = S.gpuName + ' \u2248 $' + (S.onpremYr/1000).toFixed(0) + 'K purchase price';
+  if (awsHint) awsHint.textContent = S.gpuName + ' \u2248 $' + S.awsHr.toFixed(2) + '/hr on-demand';
+  // Sync overhead slider
+  el('s-oh').value = S.overhead;
+  el('v-oh').textContent = S.overhead + '%';
+  // Sync params slider
+  el('s-params').value = Math.min(S.model, 405);
+  el('sv-params').textContent = S.model + 'B';
+  // Sync GPU card highlight
+  document.querySelectorAll('#gpu-cards .gcard').forEach(function(c) {
+    var nameEl = c.querySelector('.gcn');
+    if (nameEl) c.classList.toggle('on', nameEl.textContent.trim() === S.gpuName);
+  });
+}
+function aop(v) { S.onpremYr=v; el('v-op').textContent='$'+Number(v).toLocaleString(); renderResult(); }
+function aaws(v) { S.awsHr=v; el('v-aws').textContent='$'+parseFloat(v).toFixed(2)+'/hr'; renderResult(); }
+function aoh(v) { S.overhead=v; el('v-oh').textContent=v+'%'; renderResult(); }
+function setOverhead(v) { S.overhead=v; el('s-oh').value=v; el('v-oh').textContent=v+'%'; renderResult(); }
+function apcKvInt8(chip) {
+  // INT8 KV = 1 byte like FP8 but different framework label
+  S.kv=1; S.kvLabel='int8';
+  document.querySelectorAll('#kv-chips .chip').forEach(function(c){c.classList.remove('on');});
+  chip.classList.add('on');
+  renderResult();
+}
+function aAmort(v,e2) {
+  S.amortYrs=v;
+  document.querySelectorAll('.chip[data-v]').forEach(function(c){
+    if(['2','3','4','5','6'].indexOf(c.dataset.v)>=0) c.classList.toggle('on', +c.dataset.v===v);
+  });
+  renderResult();
+}
+function aHike(v,e2) {
+  S.cloudHike=v;
+  document.querySelectorAll('.chip[data-v]').forEach(function(c){
+    if(['0','1','2','3','4','5'].indexOf(c.dataset.v)>=0&&c.dataset.v===String(v)) c.classList.add('on');
+    else if(['0','1','2','3','4','5'].indexOf(c.dataset.v)>=0) c.classList.remove('on');
+  });
+  renderResult();
+}
+
+// ===== UI =====
+function toggleTheme() {
+  isDark = !isDark;
+  document.documentElement.classList.toggle('dark', isDark);
+  document.documentElement.classList.toggle('light', !isDark);
+  el('ti').textContent = isDark ? '\u2600' : '\u263e';
+  el('tl').textContent = isDark ? 'Light' : 'Dark';
+  if (chartInst) renderResult();
+  if (scatterInst) renderScatter();
+}
+function tog(k) {
+  ADMIN[k] = !ADMIN[k];
+  el('t-' + k).classList.toggle('on', ADMIN[k]);
+  if (k === 'linkedin') { el('liwrap').classList.toggle('h', !ADMIN[k] || liDismissed); return; }
+  if (el('rp-results').style.display !== 'none') renderResult();
+}
+function switchPage(id, elem) {
+  document.querySelectorAll('.ntab').forEach(function(t) { t.classList.remove('on'); });
+  document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('on'); });
+  elem.classList.add('on');
+  el('page-' + id).classList.add('on');
+  if (id === 'explorer') { expRenderChart(); expRenderTable(); }
+  if (id === 'wizard') { wizUpdateProgress(); }
+}
+function switchE(id, elem) {
+  document.querySelectorAll('.etab').forEach(function(t) { t.classList.remove('on'); });
+  document.querySelectorAll('.epane').forEach(function(p) { p.classList.remove('on'); });
+  elem.classList.add('on'); el('ep-' + id).classList.add('on');
+  if (id === 'pricing') renderPricing();
+}
+function toggleD(id) {
+  var b = el('dbd-' + id), a = el('da-' + id);
+  b.classList.toggle('open'); a.classList.toggle('open', b.classList.contains('open'));
+}
+function disLI() {
+  liDismissed = true; el('liwrap').classList.add('h');
+  localStorage.setItem('lid', Date.now());
+}
+// Hide if dismissed in last 24 hours
+var _lid = localStorage.getItem('lid');
+if (_lid && (Date.now() - +_lid) < 86400000) el('liwrap').classList.add('h');
+
+// ===== EXPLORER =====
+var GPU_DATA = [
+  {name:'B30A',d:'nvidia',vram:144,price:22500,tpp:30000,tpp_per_100:133.3,year:2025},
+  {name:'H20',d:'nvidia',vram:96,price:11500,tpp:2368,tpp_per_100:20.6,year:2023},
+  {name:'B300',d:'nvidia',vram:288,price:53000,tpp:60000,tpp_per_100:113.2,year:2025},
+  {name:'B200',d:'nvidia',vram:192,price:47500,tpp:40000,tpp_per_100:84.2,year:2024},
+  {name:'B100',d:'nvidia',vram:192,price:32500,tpp:28000,tpp_per_100:86.2,year:2025},
+  {name:'H100',d:'nvidia',vram:80,price:25000,tpp:15840,tpp_per_100:63.4,year:2022},
+  {name:'A100',d:'nvidia',vram:80,price:16500,tpp:4992,tpp_per_100:30.3,year:2020},
+  {name:'V100',d:'nvidia',vram:16,price:9500,tpp:2000,tpp_per_100:21.1,year:2017},
+  {name:'H200',d:'nvidia',vram:141,price:35000,tpp:15831,tpp_per_100:45.2,year:2024},
+  {name:'MI250X',d:'amd',vram:128,price:8000,tpp:6128,tpp_per_100:76.6,year:2021},
+  {name:'MI300A',d:'amd',vram:128,price:10000,tpp:15690,tpp_per_100:156.9,year:2023},
+  {name:'MI300X',d:'amd',vram:192,price:12500,tpp:20918,tpp_per_100:167.3,year:2023},
+  {name:'MI325X',d:'amd',vram:256,price:20000,tpp:20918,tpp_per_100:104.6,year:2024},
+  {name:'MI350X',d:'amd',vram:288,price:20000,tpp:38190,tpp_per_100:190.9,year:2025},
+];
+var CLOUD_DATA = [
+  {name:'CoreWeave H100',d:'cloud',provider:'CoreWeave',vram:80,aws_hr:2.50},
+  {name:'CoreWeave B200',d:'cloud',provider:'CoreWeave',vram:192,aws_hr:4.50},
+  {name:'AWS p5 (per H100)',d:'cloud',provider:'AWS',vram:80,aws_hr:98/8,note:'$98/hr for 8x H100'},
+  {name:'AWS p4d (per A100)',d:'cloud',provider:'AWS',vram:40,aws_hr:32/8,note:'$32/hr for 8x A100'},
+];
+var NVC='#4f8ef7', AMDC='#f76f6f';
+var AXLBLS = {vram:'VRAM (GB)',price:'Price ($K)',tpp:'Throughput (tokens/s)',tpp_per_100:'$ per 100 TPP'};
+
+function tF(f, e2) {
+  e2.classList.toggle('on');
+  if (f==='nvidia') showNv = e2.classList.contains('on');
+  else showAmd = e2.classList.contains('on');
+  renderScatter();
+}
+function tPF(f, e2) {
+  e2.classList.toggle('on');
+  if (f==='nvidia') pShowNv = e2.classList.contains('on');
+  else if (f==='amd') pShowAmd = e2.classList.contains('on');
+  else pShowCloud = e2.classList.contains('on');
+  renderPricing();
+}
+function setAx(ax, v, e2) {
+  document.querySelectorAll('.axc[data-ax="' + ax + '"]').forEach(function(c) { c.classList.remove('on'); });
+  e2.classList.add('on');
+  if (ax==='x') axX=v; else if (ax==='y') axY=v; else axR=v;
+  renderScatter();
+}
+function gV(d, k) { if (k==='price') return d.price/1000; return d[k]||0; }
+function sortP(k) { if(sortKey===k)sortDir*=-1; else{sortKey=k;sortDir=1;} renderPricing(); }
+
+function renderScatter() {
+  var filt = GPU_DATA.filter(function(d) {
+    return (d.d==='nvidia'&&showNv)||(d.d==='amd'&&showAmd);
+  });
+  var nv = filt.filter(function(d){return d.d==='nvidia';}),
+      am = filt.filter(function(d){return d.d==='amd';});
+  var mR = Math.max.apply(null, filt.map(function(d){return gV(d,axR);}));
+  var dk=isDark, gc=dk?'rgba(255,255,255,.04)':'rgba(0,0,0,.04)', tc=dk?'#555':'#9098aa';
+  var mkDS = function(arr) {
+    return arr.map(function(d) {
+      return {x:gV(d,axX), y:gV(d,axY), r:Math.max(5,Math.sqrt(gV(d,axR)/mR)*40), label:d.name, raw:d};
+    });
+  };
+  if (scatterInst) { scatterInst.destroy(); scatterInst=null; }
+  scatterInst = new Chart(el('scatterChart'), {
+    type:'bubble',
+    data:{datasets:[
+      {label:'NVIDIA',data:mkDS(nv),backgroundColor:NVC+'66',borderColor:NVC,borderWidth:1},
+      {label:'AMD',data:mkDS(am),backgroundColor:AMDC+'66',borderColor:AMDC,borderWidth:1},
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,layout:{padding:{top:22,right:18}},
+      plugins:{legend:{display:false},tooltip:{
+        callbacks:{label:function(ctx){
+          var d=ctx.raw.raw;
+          return[' '+d.name+' ('+d.year+')',' VRAM: '+d.vram+'GB',' Price: $'+(d.price/1000).toFixed(0)+'K',' TPP: '+d.tpp.toLocaleString(),' $/100TPP: '+d.tpp_per_100];
+        }},
+        backgroundColor:dk?'#1c1f2a':'#fff',borderColor:dk?'rgba(255,255,255,.1)':'rgba(0,0,0,.1)',
+        borderWidth:1,bodyColor:dk?'#8b90a0':'#555',padding:9
+      }},
+      scales:{
+        x:{title:{display:true,text:AXLBLS[axX]||axX,color:tc,font:{size:11}},grid:{color:gc},border:{display:false},ticks:{color:tc,font:{size:10}}},
+        y:{title:{display:true,text:AXLBLS[axY]||axY,color:tc,font:{size:11}},grid:{color:gc},border:{display:false},ticks:{color:tc,font:{size:10}}}
+      },animation:{duration:220}
+    },
+    plugins:[{id:'lbl',afterDatasetsDraw:function(chart){
+      var ctx2=chart.ctx;
+      chart.data.datasets.forEach(function(ds,di){
+        var meta=chart.getDatasetMeta(di);
+        ds.data.forEach(function(pt,pi){
+          var elem=meta.data[pi]; if(!elem)return;
+          var pos=elem.getProps(['x','y'],true);
+          ctx2.save(); ctx2.font='bold 9px DM Mono,monospace';
+          ctx2.fillStyle=isDark?'rgba(232,234,240,.85)':'rgba(17,19,24,.75)';
+          ctx2.textAlign='center'; ctx2.textBaseline='middle';
+          ctx2.fillText(pt.label,pos.x,pos.y); ctx2.restore();
+        });
+      });
+    }}]
+  });
+  el('ax-desc').textContent = 'X: '+AXLBLS[axX]+' \u00b7 Y: '+AXLBLS[axY]+' \u00b7 Bubble: '+(AXLBLS[axR]||axR);
+  var leg=el('sc-leg'), sh=[];
+  if(showNv)sh.push('\x3cspan style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2)">\x3cspan style="width:9px;height:9px;border-radius:50%;background:'+NVC+'">\x3c/span>NVIDIA\x3c/span>');
+  if(showAmd)sh.push('\x3cspan style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2)">\x3cspan style="width:9px;height:9px;border-radius:50%;background:'+AMDC+'">\x3c/span>AMD\x3c/span>');
+  leg.innerHTML=sh.join('');
+}
+
+function renderPricing() {
+  var mP=Math.max.apply(null,GPU_DATA.map(function(d){return d.price;}));
+  var gpuRows=[];
+  if(pShowNv||pShowAmd){
+    gpuRows=GPU_DATA.filter(function(d){return(d.d==='nvidia'&&pShowNv)||(d.d==='amd'&&pShowAmd);})
+      .map(function(d){return Object.assign({},d,{onprem_mo:Math.round(d.price/36*1.2),aws_hr:null,aws_mo:null});});
+    if(sortKey)gpuRows.sort(function(a,b){return((a[sortKey]||0)-(b[sortKey]||0))*sortDir;});
+  }
+  var cr=pShowCloud?CLOUD_DATA.map(function(d){return Object.assign({},d,{price:null,tpp:null,tpp_per_100:null,onprem_mo:null,aws_mo:Math.round(d.aws_hr*720)});})
+    :[];
+  var tb=el('ptbody'); tb.innerHTML='';
+  if(gpuRows.length){
+    var sh=document.createElement('tr');sh.className='sh';
+    var shTd=document.createElement('td');shTd.setAttribute('colspan','8');shTd.textContent='ON-PREM GPUS';sh.appendChild(shTd);tb.appendChild(sh);
+    gpuRows.forEach(function(d){
+      var isNv=d.d==='nvidia', badge=isNv?'\x3cspan class="cnvb">NVIDIA\x3c/span>':'\x3cspan class="camdb">AMD\x3c/span>';
+      var pb=d.price?'\x3cdiv class="bc">\x3cdiv class="bbg">\x3cdiv class="bf" style="width:'+Math.round(d.price/mP*100)+'%;background:'+(isNv?NVC:AMDC)+'">\x3c/div>\x3c/div>\x3cspan class="vm">'+fmt$(d.price)+'\x3c/span>\x3c/div>':'&mdash;';
+      var ob='\x3cdiv class="bc">\x3cdiv class="bbg">\x3cdiv class="bf" style="width:'+Math.min(100,Math.round(d.onprem_mo/3000*100))+'%;background:rgba(21,128,61,.4)">\x3c/div>\x3c/div>\x3cspan class="vm vg">'+fmt$(d.onprem_mo)+'\x3c/span>\x3c/div>';
+      var tr=document.createElement('tr');
+      var tdName=document.createElement('td'); tdName.innerHTML=badge+' \x3cb>'+d.name+'\x3c/b>';
+      var yr=document.createElement('span'); yr.style.cssText='font-family:var(--mono);font-size:10px;color:var(--text3)'; yr.textContent=' '+d.year; tdName.appendChild(yr);
+      var tdVram=document.createElement('td'); tdVram.className='vm'; tdVram.textContent=d.vram+'GB';
+      var tdP=document.createElement('td'); tdP.innerHTML=pb;
+      var tdO=document.createElement('td'); tdO.innerHTML=ob;
+      var tdH=document.createElement('td'); tdH.className='vm'; tdH.textContent='\u2014';
+      var tdM=document.createElement('td'); tdM.className='vm'; tdM.textContent='\u2014';
+      var tdT=document.createElement('td'); tdT.className='vm'; tdT.textContent=d.tpp.toLocaleString();
+      var tdPer=document.createElement('td'); tdPer.className='vm'; tdPer.textContent=d.tpp_per_100;
+      [tdName,tdVram,tdP,tdO,tdH,tdM,tdT,tdPer].forEach(function(td){tr.appendChild(td);});
+      tb.appendChild(tr);
+    });
+  }
+  if(cr.length){
+    var sh2=document.createElement('tr');sh2.className='sh';
+    var sh2Td=document.createElement('td');sh2Td.setAttribute('colspan','8');sh2Td.textContent='CLOUD INSTANCES';sh2.appendChild(sh2Td);tb.appendChild(sh2);
+    cr.forEach(function(d){
+      var pb=d.provider==='AWS'?'\x3cspan class="camdb">AWS\x3c/span>':'\x3cspan class="ccldb">CoreWeave\x3c/span>';
+      var tr=document.createElement('tr');
+      var tdName2=document.createElement('td'); tdName2.innerHTML=pb+' \x3cb>'+d.name+'\x3c/b>';
+      if(d.note){var nt=document.createElement('span');nt.style.cssText='font-family:var(--mono);font-size:10px;color:var(--text3)';nt.textContent=d.note;tdName2.appendChild(document.createElement('br'));tdName2.appendChild(nt);}
+      var tdV2=document.createElement('td');tdV2.className='vm';tdV2.textContent=d.vram+'GB';
+      var tdD=document.createElement('td');tdD.textContent='\u2014';
+      var tdD2=document.createElement('td');tdD2.textContent='\u2014';
+      var tdH2=document.createElement('td');tdH2.className='vm va';tdH2.textContent='$'+d.aws_hr.toFixed(2);
+      var tdM2=document.createElement('td');
+      var bc2el=document.createElement('div');bc2el.className='bc';
+      var bbg=document.createElement('div');bbg.className='bbg';
+      var bf=document.createElement('div');bf.className='bf';
+      bf.style.cssText='width:'+Math.min(100,Math.round(d.aws_mo/10000*100))+'%;background:rgba(146,64,14,.4)';
+      bbg.appendChild(bf);bc2el.appendChild(bbg);
+      var mval=document.createElement('span');mval.className='vm va';mval.textContent=fmt$(d.aws_mo);
+      bc2el.appendChild(mval);tdM2.appendChild(bc2el);
+      var tdD3=document.createElement('td');tdD3.textContent='\u2014';
+      var tdD4=document.createElement('td');tdD4.textContent='\u2014';
+      [tdName2,tdV2,tdD,tdD2,tdH2,tdM2,tdD3,tdD4].forEach(function(td){tr.appendChild(td);});
+      tb.appendChild(tr);
+    });
+  }
+}
+
+// ===== VLLM CONFIG =====
+var vllmCurrentTab = 'cmd';
+var vllmLastR = null;
+
+function showVllmConfig() {
+  var r = calcTiers();
+  vllmLastR = r;
+  var modal = el('vllm-modal');
+  modal.style.display = 'flex';
+  el('vllm-subtitle').textContent = S.modelLabel + ' \u00b7 ' + S.users + ' users \u00b7 '
+    + S.gpuName + ' ' + S.gpu + 'GB \u00b7 ' + S.ctx + 'K ctx \u00b7 TP=' + r.tpMin;
+  renderVllmCode(r, vllmCurrentTab);
+}
+
+function closeVllmConfig() {
+  el('vllm-modal').style.display = 'none';
+}
+
+function switchVllmTab(tab, btn) {
+  vllmCurrentTab = tab;
+  document.querySelectorAll('.vllm-tab').forEach(function(t) {
+    t.style.background = 'none'; t.style.color = 'var(--text2)';
+  });
+  btn.style.background = 'var(--bg4)'; btn.style.color = 'var(--text)';
+  if (vllmLastR) renderVllmCode(vllmLastR, tab);
+}
+
+function renderVllmCode(r, tab) {
+  var modelId = S.hfId || ('YOUR_ORG/' + S.modelLabel);
+  var maxSeqs = r.upr;
+  var maxModelLen = S.ctx * 1000;
+  var kvDtype = S.kv === 1 ? 'fp8' : 'auto';
+  var dtype = S.wp === 1 ? 'float8' : 'bfloat16';
+  var gpuUtil = ((1 - S.overhead/100) * 0.98).toFixed(2);
+
+  var code = '';
+  var notes = '';
+
+  if (tab === 'cmd') {
+    code = '# Install: pip install vllm\n'
+      + '# Run one replica (' + r.tpMin + ' GPUs via torchrun if TP>' + (r.tpMin>1?'1':'0') + ')\n\n';
+    if (r.tpMin > 1) {
+      code += 'torchrun --nproc_per_node=' + r.tpMin + ' \\\n'
+        + '  -m vllm.entrypoints.openai.api_server \\\n';
+    } else {
+      code += 'python -m vllm.entrypoints.openai.api_server \\\n';
+    }
+    code += '  --model ' + modelId + ' \\\n'
+      + '  --tensor-parallel-size ' + r.tpMin + ' \\\n'
+      + '  --max-model-len ' + maxModelLen + ' \\\n'
+      + '  --max-num-seqs ' + maxSeqs + ' \\\n'
+      + '  --gpu-memory-utilization ' + gpuUtil + ' \\\n'
+      + '  --dtype ' + dtype + ' \\\n'
+      + '  --kv-cache-dtype ' + kvDtype + ' \\\n'
+      + '  --enable-prefix-caching \\\n'
+      + '  --served-model-name ' + S.modelLabel + ' \\\n'
+      + '  --port 8000\n\n'
+      + '# Scale: run ' + r.reps + ' replica' + (r.reps!==1?'s':'') + ' behind a load balancer\n'
+      + '# Total GPUs: ' + r.t1 + ' (' + r.reps + ' replica' + (r.reps!==1?'s':'')+' x ' + r.tpMin + ' GPU)';
+
+  } else if (tab === 'py') {
+    code = 'from vllm import LLM, SamplingParams\n\n'
+      + '# One replica — run ' + r.reps + ' instance' + (r.reps!==1?'s':'') + ' for ' + S.users + ' users\n'
+      + 'llm = LLM(\n'
+      + '    model="' + modelId + '",\n'
+      + '    tensor_parallel_size=' + r.tpMin + ',\n'
+      + '    max_model_len=' + maxModelLen + ',\n'
+      + '    max_num_seqs=' + maxSeqs + ',\n'
+      + '    gpu_memory_utilization=' + gpuUtil + ',\n'
+      + '    dtype="' + dtype + '",\n'
+      + '    kv_cache_dtype="' + kvDtype + '",\n'
+      + '    enable_prefix_caching=True,\n'
+      + ')\n\n'
+      + 'sampling_params = SamplingParams(\n'
+      + '    temperature=0.7,\n'
+      + '    max_tokens=512,\n'
+      + ')\n\n'
+      + '# For OpenAI-compatible API server see CLI tab';
+
+  } else if (tab === 'yaml') {
+    code = '# Kubernetes Deployment — ' + r.reps + ' replica' + (r.reps!==1?'s':'') + '\n'
+      + 'apiVersion: apps/v1\n'
+      + 'kind: Deployment\n'
+      + 'metadata:\n'
+      + '  name: vllm-' + S.modelLabel.toLowerCase().replace(/[^a-z0-9]/g,'-') + '\n'
+      + 'spec:\n'
+      + '  replicas: ' + r.reps + '\n'
+      + '  selector:\n'
+      + '    matchLabels:\n'
+      + '      app: vllm\n'
+      + '  template:\n'
+      + '    metadata:\n'
+      + '      labels:\n'
+      + '        app: vllm\n'
+      + '    spec:\n'
+      + '      containers:\n'
+      + '      - name: vllm\n'
+      + '        image: vllm/vllm-openai:latest\n'
+      + '        args:\n'
+      + '        - "--model"\n'
+      + '        - "' + modelId + '"\n'
+      + '        - "--tensor-parallel-size"\n'
+      + '        - "' + r.tpMin + '"\n'
+      + '        - "--max-model-len"\n'
+      + '        - "' + maxModelLen + '"\n'
+      + '        - "--max-num-seqs"\n'
+      + '        - "' + maxSeqs + '"\n'
+      + '        - "--gpu-memory-utilization"\n'
+      + '        - "' + gpuUtil + '"\n'
+      + '        - "--dtype"\n'
+      + '        - "' + dtype + '"\n'
+      + '        - "--kv-cache-dtype"\n'
+      + '        - "' + kvDtype + '"\n'
+      + '        - "--enable-prefix-caching"\n'
+      + '        resources:\n'
+      + '          limits:\n'
+      + '            nvidia.com/gpu: ' + r.tpMin + '\n'
+      + '        ports:\n'
+      + '        - containerPort: 8000\n'
+      + '---\n'
+      + 'apiVersion: v1\n'
+      + 'kind: Service\n'
+      + 'metadata:\n'
+      + '  name: vllm-service\n'
+      + 'spec:\n'
+      + '  selector:\n'
+      + '    app: vllm\n'
+      + '  ports:\n'
+      + '  - port: 8000\n'
+      + '  type: LoadBalancer';
+  }
+
+  el('vllm-code').textContent = code;
+
+  notes = '\u26a0 Assumptions: gpu-memory-utilization=' + gpuUtil
+    + ' (' + S.overhead + '% overhead reserved). '
+    + 'max-num-seqs=' + maxSeqs + ' (users per replica at ' + S.ctx + 'K ctx). '
+    + (S.kv===1 ? 'FP8 KV cache requires vLLM 0.4.0+. ' : '')
+    + (r.tpMin > 1 ? 'TP=' + r.tpMin + ': use torchrun or Ray for multi-GPU. ' : '')
+    + 'Validate with vllm benchmark_throughput.py before production.';
+  el('vllm-notes').textContent = notes;
+}
+
+function copyVllmConfig() {
+  var code = el('vllm-code').textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(code).then(function() {
+      var btn = el('copy-btn'); btn.textContent = 'Copied!';
+      setTimeout(function(){ btn.textContent = 'Copy'; }, 2000);
+    });
+  }
+}
+
+// Close modal on backdrop click
+el('vllm-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeVllmConfig();
+});
+function hitCounter() {
+  // counterapi.dev — free, no signup, CORS-enabled replacement for countapi.xyz
+  fetch('https://api.counterapi.dev/v1/nb-qbits/gpu-calc-visits/up')
+    .then(function(r){return r.json();})
+    .then(function(d){if(d&&d.count)el('visit-count').textContent=Number(d.count).toLocaleString();})
+    .catch(function(){});
+  fetch('https://api.counterapi.dev/v1/nb-qbits/' + PROFILE.today + '/up')
+    .then(function(r){return r.json();})
+    .then(function(d){if(d&&d.count)el('today-count').textContent=d.count;})
+    .catch(function(){});
+}
+function getGeo() {
+  fetch('https://ipapi.co/json/')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d&&d.city&&d.country_code){
+        var loc=d.city+', '+d.country_code;
+        var ls=JSON.parse(localStorage.getItem('gpu-calc-locs')||'{}');
+        ls[loc]=(ls[loc]||0)+1;
+        localStorage.setItem('gpu-calc-locs',JSON.stringify(ls));
+        renderGeo(ls);
+      }
+    }).catch(function(){});
+}
+function renderGeo(ls) {
+  var top=Object.entries(ls).sort(function(a,b){return b[1]-a[1];}).slice(0,4);
+  var gc2 = el('geo-chips'); gc2.innerHTML = '';
+  top.forEach(function(e) { var s=document.createElement('span');s.className='gc2';s.textContent=e[0];gc2.appendChild(s); });
+  el('geo-item').style.display=top.length?'flex':'none';
+}
+
+// ===== INIT =====
+hitCounter();
+getGeo();
+var sl=JSON.parse(localStorage.getItem('gpu-calc-locs')||'{}');
+if(Object.keys(sl).length)renderGeo(sl);
+renderResult();
+
+// ===== WIZARD =====
+var WS={step:0,params:8,paramsLabel:'~8B',gpuVram:80,gpuName:'H100',gpuPrice:25000,gpuCloud:3.10,ctx:8,users:100,prec:2,precLabel:'BF16'};
+function wizPickModel(p,lbl,el){WS.params=p;WS.paramsLabel=lbl;el.closest('.wiz-opts').querySelectorAll('.wiz-opt').forEach(function(o){o.classList.remove('on');});el.classList.add('on');}
+function wizPickGpu(name,vram,price,cloud,el){WS.gpuName=name;WS.gpuVram=vram;WS.gpuPrice=price;WS.gpuCloud=cloud;el.closest('.wiz-opts').querySelectorAll('.wiz-opt').forEach(function(o){o.classList.remove('on');});el.classList.add('on');}
+function wizPickCtx(v,el){WS.ctx=v;el.closest('.wiz-opts').querySelectorAll('.wiz-opt').forEach(function(o){o.classList.remove('on');});el.classList.add('on');}
+function wizSetUsers(v){WS.users=v;document.getElementById('wiz-users-inp').value=v;}
+function wizPickPrec(v,lbl,el){WS.prec=v;WS.precLabel=lbl;el.closest('.wiz-opts').querySelectorAll('.wiz-opt').forEach(function(o){o.classList.remove('on');});el.classList.add('on');}
+function wizUpdateProgress(){for(var i=0;i<5;i++){var d=document.getElementById('wdot-'+i);d.className='wiz-step-dot'+(i<WS.step?' done':i===WS.step?' cur':'');}document.getElementById('wiz-step-label').textContent='Step '+(WS.step+1)+' of 5';}
+function wizBack(){if(WS.step===0)return;document.getElementById('wstep-'+WS.step).style.display='none';WS.step--;document.getElementById('wstep-'+WS.step).style.display='';wizUpdateProgress();}
+function wizNext(){WS.users=+(document.getElementById('wiz-users-inp').value)||100;if(WS.step>=4){wizShowResults();return;}document.getElementById('wstep-'+WS.step).style.display='none';WS.step++;document.getElementById('wstep-'+WS.step).style.display='';wizUpdateProgress();}
+function wizGoTo(step){WS.step=step;document.getElementById('wstep-results').style.display='none';for(var i=0;i<5;i++)document.getElementById('wstep-'+i).style.display=i===step?'':'none';wizUpdateProgress();}
+function wizRestart(){WS.step=0;document.getElementById('wstep-results').style.display='none';for(var i=1;i<5;i++)document.getElementById('wstep-'+i).style.display='none';document.getElementById('wstep-0').style.display='';wizUpdateProgress();}
+function wizShowResults(){
+  WS.users=+(document.getElementById('wiz-users-inp').value)||100;
+  for(var i=0;i<5;i++)document.getElementById('wstep-'+i).style.display='none';
+  document.getElementById('wstep-results').style.display='';
+  for(var i=0;i<5;i++)document.getElementById('wdot-'+i).className='wiz-step-dot done';
+  document.getElementById('wiz-step-label').textContent='Results';
+  wizCalc();
+}
+function wizCalc(){
+  function nP2(n){var p=1;while(p<n)p*=2;return p;}
+  function f$(n){return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1000?'$'+Math.round(n/1000)+'K':'$'+Math.round(n);}
+  function fGB(n){return n>=10?Math.round(n)+' GB':n.toFixed(1)+' GB';}
+  var wt=WS.params*WS.prec,usable=WS.gpuVram*0.92;
+  var kvBpt=0.02*WS.params*WS.prec,kvB=kvBpt*WS.ctx;
+  var MAX_TP=8,tpW=nP2(Math.max(1,Math.ceil(wt/Math.max(0.1,usable))));
+  var bestTp=tpW,bestTotal=Infinity,tp=tpW;
+  while(tp<=MAX_TP){var av=(usable*tp-wt)*0.95;if(av>0){var u=Math.max(1,Math.floor(av/Math.max(0.001,kvB)));var tot=Math.ceil(WS.users/u)*tp;if(tot<bestTotal){bestTotal=tot;bestTp=tp;}}tp*=2;}
+  var tpMin=bestTp,aPA=(usable*tpMin-wt)*0.95;
+  var upr=Math.max(1,Math.floor(aPA/Math.max(0.001,kvB)));
+  var reps=Math.ceil(WS.users/upr),t1=reps*tpMin;
+  var opTot=t1*WS.gpuPrice,clMo=t1*WS.gpuCloud*720,clTot=0,mo=clMo;
+  for(var y=0;y<5;y++){clTot+=mo*12;mo*=1.03;}
+  document.getElementById('wres-gpus').textContent=t1;
+  document.getElementById('wres-sub').textContent=t1+' × '+WS.gpuName+' · TP='+tpMin+' · '+reps+' replica'+(reps!==1?'s':'')+' · '+WS.ctx+'K ctx';
+  document.getElementById('wm-kv').textContent=fGB(kvB);document.getElementById('wm-kv-sub').textContent=(kvBpt*1000).toFixed(2)+' MB/tok';
+  document.getElementById('wm-upr').textContent=upr;document.getElementById('wm-upr-sub').textContent=reps+' replica'+(reps!==1?'s':'')+' × '+tpMin+' GPU'+(tpMin!==1?'s':'');
+  document.getElementById('wm-tp').textContent='TP='+tpMin;document.getElementById('wm-tp-sub').textContent=tpMin===1?'no TP':tpMin+' GPUs/replica';
+  document.getElementById('wm-pool').textContent=fGB(aPA);
+  document.getElementById('wc-op').textContent=f$(opTot);document.getElementById('wc-op-sub').textContent=t1+' GPUs × $'+Math.round(WS.gpuPrice/1000)+'K · '+f$(Math.round(opTot/60))+'/mo';
+  document.getElementById('wc-cl').textContent=f$(Math.round(clTot));document.getElementById('wc-cl-sub').textContent='$'+Math.round(clMo).toLocaleString()+'/mo today · +3%/yr';
+  document.getElementById('wans-model').innerHTML=WS.paramsLabel+' <span class="wiz-edit">edit</span>';
+  document.getElementById('wans-gpu').innerHTML=WS.gpuName+' '+WS.gpuVram+'GB <span class="wiz-edit">edit</span>';
+  document.getElementById('wans-ctx').innerHTML=WS.ctx+'K tokens <span class="wiz-edit">edit</span>';
+  document.getElementById('wans-users').innerHTML=WS.users+' concurrent <span class="wiz-edit">edit</span>';
+  document.getElementById('wans-prec').innerHTML=WS.precLabel+' <span class="wiz-edit">edit</span>';
+}
+
+// ===== EXPLORER =====
+var EXP={nv:true,amd:true,cloud:true,axX:'vram',axY:'tpp',axR:'tpp_per_100'};
+var EXP_GPUS=[
+  {name:'B300',d:'nv',vram:288,price:53000,tpp:60000,tpp_per_100:88.3,year:2025},
+  {name:'B200',d:'nv',vram:192,price:48000,tpp:40000,tpp_per_100:120,year:2024},
+  {name:'B100',d:'nv',vram:192,price:32500,tpp:28000,tpp_per_100:116,year:2025},
+  {name:'B30A',d:'nv',vram:144,price:22500,tpp:30000,tpp_per_100:75,year:2025},
+  {name:'H200',d:'nv',vram:141,price:35000,tpp:15831,tpp_per_100:221,year:2024},
+  {name:'H100',d:'nv',vram:80,price:25000,tpp:15840,tpp_per_100:158,year:2022},
+  {name:'H20',d:'nv',vram:96,price:11500,tpp:2368,tpp_per_100:486,year:2023},
+  {name:'A100',d:'nv',vram:80,price:16500,tpp:4992,tpp_per_100:331,year:2020},
+  {name:'V100',d:'nv',vram:16,price:9500,tpp:2000,tpp_per_100:475,year:2017},
+  {name:'MI350X',d:'amd',vram:288,price:20000,tpp:38190,tpp_per_100:52.4,year:2025},
+  {name:'MI325X',d:'amd',vram:256,price:20000,tpp:20918,tpp_per_100:95.6,year:2024},
+  {name:'MI300X',d:'amd',vram:192,price:12500,tpp:20918,tpp_per_100:59.8,year:2023},
+  {name:'MI300A',d:'amd',vram:128,price:10000,tpp:15690,tpp_per_100:63.7,year:2023},
+  {name:'MI250X',d:'amd',vram:128,price:8000,tpp:6128,tpp_per_100:130.5,year:2021},
+];
+var EXP_CLOUD=[
+  {name:'H100 (CoreWeave)',provider:'CoreWeave',vram:80,aws_hr:2.50},
+  {name:'B200 (CoreWeave)',provider:'CoreWeave',vram:192,aws_hr:4.50},
+  {name:'H100 (AWS p5)',provider:'AWS',vram:80,aws_hr:12.25,note:'$98/hr ÷8'},
+  {name:'A100 (AWS p4d)',provider:'AWS',vram:40,aws_hr:4.00,note:'$32/hr ÷8'},
+  {name:'H100 (GCP A3)',provider:'GCP',vram:80,aws_hr:3.27},
+];
+var EXP_AXLBLS={vram:'VRAM (GB)',price:'Purchase ($K)',tpp:'Throughput (tok/s)',tpp_per_100:'$/100 TPP'};
+var expScatter=null,expSortKey='tpp_per_100',expSortDir=1;
+function expGV(d,k){if(k==='price')return d.price/1000;return d[k]||0;}
+function expToggle(f,btn){EXP[f]=!EXP[f];btn.classList.toggle('on',EXP[f]);if(document.getElementById('ep-chart').classList.contains('on'))expRenderChart();else expRenderTable();}
+function expSetAx(ax,v,btn){document.querySelectorAll('.axc[data-ax="'+ax+'"]').forEach(function(b){b.classList.remove('on');});btn.classList.add('on');if(ax==='x')EXP.axX=v;else if(ax==='y')EXP.axY=v;else EXP.axR=v;expRenderChart();}
+function expRenderChart(){
+  var nvD=EXP.nv?EXP_GPUS.filter(function(d){return d.d==='nv';}):[];
+  var amD=EXP.amd?EXP_GPUS.filter(function(d){return d.d==='amd';}):[];
+  var all=nvD.concat(amD);if(!all.length)return;
+  var maxR=Math.max.apply(null,all.map(function(d){return expGV(d,EXP.axR)||1;}));
+  var dk=document.documentElement.classList.contains('dark');
+  var mkDS=function(arr){return arr.map(function(d){return{x:expGV(d,EXP.axX),y:expGV(d,EXP.axY),r:Math.max(6,Math.sqrt(expGV(d,EXP.axR)/maxR)*44),label:d.name,raw:d};});};
+  if(expScatter){expScatter.destroy();expScatter=null;}
+  var canvas=document.getElementById('scatterChart');if(!canvas)return;
+  expScatter=new Chart(canvas,{
+    type:'bubble',
+    data:{datasets:[
+      {label:'NVIDIA',data:mkDS(nvD),backgroundColor:dk?'rgba(79,142,247,.25)':'rgba(37,99,235,.2)',borderColor:dk?'rgba(79,142,247,.7)':'rgba(37,99,235,.7)',borderWidth:1.5},
+      {label:'AMD',data:mkDS(amD),backgroundColor:dk?'rgba(247,111,111,.25)':'rgba(220,38,38,.2)',borderColor:dk?'rgba(247,111,111,.7)':'rgba(220,38,38,.7)',borderWidth:1.5},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:28,right:20}},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:dk?'#1c1f2a':'#fff',borderColor:dk?'rgba(255,255,255,.1)':'rgba(0,0,0,.1)',borderWidth:1,titleColor:dk?'#e8eaf0':'#0f1117',bodyColor:dk?'#8b90a0':'#505666',padding:10,
+        callbacks:{title:function(i){return i[0].raw.label;},label:function(ctx){var d=ctx.raw.raw;return['VRAM: '+d.vram+' GB','Price: $'+Math.round(d.price/1000)+'K','TPP: '+d.tpp.toLocaleString(),'$/100TPP: $'+d.tpp_per_100,'Year: '+d.year];}}}},
+      scales:{
+        x:{grid:{color:dk?'rgba(255,255,255,.05)':'rgba(0,0,0,.05)'},ticks:{color:dk?'#555b6e':'#9098aa',font:{family:'DM Mono',size:10},callback:function(v){return EXP.axX==='price'?'$'+v+'K':v;}},title:{display:true,text:EXP_AXLBLS[EXP.axX],color:dk?'#555b6e':'#9098aa',font:{family:'DM Mono',size:10}}},
+        y:{grid:{color:dk?'rgba(255,255,255,.05)':'rgba(0,0,0,.05)'},ticks:{color:dk?'#555b6e':'#9098aa',font:{family:'DM Mono',size:10},callback:function(v){return EXP.axY==='price'?'$'+v+'K':v>=1000?(v/1000).toFixed(0)+'K':v;}},title:{display:true,text:EXP_AXLBLS[EXP.axY],color:dk?'#555b6e':'#9098aa',font:{family:'DM Mono',size:10}}}
+      }
+    },
+    plugins:[{id:'lbl',afterDatasetsDraw:function(chart){var ctx2=chart.ctx,dk2=document.documentElement.classList.contains('dark');chart.data.datasets.forEach(function(ds,di){var meta=chart.getDatasetMeta(di);if(meta.hidden)return;meta.data.forEach(function(pt,pi){var d=ds.data[pi];if(!d)return;var pos=pt.tooltipPosition();ctx2.save();ctx2.font='600 10px DM Mono';ctx2.fillStyle=dk2?'rgba(232,234,240,.8)':'rgba(15,17,23,.7)';ctx2.textAlign='center';ctx2.textBaseline='middle';ctx2.fillText(d.label,pos.x,pos.y);ctx2.restore();});});}}]
+  });
+  var desc=document.getElementById('exp-ax-desc');
+  if(desc)desc.textContent='X: '+EXP_AXLBLS[EXP.axX]+' · Y: '+EXP_AXLBLS[EXP.axY]+' · Bubble: '+EXP_AXLBLS[EXP.axR];
+}
+function expRenderTable(){
+  var maxP=Math.max.apply(null,EXP_GPUS.map(function(d){return d.price;}));
+  var rows=[];
+  if(EXP.nv||EXP.amd){
+    var gpus=EXP_GPUS.filter(function(d){return(d.d==='nv'&&EXP.nv)||(d.d==='amd'&&EXP.amd);}).map(function(d){return Object.assign({},d,{onprem_mo:Math.round(d.price/(5*12))});});
+    if(expSortKey)gpus.sort(function(a,b){return((a[expSortKey]||0)-(b[expSortKey]||0))*expSortDir;});
+    rows.push('<tr class="sh"><td colspan="8">ON-PREM GPUS</td></tr>');
+    gpus.forEach(function(d){var isNv=d.d==='nv';var badge=isNv?'<span class="cnvb">NVIDIA</span>':'<span class="camdb">AMD</span>';var pPct=Math.round(d.price/maxP*100);rows.push('<tr><td>'+badge+' <b>'+d.name+'</b> <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">'+d.year+'</span></td><td class="vm">'+d.vram+'GB</td><td><div class="bc"><div class="bbg"><div class="bf" style="width:'+pPct+'%;background:rgba(37,99,235,.35)"></div></div><span class="vm">$'+Math.round(d.price/1000)+'K</span></div></td><td><span class="vm vg">$'+d.onprem_mo.toLocaleString()+'/mo</span></td><td class="vm">—</td><td class="vm">—</td><td class="vm">'+d.tpp.toLocaleString()+'</td><td class="vm">$'+d.tpp_per_100+'</td></tr>');});
+  }
+  if(EXP.cloud){
+    rows.push('<tr class="sh"><td colspan="8">CLOUD INSTANCES</td></tr>');
+    EXP_CLOUD.forEach(function(d){var badge=d.provider==='AWS'?'<span class="camdb">AWS</span>':d.provider==='GCP'?'<span class="ccldb">GCP</span>':'<span class="ccldb">CoreWeave</span>';var mo=Math.round(d.aws_hr*720);rows.push('<tr><td>'+badge+' <b>'+d.name+'</b>'+(d.note?'<br><span style="font-family:var(--mono);font-size:10px;color:var(--text3)">'+d.note+'</span>':'')+'</td><td class="vm">'+d.vram+'GB</td><td class="vm">—</td><td class="vm">—</td><td class="vm va">$'+d.aws_hr.toFixed(2)+'/hr</td><td class="vm va">$'+mo.toLocaleString()+'/mo</td><td class="vm">—</td><td class="vm">—</td></tr>');});
+  }
+  document.getElementById('ptbody').innerHTML=rows.join('');
+}
+
+</script>
+</body>
+</html>
