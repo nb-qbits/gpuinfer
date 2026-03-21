@@ -309,7 +309,7 @@ html.dark .fchip.on.nv{color:#76b900}html.dark .fchip.on.amd{color:#f76f6f}
 .axc{padding:3px 9px;border-radius:10px;border:1px solid var(--border);font-size:11px;cursor:pointer;background:var(--bg3);color:var(--text2)}
 .axc.on{background:var(--bdim);color:var(--blue);border-color:var(--bbord)}
 .scwrap{position:relative;width:100%;height:360px}
-.ptable{width:100%;border-collapse:collapse;font-size:12px}
+.ptable{width:100%;border-collapse:collapse;font-size:12px;user-select:none;-webkit-user-select:none}
 .ptable th{text-align:left;padding:7px 9px;font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.05em;border-bottom:1px solid var(--border)}
 .ptable th.s{cursor:pointer}.ptable th.s:hover{color:var(--text2)}
 .ptable td{padding:8px 9px;border-bottom:1px solid var(--border);vertical-align:middle}
@@ -340,6 +340,24 @@ html.dark .cnvb{color:#76b900}.html.dark .camdb{color:#f76f6f}
 .cdot{width:5px;height:5px;border-radius:50%;background:var(--green)}
 .gcs2{display:flex;gap:4px;flex-wrap:wrap}
 .gc2{padding:2px 6px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--text3)}
+
+
+/* Action buttons pulse */
+@keyframes subtlePulse {
+  0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,0)}
+  50%{box-shadow:0 0 0 6px rgba(37,99,235,0.15)}
+}
+@keyframes subtlePulseGreen {
+  0%,100%{box-shadow:0 0 0 0 rgba(21,128,61,0)}
+  50%{box-shadow:0 0 0 6px rgba(21,128,61,0.15)}
+}
+.action-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0 14px;border-bottom:1px solid var(--border);margin-bottom:14px}
+.act-btn-save{padding:8px 16px;background:var(--green);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--body);display:flex;align-items:center;gap:6px;animation:subtlePulseGreen 2.5s ease-in-out infinite}
+.act-btn-save:hover{opacity:.88;animation:none}
+.act-btn-validate{padding:8px 16px;background:var(--bg2);border:1.5px solid #7c3aed;border-radius:8px;color:#7c3aed;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--body);display:flex;align-items:center;gap:6px;animation:subtlePulse 2.5s ease-in-out 1.2s infinite}
+.act-btn-validate:hover{background:rgba(124,58,237,.08);animation:none}
+.act-btn-secondary{padding:8px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:12px;cursor:pointer;font-family:var(--body)}
+.act-btn-secondary:hover{background:var(--bg3)}
 
 @keyframes slideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
@@ -526,14 +544,31 @@ tr.selected td{background:rgba(37,99,235,.04)}
 .vtab.on{background:var(--bg4);color:var(--text);font-weight:500}
 /* Print styles */
 @media print{
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   nav,.ntabs,.liwrap,.cbar,.rnav,#page-home,#page-wizard,#page-calc,#page-explorer,
-  #saved-validate-wrap,.sv-del,button{display:none!important}
+  #saved-validate-wrap,.sv-del,button,#action-bar-top{display:none!important}
   #page-saved{display:block!important}
-  body{background:#fff;color:#000}
-  .sv-table th{background:#f5f5f5;color:#333}
-  .sv-table td{color:#000}
-  @page{size:A4 landscape;margin:15mm}
+  body{background:#fff!important;color:#000!important;font-size:10px}
+  @page{size:A4 landscape;margin:10mm}
+  /* Compact table */
+  .sv-table{font-size:9px!important;page-break-inside:avoid}
+  .sv-table th{padding:5px 8px!important;background:#1e3a5f!important;color:#fff!important;font-size:8px!important;letter-spacing:.04em}
+  .sv-table td{padding:4px 8px!important;border-bottom:1px solid #e5e7eb!important}
+  /* Section headers */
+  .sv-section-head td{background:#f0f4f8!important;color:#1e3a5f!important;font-weight:700!important;font-size:8px!important;padding:4px 8px!important;letter-spacing:.08em}
+  /* Color coded value columns */
+  .sv-val.green{color:#065f46!important;font-weight:700!important}
+  .sv-val.blue{color:#1e40af!important;font-weight:700!important}
+  .sv-val.amber{color:#92400e!important;font-weight:600!important}
+  /* Print header */
+  #print-header{display:block!important}
+  /* GPU count row highlight */
+  tr.sv-highlight td{background:#eff6ff!important}
 }
+#print-header{display:none;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid #1e3a5f}
+.print-logo{font-family:var(--display);font-size:18px;font-weight:800;color:#1e3a5f}
+.print-date{font-size:10px;color:#6b7280;font-family:var(--mono)}
+.print-title{font-size:12px;color:#374151;margin-top:2px}
 
 /* Disclaimer */
 .disc{font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.7;padding:14px 18px;background:var(--bg3);border-top:1px solid var(--border)}
@@ -705,6 +740,12 @@ tr.selected td{background:rgba(37,99,235,.04)}
           <div class="wiz-cost-card cl"><div class="wiz-cost-title">Cloud on-demand &middot; 5yrs</div><div class="wiz-cost-big cl" id="wc-cl">&mdash;</div><div class="wiz-cost-sub" id="wc-cl-sub"></div></div>
         </div>
         <div style="font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.7;padding:9px 12px;background:var(--bg3);border-radius:7px;margin-bottom:12px">On-prem = hardware purchase only. Cloud = on-demand &times;720hrs &times;12 &times;5yrs (+3%/yr). GPU-to-GPU comparison.</div>
+
+        <!-- WIZARD ACTION BUTTONS -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+          <button class="act-btn-save" onclick="saveResult()" style="font-size:11px;padding:7px 14px">&#128190; Save result</button>
+          <button class="act-btn-validate" onclick="showValidateModal()" style="font-size:11px;padding:7px 14px">&#129302; Validate with AI</button>
+        </div>
 
         <!-- KV CACHE FORMULA -->
         <div class="kv-balloon-wrap">
@@ -982,6 +1023,14 @@ tr.selected td{background:rgba(37,99,235,.04)}
       </div>
 
       <div id="rp-results" style="display:none">
+
+        <!-- ACTION BAR (top of results) -->
+        <div class="action-bar" id="action-bar-top">
+          <button class="act-btn-save" onclick="saveResult()">&#128190; Save result</button>
+          <button class="act-btn-validate" onclick="showValidateModal()">&#129302; Validate with AI</button>
+          <div style="flex:1"></div>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">&#8595; Scroll down for full breakdown</span>
+        </div>
 
         <!-- WARNINGS -->
         <div class="wbox amber" id="w-tp">
@@ -1333,6 +1382,17 @@ tr.selected td{background:rgba(37,99,235,.04)}
     </div>
   </div>
 
+  <!-- Print header (only visible when printing) -->
+  <div id="print-header">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="print-logo">gpu.calc</div>
+        <div class="print-title">LLM Inference Sizing Report</div>
+      </div>
+      <div class="print-date" id="print-date"></div>
+    </div>
+  </div>
+
   <!-- Empty state -->
   <div id="saved-empty" style="text-align:center;padding:60px 20px;color:var(--text3)">
     <div style="font-size:36px;margin-bottom:12px">&#128190;</div>
@@ -1393,9 +1453,12 @@ tr.selected td{background:rgba(37,99,235,.04)}
   </div>
   <div class="epane on" id="ep-chart" style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px">
     <div class="scwrap"><canvas id="scatterChart"></canvas></div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);line-height:1.7">
+      <span style="color:var(--amber);font-weight:600">Data notice</span> &mdash; Purchase prices are indicative market estimates for planning purposes only. Prices vary by vendor, volume, region, and time. Validate all figures with vendors before procurement. &copy; gpu.calc
+    </div>
   </div>
   <div class="epane" id="ep-pricing">
-    <table class="ptable"><thead><tr>
+    <table class="ptable" oncontextmenu="return false"><thead><tr>
       <th class="s" onclick="sortP('name')">GPU &#8597;</th><th>VRAM</th>
       <th class="s" onclick="sortP('price')">Purchase &#8597;</th>
       <th class="s" onclick="sortP('onprem_mo')">On-prem/mo &#8597;</th>
@@ -2923,7 +2986,7 @@ function renderSavedTable() {
     {lbl:'MB / token',key:'mbTok'},
     // Section: GPU Sizing
     {sec:'GPU SIZING'},
-    {lbl:'GPUs needed',       key:'gpus',      cls:'green'},
+    {lbl:'GPUs needed',       key:'gpus',      cls:'green', highlight:true},
     {lbl:'Tensor parallel',   key:'tp'},
     {lbl:'Replicas',          key:'reps'},
     {lbl:'Production range',  key:'prodRange', cls:'amber'},
@@ -2952,7 +3015,7 @@ function renderSavedTable() {
       var v = r[row.key];
       return '<td class="sv-val'+(row.cls?' '+row.cls:'')+'">'+v+'</td>';
     }).join('');
-    return '<tr><td class="sv-label">'+row.lbl+'</td>'+cells+'</tr>';
+    return '<tr'+(row.highlight?' class="sv-highlight"':'')+'>\x3ctd class="sv-label">'+row.lbl+'\x3c/td>'+cells+'</tr>';
   }).join('');
 
   document.getElementById('saved-table').innerHTML =
@@ -2960,6 +3023,8 @@ function renderSavedTable() {
 }
 
 function printSaved() {
+  var pd = document.getElementById('print-date');
+  if (pd) pd.textContent = 'Generated: ' + new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
   if (!savedResults.length) { alert('No saved results to export'); return; }
   switchPage('saved', document.querySelectorAll('.ntab')[4]);
   setTimeout(function(){ window.print(); }, 300);
