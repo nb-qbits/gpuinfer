@@ -608,7 +608,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
       <button class="wiz-opt on" onclick="wizPickGpu('H100',this)"><span>H100 80GB</span><span class="wiz-opt-sub">$25K &middot; $3.10/hr</span></button>
       <button class="wiz-opt" onclick="wizPickGpu('H200',this)"><span>H200 141GB</span><span class="wiz-opt-sub">$35K &middot; $4.20/hr</span></button>
       <button class="wiz-opt" onclick="wizPickGpu('B200',this)"><span>B200 192GB</span><span class="wiz-opt-sub">$48K &middot; $5.50/hr</span></button>
-      <button class="wiz-opt" onclick="wizPickGpu('L40S',this)"><span>L40S 48GB</span><span class="wiz-opt-sub">$12K &middot; $1.50/hr</span></button>
+      <button class="wiz-opt" onclick="wizPickGpu('L40S',this)"><span>L40S 48GB</span><span class="wiz-opt-sub">NVIDIA Ada Lovelace &middot; $12K &middot; $1.50/hr &middot; great for inference</span></button>
     </div>
     <div class="wiz-nav"><button class="wiz-back" onclick="wizBack()">&larr; Back</button><button class="wiz-next" onclick="wizNext()">Next &rarr;</button></div>
   </div>
@@ -644,9 +644,11 @@ tr.selected td{background:rgba(37,99,235,.04)}
     <div class="wiz-q-num">Question 5 of 5</div>
     <div class="wiz-q">Weight precision?</div>
     <div class="wiz-opts">
-      <button class="wiz-opt on" onclick="wizPickPrec(2,'BF16',this)"><span>BF16 &mdash; full precision</span><span class="wiz-opt-sub">Standard, best quality, highest memory</span></button>
-      <button class="wiz-opt" onclick="wizPickPrec(1,'FP8',this)"><span>FP8 &mdash; quantised</span><span class="wiz-opt-sub">Half the memory, minimal quality loss</span></button>
-      <button class="wiz-opt" onclick="wizPickPrec(1,'W8A8 (RedHatAI)',this)"><span>W8A8 &mdash; RedHatAI validated</span><span class="wiz-opt-sub">Validated quantised models, same memory as FP8</span></button>
+      <button class="wiz-opt on" onclick="wizPickPrec(2,'BF16',this)"><span>BF16 &mdash; full precision</span><span class="wiz-opt-sub">Standard, best quality, highest memory · 2 bytes/param</span></button>
+      <button class="wiz-opt" onclick="wizPickPrec(1,'FP8',this)"><span>FP8 &mdash; quantized weights</span><span class="wiz-opt-sub">Half the memory, minimal quality loss · 1 byte/param · vLLM native</span></button>
+      <button class="wiz-opt" onclick="wizPickPrec(1,'W8A8 (RedHatAI)',this)"><span>W8A8 &mdash; RedHatAI validated</span><span class="wiz-opt-sub">INT8 weights &amp; activations · validated on RedHatAI hub · 1 byte/param</span></button>
+      <button class="wiz-opt" onclick="wizPickPrec(0.5,'INT4 / GPTQ / AWQ',this)"><span>INT4 &mdash; GPTQ / AWQ</span><span class="wiz-opt-sub">Quarter the memory · 0.5 bytes/param · some quality loss · community models</span></button>
+      <button class="wiz-opt" onclick="wizPickPrec(0.5,'W4A16 (RedHatAI)',this)"><span>W4A16 &mdash; RedHatAI quantized</span><span class="wiz-opt-sub">4-bit weights, 16-bit activations · 0.5 bytes/param · good quality/size tradeoff</span></button>
     </div>
     <div class="wiz-nav"><button class="wiz-back" onclick="wizBack()">&larr; Back</button><button class="wiz-next" onclick="wizShowResults()">See results &rarr;</button></div>
   </div>
@@ -1289,6 +1291,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
     <tbody id="ptbody"></tbody></table>
     <div style="font-family:var(--mono);font-size:10px;color:var(--text3);padding:10px 12px;line-height:1.8;border-top:1px solid var(--border)">
       <span style="color:var(--amber);font-weight:600">Data &amp; Attribution</span> &mdash; Purchase prices are indicative market estimates compiled from public sources (TechPowerUp, ServeTheHome, vendor announcements) as of early 2025. Prices vary significantly by vendor, volume, region, and market conditions.<br>
+      <strong>L40S</strong> = NVIDIA Ada Lovelace architecture (2023), 48GB GDDR6 ECC, PCIe form factor — optimized for inference and video workloads, no NVLink. Popular cost-efficient alternative to H100 for single-node deployments.<br>
       Cloud rates reflect public on-demand pricing &mdash; reserved/spot/negotiated pricing may be 35&ndash;70% lower. TPP (tokens per second) figures are representative benchmarks for FP16 inference on a typical 7B&ndash;70B model; actual throughput depends on model architecture, batch size, and framework.<br>
       <span style="color:var(--amber);font-weight:600">Disclaimer</span> &mdash; This data is provided for comparative sizing purposes only. No warranty of accuracy or completeness. Validate all figures directly with vendors before procurement decisions.
     </div>
@@ -1499,6 +1502,9 @@ var AC_MODELS = [
   {id:'RedHatAI/Qwen2.5-7B-Instruct-quantized.w8a8',      cat:'redhat',badge:'rh', params:7,  q:'W8A8'},
   {id:'RedHatAI/Qwen2.5-72B-Instruct-quantized.w8a8',     cat:'redhat',badge:'rh', params:72, q:'W8A8'},
   {id:'RedHatAI/starcoder2-15b-quantized.w8a16',           cat:'redhat',badge:'rh', params:15, q:'W8A16'},
+  {id:'RedHatAI/Llama-3.1-8B-Instruct-quantized.w4a16',   cat:'redhat',badge:'rh', params:8,  q:'W4A16'},
+  {id:'RedHatAI/Llama-3.1-70B-Instruct-quantized.w4a16',  cat:'redhat',badge:'rh', params:70, q:'W4A16'},
+  {id:'RedHatAI/Mistral-7B-Instruct-v0.3-quantized.w4a16',cat:'redhat',badge:'rh', params:7,  q:'W4A16'},
   {id:'nvidia/Llama-3.1-Nemotron-70B-Instruct-HF',  cat:'nvidia', badge:'nv', params:70},
   {id:'nvidia/Llama-3.1-Nemotron-51B-Instruct',     cat:'nvidia', badge:'nv', params:51},
   {id:'nvidia/Llama-3.3-Nemotron-Super-49B-v1',     cat:'nvidia', badge:'nv', params:49},
@@ -1533,13 +1539,11 @@ function setACCat(cat, btn) {
 }
 
 function onACInput(val) {
-  onHFInput();
   clearTimeout(acTimer);
   val = (val||'').trim();
   var q = val.toLowerCase();
   var src = AC_MODELS;
   if (!q && acCat === 'all') {
-    // Default: RedHatAI first
     src = AC_MODELS.filter(function(m){return m.cat==='redhat';})
       .concat(AC_MODELS.filter(function(m){return m.cat==='nvidia';}))
       .concat(AC_MODELS.filter(function(m){return m.cat!=='redhat'&&m.cat!=='nvidia';}));
@@ -2281,9 +2285,9 @@ function disLI() {
   liDismissed = true; el('liwrap').classList.add('h');
   localStorage.setItem('lid', Date.now());
 }
-// Hide if dismissed in last 24 hours
+// Hide if dismissed in last 4 hours (shorter window)
 var _lid = localStorage.getItem('lid');
-if (_lid && (Date.now() - +_lid) < 86400000) el('liwrap').classList.add('h');
+if (_lid && (Date.now() - +_lid) < 14400000) el('liwrap').classList.add('h');
 
 // ===== EXPLORER =====
 var GPU_DATA = [
@@ -2656,7 +2660,7 @@ var WIZ_GPUS = {
   'H100':    {name:'H100',  vram:80,  aws:3.10, op:25000},
   'H200':    {name:'H200',  vram:141, aws:4.20, op:35000},
   'B200':    {name:'B200',  vram:192, aws:5.50, op:48000},
-  'L40S':    {name:'L40S',  vram:48,  aws:1.50, op:12000},
+  'L40S':    {name:'L40S',  vram:48,  aws:1.50, op:12000}, // NVIDIA Ada Lovelace 48GB — cost-efficient inference GPU
 };
 
 // Map WS.gpuKey → S fields and sync Advanced GPU card UI
