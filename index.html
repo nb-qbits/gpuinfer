@@ -1520,7 +1520,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
   </div>
   <button onclick="toggleAbout()" style="position:absolute;top:14px;right:18px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px">&#215;</button>
 </div>
-<div id="about-overlay" onclick="toggleAbout()" style="display:none;position:fixed;inset:0;z-index:140;"></div>
+
 
 <!-- LINKEDIN -->
 <div class="liwrap" id="liwrap">
@@ -1530,7 +1530,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
       <div class="liav" style="width:40px;height:40px;border-radius:50%;background:var(--bdim);border:2px solid var(--bbord);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:15px;font-weight:800;color:var(--blue);flex-shrink:0">VG</div>
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--text);font-family:var(--display)">Vikas Grover</div>
-        <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:1px">AI Infrastructure &middot; Red Hat</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:1px">AI Infrastructure &middot; LLM Inference</div>
       </div>
     </div>
     <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:10px">Building open-source AI infra tooling. Follow for LLM inference, GPU sizing, and platform engineering content.</div>
@@ -2564,7 +2564,13 @@ function disLI() {
 }
 // Hide if dismissed in last 4 hours (shorter window)
 var _lid = localStorage.getItem('lid');
-if (_lid && (Date.now() - +_lid) < 14400000) el('liwrap').classList.add('h');
+if (_lid && (Date.now() - +_lid) < 14400000) {
+  el('liwrap').classList.add('h');
+} else {
+  // Show after short delay so page loads first
+  el('liwrap').classList.add('h');
+  setTimeout(function(){ el('liwrap').classList.remove('h'); }, 3000);
+}
 
 // ===== EXPLORER =====
 var GPU_DATA = [
@@ -3351,11 +3357,20 @@ function openGoogleSheets() {
 
 function toggleAbout() {
   var d = document.getElementById('about-drawer');
-  var o = document.getElementById('about-overlay');
-  var isOpen = d && d.style.display !== 'none';
-  if (d) d.style.display = isOpen ? 'none' : 'block';
-  if (o) o.style.display = isOpen ? 'none' : 'block';
+  if (!d) return;
+  var isOpen = d.style.display !== 'none';
+  d.style.display = isOpen ? 'none' : 'block';
 }
+function closeAboutOnOutside(e) {
+  var d = document.getElementById('about-drawer');
+  if (!d || d.style.display === 'none') return;
+  var brand = document.querySelector('.brand');
+  if (!d.contains(e.target) && !(brand && brand.contains(e.target))) {
+    d.style.display = 'none';
+  }
+}
+document.addEventListener('click', closeAboutOnOutside);
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') { var d=document.getElementById('about-drawer'); if(d) d.style.display='none'; }});
 
 // Update switchPage to handle saved tab
 var _origSwitchPage = switchPage;
