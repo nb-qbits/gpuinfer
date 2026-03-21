@@ -1553,7 +1553,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v5.1</span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v5.2</span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank"
       style="font-family:var(--mono);font-size:10px;color:var(--text3);text-decoration:none">&#9733; GitHub</a>
     <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">
@@ -3081,7 +3081,7 @@ function renderSavedTable() {
       return '<th style="min-width:170px;padding:7px 10px 7px 0;border-bottom:2px solid var(--border2)">'
         +'<div style="font-size:12px;font-weight:600;color:var(--text)">'+r.label
         +'<button class="sv-del" onclick="deleteSaved('+r.id+')" title="Remove" style="margin-left:4px">&#215;</button>'
-        +'<button onclick="showValidateForSaved('+i+','tech')" style="font-family:var(--mono);font-size:9px;padding:1px 5px;border:1px solid var(--bbord);border-radius:3px;background:var(--bdim);color:var(--blue);cursor:pointer;margin-left:3px">verify</button>'
+        +'<button onclick="showValidateForSaved('+i+',\'tech\')" style="font-family:var(--mono);font-size:9px;padding:1px 5px;border:1px solid var(--bbord);border-radius:3px;background:var(--bdim);color:var(--blue);cursor:pointer;margin-left:3px">verify</button>'
         +'</div>'
         +'<div style="font-family:var(--mono);font-size:10px;color:var(--text3);background:var(--bg3);display:inline-block;padding:1px 5px;border-radius:3px;margin-top:2px">'+(r.prec||'BF16')+' · '+r.users+'u · '+(r.ctx||'8K')+'</div></th>';
     }).join('');
@@ -3321,8 +3321,7 @@ function exportExcel() {
       var s = String(cell==null?'':cell);
       return s.indexOf(',')>=0||s.indexOf('"')>=0 ? '"'+s.replace(/"/g,'""')+'"' : s;
     }).join(',');
-  }).join('
-');
+  }).join('\n');
   var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   var url  = URL.createObjectURL(blob);
   var a    = document.createElement('a');
@@ -3335,9 +3334,8 @@ function copyTSV() {
   if (!savedResults.length) { alert('No saved results to export'); return; }
   var d = buildTableData();
   var tsv = [d.cols].concat(d.rows).map(function(row){
-    return row.map(function(cell){return String(cell==null?'':cell);}).join('	');
-  }).join('
-');
+    return row.map(function(cell){return String(cell==null?'':cell);}).join('\t');
+  }).join('\n');
   navigator.clipboard.writeText(tsv).then(function(){
     var btn = document.getElementById('tsv-btn');
     if(btn){var orig=btn.innerHTML;btn.innerHTML='&#10003; Copied!';btn.style.color='var(--green)';setTimeout(function(){btn.innerHTML=orig;btn.style.color='';},2000);}
