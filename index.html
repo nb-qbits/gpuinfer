@@ -1428,18 +1428,39 @@ function applyModelConfig(id, cfg) {
     document.getElementById('s-params').value = Math.min(cfg.params, 405);
     document.getElementById('sv-params').textContent = cfg.params + 'B';
   }
+  // Set weight precision from dtype — critical for quantized models
+  if (cfg.dtype) {
+    var dtype = cfg.dtype.toLowerCase();
+    if (dtype === 'int4' || dtype === 'float4') {
+      S.wp = 0.5;
+    } else if (dtype === 'int8' || dtype === 'float8' || dtype === 'fp8') {
+      S.wp = 1;
+    } else {
+      S.wp = 2; // bfloat16, float16, default
+    }
+    // Sync weight precision chips
+    document.querySelectorAll('#wp-chips .chip').forEach(function(c) {
+      c.classList.toggle('on', +c.dataset.v === S.wp);
+    });
+  }
   document.querySelectorAll('#attn-chips .chip').forEach(function(c) {
     c.classList.toggle('on', c.dataset.v === S.attn);
   });
   var info = document.getElementById('minfo');
-  info.className = 'minfo show';
-  info.textContent = id + ' | ' + cfg.params + 'B | Layers: ' + cfg.layers
-    + ' | KV heads: ' + cfg.kvHeads + ' | Head dim: ' + cfg.headDim
-    + ' | dtype: ' + cfg.dtype
-    + (cfg.maxCtx ? ' | max ctx: ' + Math.round(cfg.maxCtx/1000) + 'K' : '');
-  document.getElementById('hf-st').className = 'hfst ok';
-  document.getElementById('hf-st').textContent = '\u2713 Exact KV loaded ('
-    + cfg.kvHeads + ' KV heads \u00d7 ' + cfg.headDim + ' dim \u00d7 ' + cfg.layers + ' layers)';
+  if (info) {
+    info.className = 'minfo show';
+    info.textContent = id + ' | ' + cfg.params + 'B | Layers: ' + cfg.layers
+      + ' | KV heads: ' + cfg.kvHeads + ' | Head dim: ' + cfg.headDim
+      + ' | dtype: ' + cfg.dtype + ' | wp: ' + S.wp + ' bytes/param'
+      + (cfg.maxCtx ? ' | max ctx: ' + Math.round(cfg.maxCtx/1000) + 'K' : '');
+  }
+  var hfst = document.getElementById('hf-st');
+  if (hfst) {
+    hfst.className = 'hfst ok';
+    hfst.textContent = '\u2713 Exact KV loaded ('
+      + cfg.kvHeads + ' KV heads \u00d7 ' + cfg.headDim + ' dim \u00d7 ' + cfg.layers + ' layers)'
+      + (S.wp < 2 ? ' \u00b7 ' + cfg.dtype + ' weights (' + S.wp + 'B/param)' : '');
+  }
   syncAssumptions();
 }
 
@@ -1488,6 +1509,12 @@ function fetchHF() {
       S.modelLabel = id.split('/').pop();
       var attn = (numKvH && numQH && numKvH < numQH) ? 'gqa' : 'mha';
       S.attn = attn;
+      // Set weight precision from dtype
+      var dtypeLower = dtype.toLowerCase();
+      if (dtypeLower==='int4'||dtypeLower==='float4') S.wp=0.5;
+      else if (dtypeLower==='int8'||dtypeLower==='float8'||dtypeLower==='fp8') S.wp=1;
+      else S.wp=2;
+      document.querySelectorAll('#wp-chips .chip').forEach(function(c){c.classList.toggle('on',+c.dataset.v===S.wp);});
       document.querySelectorAll('#attn-chips .chip').forEach(function(c) {
         c.classList.toggle('on', c.dataset.v === attn);
       });
