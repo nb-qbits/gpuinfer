@@ -510,6 +510,30 @@ tr:hover td{background:rgba(0,0,0,.015)}
 
 /* Selected row */
 tr.selected td{background:rgba(37,99,235,.04)}
+/* Saved results table */
+.sv-table{border-collapse:collapse;width:100%;font-size:12px}
+.sv-table th{padding:9px 12px;text-align:left;font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border2);background:var(--bg3);white-space:nowrap;position:sticky;top:0}
+.sv-table td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:middle;font-size:12px}
+.sv-table tr:hover td{background:rgba(0,0,0,.015)}
+.sv-section-head td{background:var(--bg3);font-family:var(--mono);font-size:9px;color:var(--blue);letter-spacing:.12em;text-transform:uppercase;padding:5px 12px;border-bottom:1px solid var(--border)}
+.sv-label{font-family:var(--mono);font-size:11px;color:var(--text2);white-space:nowrap}
+.sv-val{font-family:var(--mono);font-size:12px;color:var(--text);font-weight:500}
+.sv-val.green{color:var(--green)}.sv-val.blue{color:var(--blue)}.sv-val.amber{color:var(--amber)}
+.sv-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 4px}
+.sv-del:hover{color:var(--red)}
+/* Validate tabs */
+.vtab{background:none;color:var(--text2)}
+.vtab.on{background:var(--bg4);color:var(--text);font-weight:500}
+/* Print styles */
+@media print{
+  nav,.ntabs,.liwrap,.cbar,.rnav,#page-home,#page-wizard,#page-calc,#page-explorer,
+  #saved-validate-wrap,.sv-del,button{display:none!important}
+  #page-saved{display:block!important}
+  body{background:#fff;color:#000}
+  .sv-table th{background:#f5f5f5;color:#333}
+  .sv-table td{color:#000}
+  @page{size:A4 landscape;margin:15mm}
+}
 
 /* Disclaimer */
 .disc{font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.7;padding:14px 18px;background:var(--bg3);border-top:1px solid var(--border)}
@@ -529,6 +553,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
     <button class="ntab" onclick="switchPage('wizard',this)">▶ Quick size</button>
     <button class="ntab" onclick="switchPage('calc',this)">Advanced</button>
     <button class="ntab" onclick="switchPage('explorer',this)">GPU Explorer</button>
+    <button class="ntab" onclick="switchPage('saved',this)" id="saved-tab">&#128190; Saved <span id="saved-count" style="background:var(--blue);color:#fff;border-radius:8px;padding:1px 6px;font-size:10px;margin-left:3px;display:none">0</span></button>
   </div>
   <div class="nright">
     <button class="tbtn" id="tbtn" onclick="toggleTheme()"><span id="ti">☾</span>&nbsp;<span id="tl">Dark</span></button>
@@ -1215,6 +1240,8 @@ tr.selected td{background:rgba(37,99,235,.04)}
 
         <!-- NAV BUTTONS -->
         <div class="rnav">
+          <button class="btn p" onclick="saveResult()" style="background:var(--green);border-color:var(--green)">&#128190; Save result</button>
+          <button class="btn" onclick="showValidateModal()" style="border-color:var(--purple,#7c3aed);color:var(--purple,#7c3aed)">&#129302; Validate with AI</button>
           <button class="btn" onclick="switchPage('explorer',document.querySelectorAll('.ntab')[1])">GPU Explorer &#8594;</button>
           <button class="btn p" id="tco-btn">3-year TCO &#8599;</button>
           <a class="btn danger" id="bug-btn"
@@ -1227,6 +1254,44 @@ tr.selected td{background:rgba(37,99,235,.04)}
 
   </div><!-- /layout -->
 </div><!-- /page-calc -->
+
+
+<!-- VALIDATE WITH AI MODAL -->
+<div id="validate-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:400;align-items:center;justify-content:center">
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:24px;width:min(720px,95vw);max-height:90vh;overflow-y:auto;position:relative">
+    <button onclick="closeValidateModal()" style="position:absolute;top:12px;right:14px;background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px">&#215;</button>
+    <div style="font-family:var(--display);font-size:18px;font-weight:700;margin-bottom:4px">&#129302; Validate with AI</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:16px">Copy this prompt and paste into ChatGPT, Claude, or Copilot to get an independent review of these estimates.</div>
+
+    <!-- Prompt type tabs -->
+    <div style="display:flex;gap:2px;background:var(--bg3);border-radius:8px;padding:3px;margin-bottom:14px;width:fit-content">
+      <button class="vtab on" id="vtab-tech" onclick="switchVTab('tech',this)" style="padding:6px 16px;border-radius:6px;font-size:12px;cursor:pointer;border:none;font-family:var(--body);transition:all .12s">&#9881; Technical verify</button>
+      <button class="vtab" id="vtab-cfo" onclick="switchVTab('cfo',this)" style="padding:6px 16px;border-radius:6px;font-size:12px;cursor:pointer;border:none;font-family:var(--body);transition:all .12s">&#128203; CFO justification</button>
+    </div>
+
+    <!-- Prompt text area -->
+    <div style="position:relative">
+      <textarea id="validate-prompt" readonly style="width:100%;height:340px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:14px;font-family:var(--mono);font-size:11px;color:var(--text);line-height:1.7;resize:none;outline:none"></textarea>
+      <button onclick="copyValidatePrompt()" id="vcopy-btn" style="position:absolute;top:10px;right:10px;padding:5px 12px;background:var(--blue);border:none;border-radius:6px;color:#fff;font-size:11px;cursor:pointer;font-family:var(--mono)">Copy</button>
+    </div>
+
+    <!-- Open in AI buttons -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button onclick="openInClaude()" style="padding:8px 16px;background:#cc7a00;border:none;border-radius:7px;color:#fff;font-size:12px;cursor:pointer;font-family:var(--body);display:flex;align-items:center;gap:6px">
+        &#9670; Open in Claude.ai
+      </button>
+      <button onclick="openInChatGPT()" style="padding:8px 16px;background:#10a37f;border:none;border-radius:7px;color:#fff;font-size:12px;cursor:pointer;font-family:var(--body);display:flex;align-items:center;gap:6px">
+        &#10003; Open in ChatGPT
+      </button>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);align-self:center;margin-left:4px">Prompt is copied automatically when opening</div>
+    </div>
+
+    <!-- Production note -->
+    <div style="margin-top:14px;padding:10px 12px;background:var(--adim);border:1px solid var(--abord);border-radius:8px;font-size:11px;color:var(--amber);line-height:1.6">
+      <strong>Note:</strong> This calculator produces planning estimates, not engineering specifications. Based on community feedback, production deployments typically need 15&ndash;30% more GPUs than the baseline estimate due to KV utilization variance, fragmentation, and workload spikes.
+    </div>
+  </div>
+</div>
 
 <!-- VLLM CONFIG MODAL -->
 <div id="vllm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:300;align-items:center;justify-content:center">
@@ -1254,6 +1319,44 @@ tr.selected td{background:rgba(37,99,235,.04)}
 </div>
 
 <!-- EXPLORER -->
+
+<div class="page" id="page-saved">
+<div style="padding:16px 20px">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+    <div>
+      <div style="font-family:var(--display);font-size:20px;font-weight:700;margin-bottom:3px">Saved Results</div>
+      <div style="font-size:12px;color:var(--text2)">Compare workloads side by side. Save from the Advanced calculator.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="printSaved()" style="padding:7px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:7px;font-size:12px;cursor:pointer;font-family:var(--body)">&#128438; Export PDF</button>
+      <button onclick="clearSaved()" style="padding:7px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:7px;font-size:12px;cursor:pointer;font-family:var(--body);color:var(--red)">&#128465; Clear all</button>
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="saved-empty" style="text-align:center;padding:60px 20px;color:var(--text3)">
+    <div style="font-size:36px;margin-bottom:12px">&#128190;</div>
+    <div style="font-family:var(--display);font-size:16px;font-weight:600;margin-bottom:6px">No saved results yet</div>
+    <div style="font-size:12px;line-height:1.6">Run a calculation in <b>Advanced</b> then click <b>Save result</b>.<br>You can save multiple workloads and compare them here.</div>
+  </div>
+
+  <!-- Comparison table -->
+  <div id="saved-table-wrap" style="display:none;overflow-x:auto">
+    <table id="saved-table" style="border-collapse:collapse;font-size:12px;min-width:600px;width:100%">
+    </table>
+  </div>
+
+  <!-- Validate with AI from saved -->
+  <div id="saved-validate-wrap" style="display:none;margin-top:16px;padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:10px">
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Validate saved results with AI</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button onclick="validateAllSaved('tech')" style="padding:7px 14px;background:var(--bdim);border:1px solid var(--bbord);border-radius:7px;font-size:12px;cursor:pointer;font-family:var(--body);color:var(--blue)">&#129302; Technical review (all workloads)</button>
+      <button onclick="validateAllSaved('cfo')" style="padding:7px 14px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.25);border-radius:7px;font-size:12px;cursor:pointer;font-family:var(--body);color:#7c3aed">&#128203; CFO justification (all workloads)</button>
+    </div>
+  </div>
+</div>
+</div>
+
 <div class="page" id="page-explorer">
 <div>
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
@@ -2711,7 +2814,303 @@ var sl=JSON.parse(localStorage.getItem('gpu-calc-locs')||'{}');
 if(Object.keys(sl).length)renderGeo(sl);
 renderResult();
 
-// ===== WIZARD — shares S with Advanced, one engine =====
+
+// ===== SAVED RESULTS =====
+var savedResults = [];
+
+function saveResult() {
+  var r = calcTiers();
+  if (!r || !r.t1) { alert('Run a calculation first'); return; }
+  function f$(n){return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1000?'$'+Math.round(n/1000)+'K':'$'+Math.round(n);}
+  function fGB(n){return n>=10?Math.round(n)+' GB':n.toFixed(2)+' GB';}
+  var yrs=S.amortYrs, opTot=r.t1*S.onpremYr;
+  var clMo=r.t1*S.awsHr*720, clTot=0, mo=clMo;
+  for(var y=0;y<yrs;y++){clTot+=mo*12;mo*=(1+S.cloudHike/100);}
+  var entry = {
+    id: Date.now(),
+    label: (S.hfId||S.modelLabel||S.model+'B') + ' / ' + S.gpuName,
+    // Inputs
+    model: S.hfId ? S.hfId.split('/').pop() : S.model+'B',
+    gpu: S.gpuName + ' ' + S.gpu + 'GB',
+    users: S.users,
+    ctx: S.ctx + 'K',
+    prec: S.wp===2?'BF16':S.wp===1?'FP8/INT8':'INT4',
+    // KV
+    kvUser: fGB(r.kvB),
+    kvPool: fGB(r.aPA),
+    mbTok: (r.kvBpt*1000).toFixed(3)+' MB/tok',
+    // GPU sizing
+    gpus: r.t1,
+    tp: 'TP='+r.tpMin,
+    reps: Math.ceil(S.users/r.upr)+' × '+r.tpMin+' GPU'+(r.tpMin>1?'s':''),
+    prodRange: r.t1+' – '+Math.ceil(r.t1*1.3)+' GPUs',
+    // Cost
+    opTot: f$(opTot),
+    clTot: f$(Math.round(clTot)),
+    opMo: f$(Math.round(opTot/(yrs*12)))+'/mo',
+    clMo: f$(Math.round(clMo))+'/mo today',
+    // Raw for prompt
+    raw: {
+      model: S.hfId||S.model+'B', wp: S.wp, wt: r.wt,
+      gpu: S.gpuName, vram: S.gpu, oh: S.overhead,
+      usable: (S.gpu*(1-S.overhead/100)).toFixed(1),
+      users: S.users, ctx: S.ctx,
+      kvHeads: S.numKvHeads||'~', headDim: S.headDim||128, layers: S.numLayers||'~',
+      kvB: r.kvB.toFixed(2), aPA: r.aPA.toFixed(1),
+      tpMin: r.tpMin, upr: r.upr, reps: Math.ceil(S.users/r.upr), t1: r.t1,
+      opTot: f$(opTot), clTot: f$(Math.round(clTot)), yrs: yrs
+    }
+  };
+  savedResults.push(entry);
+  updateSavedCount();
+  renderSavedTable();
+  // Flash feedback
+  var btn = event.target;
+  var orig = btn.innerHTML;
+  btn.innerHTML = '&#10003; Saved!';
+  btn.style.background = 'var(--green)';
+  setTimeout(function(){btn.innerHTML=orig;btn.style.background='var(--green)';}, 1500);
+}
+
+function updateSavedCount() {
+  var cnt = document.getElementById('saved-count');
+  var tab = document.getElementById('saved-tab');
+  if (!cnt) return;
+  cnt.textContent = savedResults.length;
+  cnt.style.display = savedResults.length ? '' : 'none';
+}
+
+function deleteSaved(id) {
+  savedResults = savedResults.filter(function(r){return r.id!==id;});
+  updateSavedCount();
+  renderSavedTable();
+}
+
+function clearSaved() {
+  if (!savedResults.length) return;
+  if (!confirm('Clear all '+savedResults.length+' saved results?')) return;
+  savedResults = [];
+  updateSavedCount();
+  renderSavedTable();
+}
+
+function renderSavedTable() {
+  var empty = document.getElementById('saved-empty');
+  var wrap  = document.getElementById('saved-table-wrap');
+  var vwrap = document.getElementById('saved-validate-wrap');
+  if (!savedResults.length) {
+    if(empty) empty.style.display='';
+    if(wrap)  wrap.style.display='none';
+    if(vwrap) vwrap.style.display='none';
+    return;
+  }
+  if(empty) empty.style.display='none';
+  if(wrap)  wrap.style.display='';
+  if(vwrap) vwrap.style.display='';
+
+  var rows = [
+    // Section: Inputs
+    {sec:'INPUTS'},
+    {lbl:'Model',     key:'model'},
+    {lbl:'GPU',       key:'gpu'},
+    {lbl:'Users',     key:'users'},
+    {lbl:'Context',   key:'ctx'},
+    {lbl:'Precision', key:'prec'},
+    // Section: KV Cache
+    {sec:'KV CACHE'},
+    {lbl:'KV / user', key:'kvUser', cls:'blue'},
+    {lbl:'KV pool',   key:'kvPool', cls:'blue'},
+    {lbl:'MB / token',key:'mbTok'},
+    // Section: GPU Sizing
+    {sec:'GPU SIZING'},
+    {lbl:'GPUs needed',       key:'gpus',      cls:'green'},
+    {lbl:'Tensor parallel',   key:'tp'},
+    {lbl:'Replicas',          key:'reps'},
+    {lbl:'Production range',  key:'prodRange', cls:'amber'},
+    // Section: Cost
+    {sec:'COST (' + (savedResults[0]? savedResults[0].raw.yrs : 5) + ' YRS)'},
+    {lbl:'On-prem total', key:'opTot', cls:'green'},
+    {lbl:'Cloud total',   key:'clTot', cls:'amber'},
+    {lbl:'On-prem /mo',   key:'opMo'},
+    {lbl:'Cloud /mo',     key:'clMo'},
+  ];
+
+  var colHeader = '<th style="min-width:140px">Metric</th>'
+    + savedResults.map(function(r,i){
+        return '<th style="min-width:160px">'
+          +'<div style="font-weight:600;color:var(--text)">'+r.label+'</div>'
+          +'<button class="sv-del" onclick="deleteSaved('+r.id+')" title="Remove">&#215;</button>'
+          +'<button onclick="showValidateForSaved('+i+',\'tech\')" style="font-family:var(--mono);font-size:9px;padding:2px 6px;border:1px solid var(--bbord);border-radius:4px;background:var(--bdim);color:var(--blue);cursor:pointer;margin-left:4px">verify</button>'
+          +'</th>';
+      }).join('');
+
+  var tableRows = rows.map(function(row){
+    if (row.sec) {
+      return '<tr class="sv-section-head"><td colspan="'+(savedResults.length+1)+'">'+row.sec+'</td></tr>';
+    }
+    var cells = savedResults.map(function(r){
+      var v = r[row.key];
+      return '<td class="sv-val'+(row.cls?' '+row.cls:'')+'">'+v+'</td>';
+    }).join('');
+    return '<tr><td class="sv-label">'+row.lbl+'</td>'+cells+'</tr>';
+  }).join('');
+
+  document.getElementById('saved-table').innerHTML =
+    '<thead><tr>'+colHeader+'</tr></thead><tbody>'+tableRows+'</tbody>';
+}
+
+function printSaved() {
+  if (!savedResults.length) { alert('No saved results to export'); return; }
+  switchPage('saved', document.querySelectorAll('.ntab')[4]);
+  setTimeout(function(){ window.print(); }, 300);
+}
+
+// ===== VALIDATE WITH AI =====
+var currentVTab = 'tech';
+var currentValidateIdx = -1; // -1 = current calc, >=0 = saved result
+
+function buildTechPrompt(raw) {
+  var wpLabel = raw.wp===2?'BF16 (2 bytes/param)':raw.wp===1?'FP8/INT8 (1 byte/param)':'INT4 (0.5 bytes/param)';
+  var wt = (raw.params||parseFloat(raw.model)) * raw.wp;
+  return 'You are reviewing a GPU sizing ESTIMATE for LLM inference planning.\n'
+  +'This is not a precision tool — we use SI gigabytes (÷1e9), '+raw.oh+'% overhead\n'
+  +'as a planning assumption, and approximations where exact arch is unknown.\n'
+  +'The goal is to validate that our approach and order-of-magnitude is sound,\n'
+  +'not to find rounding differences.\n\n'
+  +'MODEL: '+raw.model+' · '+wpLabel+' · '+raw.gpu+' '+raw.vram+'GB · '+raw.users+' concurrent users · '+raw.ctx+'K context\n\n'
+  +'OUR CALCULATION:\n'
+  +'- Weights: '+(raw.params||parseFloat(raw.model))+'B × '+raw.wp+' bytes = '+wt+' GB\n'
+  +'- Overhead ('+raw.oh+'% planning assumption): '+(raw.vram*raw.oh/100).toFixed(1)+' GB → usable: '+raw.usable+' GB/GPU\n'
+  +'- KV formula: 2 × '+raw.kvHeads+'_kv_heads × '+raw.headDim+'_dim × '+raw.layers+'_layers × '+raw.wp+'_bytes × '+(raw.ctx*1000)+'_tokens ÷ 1e9 = '+raw.kvB+' GB/user\n'
+  +'- Optimal TP='+raw.tpMin+': KV pool = ('+raw.usable+'×'+raw.tpMin+' − '+wt+') × 0.95 = '+raw.aPA+' GB → '+raw.upr+' users/replica\n'
+  +'- Replicas: ceil('+raw.users+'/'+raw.upr+') = '+raw.reps+' → Total: '+raw.reps+' × '+raw.tpMin+' = '+raw.t1+' GPUs\n\n'
+  +'QUESTIONS (answer ✓ sound / ⚠ risky / ✗ wrong approach):\n'
+  +'1. Is the KV formula structurally correct as a planning estimate?\n'
+  +'2. Is TP='+raw.tpMin+' a reasonable choice for '+raw.users+' users at this scale?\n'
+  +'3. Is the final order-of-magnitude ('+raw.t1+' GPUs) reasonable for production planning?\n'
+  +'4. What single assumption poses the highest real-world risk?';
+}
+
+function buildCFOPrompt(raw) {
+  var wt = (raw.params||parseFloat(raw.model)) * raw.wp;
+  var wpLabel = raw.wp===2?'BF16':raw.wp===1?'FP8/INT8':'INT4';
+  return 'Review this GPU infrastructure recommendation as a planning estimate,\n'
+  +'not an engineering specification. Flag if the number is wildly off —\n'
+  +'otherwise confirm it is a reasonable basis for budget planning.\n\n'
+  +'WORKLOAD: '+raw.model+' ('+wpLabel+') · '+raw.users+' simultaneous users · '+raw.ctx+'K context · '+raw.gpu+' '+raw.vram+'GB\n\n'
+  +'RECOMMENDATION: '+raw.t1+' × '+raw.gpu+' GPUs\n'
+  +'- Model weights need '+wt+' GB → requires '+raw.tpMin+' GPUs working together (tensor parallel)\n'
+  +'- Each '+raw.tpMin+'-GPU group holds '+raw.aPA+' GB for conversation context → serves '+raw.upr+' users\n'
+  +'- '+raw.reps+' group'+(raw.reps>1?'s':'')+' needed for '+raw.users+' users\n'
+  +'- Production range estimate: '+raw.t1+'–'+Math.ceil(raw.t1*1.3)+' GPUs (factoring KV utilization variance)\n\n'
+  +'COST BASIS:\n'
+  +'- On-prem: '+raw.opTot+' hardware ('+raw.yrs+'-year amortisation)\n'
+  +'- Cloud on-demand: '+raw.clTot+' over '+raw.yrs+' years (+3%/yr)\n\n'
+  +'QUESTION: Is '+raw.t1+' GPUs a defensible budget planning number for this workload,\n'
+  +'or are we materially over/under-provisioned? Give a one-paragraph verdict.';
+}
+
+function getRawForValidate() {
+  if (currentValidateIdx >= 0 && savedResults[currentValidateIdx]) {
+    return savedResults[currentValidateIdx].raw;
+  }
+  // Build raw from current S state
+  var r = calcTiers();
+  if (!r) return null;
+  function f$(n){return n>=1e6?'$'+(n/1e6).toFixed(1)+'M':n>=1000?'$'+Math.round(n/1000)+'K':'$'+Math.round(n);}
+  var yrs=S.amortYrs, opTot=r.t1*S.onpremYr;
+  var clMo=r.t1*S.awsHr*720, clTot=0, mo=clMo;
+  for(var y=0;y<yrs;y++){clTot+=mo*12;mo*=(1+S.cloudHike/100);}
+  return {
+    model:S.hfId||S.model+'B', params:S.model, wp:S.wp,
+    gpu:S.gpuName, vram:S.gpu, oh:S.overhead,
+    usable:(S.gpu*(1-S.overhead/100)).toFixed(1),
+    users:S.users, ctx:S.ctx,
+    kvHeads:S.numKvHeads||'~', headDim:S.headDim||128, layers:S.numLayers||'~',
+    kvB:r.kvB.toFixed(2), aPA:r.aPA.toFixed(1),
+    tpMin:r.tpMin, upr:r.upr, reps:Math.ceil(S.users/r.upr), t1:r.t1,
+    opTot:f$(opTot), clTot:f$(Math.round(clTot)), yrs:yrs
+  };
+}
+
+function showValidateModal() {
+  currentValidateIdx = -1;
+  document.getElementById('validate-modal').style.display='flex';
+  switchVTab('tech', document.getElementById('vtab-tech'));
+}
+
+function showValidateForSaved(idx, tab) {
+  currentValidateIdx = idx;
+  document.getElementById('validate-modal').style.display='flex';
+  switchVTab(tab||'tech', document.getElementById('vtab-'+( tab||'tech')));
+}
+
+function closeValidateModal() {
+  document.getElementById('validate-modal').style.display='none';
+}
+
+function switchVTab(tab, btn) {
+  currentVTab = tab;
+  document.querySelectorAll('.vtab').forEach(function(b){b.classList.remove('on');});
+  btn.classList.add('on');
+  var raw = getRawForValidate();
+  if (!raw) { document.getElementById('validate-prompt').value='Run a calculation first.'; return; }
+  document.getElementById('validate-prompt').value = tab==='tech' ? buildTechPrompt(raw) : buildCFOPrompt(raw);
+}
+
+function copyValidatePrompt() {
+  var ta = document.getElementById('validate-prompt');
+  navigator.clipboard.writeText(ta.value).then(function(){
+    var btn = document.getElementById('vcopy-btn');
+    btn.textContent='Copied!'; btn.style.background='var(--green)';
+    setTimeout(function(){btn.textContent='Copy';btn.style.background='var(--blue)';},2000);
+  }).catch(function(){ta.select();document.execCommand('copy');});
+}
+
+function openInClaude() {
+  var prompt = document.getElementById('validate-prompt').value;
+  navigator.clipboard.writeText(prompt).catch(function(){});
+  window.open('https://claude.ai/new', '_blank');
+}
+
+function openInChatGPT() {
+  var prompt = document.getElementById('validate-prompt').value;
+  navigator.clipboard.writeText(prompt).catch(function(){});
+  window.open('https://chatgpt.com/', '_blank');
+}
+
+function validateAllSaved(tab) {
+  if (!savedResults.length) return;
+  // Build combined prompt for all saved workloads
+  var raw0 = savedResults[0].raw;
+  var intro = tab==='tech'
+    ? 'You are reviewing GPU sizing ESTIMATES for LLM inference planning (SI gigabytes, planning assumptions — not precision engineering). Validate the approach and order-of-magnitude for each workload below.\n\n'
+    : 'Review these GPU infrastructure recommendations as planning estimates for budget approval. For each, confirm if the number is reasonable or flag if wildly off.\n\n';
+  var body = savedResults.map(function(r,i){
+    var raw = r.raw;
+    var wt = (raw.params||parseFloat(raw.model))*raw.wp;
+    return 'WORKLOAD '+(i+1)+': '+r.label+'\n'
+      +'  Model: '+raw.model+' · GPU: '+raw.gpu+' '+raw.vram+'GB · Users: '+raw.users+' · Context: '+raw.ctx+'K\n'
+      +'  Weights: '+wt+' GB · TP='+raw.tpMin+' · '+raw.t1+' GPUs total\n'
+      +'  KV/user: '+raw.kvB+' GB · KV pool: '+raw.aPA+' GB · '+raw.upr+' users/replica\n'
+      +'  Cost: '+raw.opTot+' on-prem / '+raw.clTot+' cloud over '+raw.yrs+' yrs\n';
+  }).join('\n');
+  var questions = tab==='tech'
+    ? '\nQUESTIONS (for each workload, answer ✓/⚠/✗):\n1. Is the GPU count order-of-magnitude correct?\n2. Are there any workloads that look significantly off?\n3. Which workload has the riskiest assumptions?'
+    : '\nQUESTION: Which workload(s) represent the best and worst value? Is there an obvious procurement recommendation?';
+  currentValidateIdx = -1;
+  document.getElementById('validate-prompt').value = intro + body + questions;
+  document.getElementById('validate-modal').style.display='flex';
+  switchVTab(tab, document.getElementById('vtab-'+tab));
+}
+
+// Update switchPage to handle saved tab
+var _origSwitchPage = switchPage;
+switchPage = function(id, elem) {
+  _origSwitchPage(id, elem);
+  if (id === 'saved') renderSavedTable();
+};
+
 // WS tracks wizard UI step only. All model/gpu/ctx/users state lives in S.
 var WS = { step: 0 };
 
