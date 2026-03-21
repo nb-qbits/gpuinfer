@@ -78,6 +78,18 @@ input,button{font-family:var(--body)}
 
 /* HF */
 .hfrow{display:flex;gap:6px;margin-bottom:5px}
+.ac-cat{padding:3px 9px;border-radius:12px;border:1px solid var(--border);background:var(--bg3);font-family:var(--mono);font-size:10px;color:var(--text3);cursor:pointer;transition:all .12s}
+.ac-cat:hover{border-color:var(--bbord);color:var(--blue)}
+.ac-cat.on{background:var(--bdim);border-color:var(--bbord);color:var(--blue)}
+.ac-item{padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px;transition:background .1s}
+.ac-item:last-child{border-bottom:none}
+.ac-item:hover,.ac-item.ac-sel{background:var(--bg3)}
+.ac-badge{font-family:var(--mono);font-size:9px;padding:1px 5px;border-radius:3px;font-weight:600;flex-shrink:0}
+.ac-badge.rh{background:rgba(220,38,38,.1);color:var(--red)}
+.ac-badge.nv{background:rgba(21,128,61,.1);color:var(--green)}
+.ac-badge.hf{background:var(--bdim);color:var(--blue)}
+.ac-name{font-size:11px;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono)}
+.ac-sub{font-family:var(--mono);font-size:10px;color:var(--text3);flex-shrink:0}
 .hfinp{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;
   color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 10px;outline:none}
 .hfinp:focus{border-color:var(--blue)}
@@ -404,6 +416,19 @@ html.dark .cnvb{color:#76b900}.html.dark .camdb{color:#f76f6f}
 .wiz-cost-big.op{color:var(--green)}.wiz-cost-big.cl{color:var(--amber)}
 .wiz-cost-sub{font-family:var(--mono);font-size:10px;color:var(--text2);margin-top:3px}
 .wiz-restart{padding:7px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;font-size:12px;cursor:pointer;font-family:var(--body);margin-bottom:6px;display:block;width:100%;text-align:left}
+/* KV balloon viz */
+.kv-balloon-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px}
+.kv-balloon-title{font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+.kv-formula{font-family:var(--mono);font-size:10px;color:var(--text2);background:var(--bg3);padding:7px 10px;border-radius:6px;margin-bottom:10px;line-height:1.8}
+.kv-formula span{color:var(--blue)}
+.kv-bars{display:flex;gap:6px;align-items:flex-end;height:80px;padding:0 4px}
+.kv-bar-col{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1}
+.kv-bar-fill{width:100%;border-radius:4px 4px 0 0;transition:height .4s;min-height:4px}
+.kv-bar-lbl{font-family:var(--mono);font-size:9px;color:var(--text3);text-align:center;line-height:1.2;margin-top:2px}
+.kv-bar-val{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--text2)}
+/* KV validation callout */
+.kv-validate-box{background:var(--adim);border:1px solid var(--abord);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:11px;color:var(--amber);line-height:1.6}
+.kv-validate-box strong{font-weight:600}
 
 *{box-sizing:border-box;margin:0;padding:0}
 
@@ -652,7 +677,37 @@ tr.selected td{background:rgba(37,99,235,.04)}
           <div class="wiz-cost-card op"><div class="wiz-cost-title">On-prem &middot; 5yr hardware</div><div class="wiz-cost-big op" id="wc-op">&mdash;</div><div class="wiz-cost-sub" id="wc-op-sub"></div></div>
           <div class="wiz-cost-card cl"><div class="wiz-cost-title">Cloud on-demand &middot; 5yrs</div><div class="wiz-cost-big cl" id="wc-cl">&mdash;</div><div class="wiz-cost-sub" id="wc-cl-sub"></div></div>
         </div>
-        <div style="font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.7;padding:9px 12px;background:var(--bg3);border-radius:7px">On-prem = hardware purchase only. Cloud = on-demand &times;720hrs &times;12 &times;5yrs (+3%/yr). GPU-to-GPU comparison.</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.7;padding:9px 12px;background:var(--bg3);border-radius:7px;margin-bottom:12px">On-prem = hardware purchase only. Cloud = on-demand &times;720hrs &times;12 &times;5yrs (+3%/yr). GPU-to-GPU comparison.</div>
+
+        <!-- KV CACHE FORMULA -->
+        <div class="kv-balloon-wrap">
+          <div class="kv-balloon-title">
+            <span>&#402; KV Cache calculation</span>
+            <span id="wkv-exact-badge" style="display:none;color:var(--green);font-size:9px">&#10003; Exact (HuggingFace)</span>
+          </div>
+          <div class="kv-formula">
+            KV_bytes = 2 &times; <span id="wkv-heads">kv_heads</span> &times; <span id="wkv-dim">head_dim</span> &times; <span id="wkv-layers">layers</span> &times; <span id="wkv-bytes">bytes</span> &times; <span id="wkv-ctx">ctx_tokens</span><br>
+            = <span id="wkv-result" style="color:var(--green);font-weight:600">—</span> per user &nbsp;&middot;&nbsp; <span id="wkv-mbtok">—</span> MB/token
+          </div>
+          <!-- Balloon bar chart: weights | overhead | kv per user | kv all users | gpu vram -->
+          <div class="kv-bars" id="wkv-bars"></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-family:var(--mono);font-size:9px;color:var(--text3)">
+            <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:2px;background:#4a5568;display:inline-block"></span>Weights</span>
+            <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:2px;background:#6b7280;display:inline-block"></span>Overhead</span>
+            <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:2px;background:var(--blue);display:inline-block"></span>KV pool</span>
+            <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:2px;background:#f59e0b;display:inline-block"></span>KV/user</span>
+            <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border-radius:2px;background:var(--red);display:inline-block"></span>All users KV</span>
+          </div>
+        </div>
+
+        <!-- KV VALIDATION CALLOUT -->
+        <div class="kv-validate-box">
+          <strong>&#9888; Theoretical vs actual KV pool</strong><br>
+          This calculator uses <strong>8% framework overhead</strong> (CUDA graphs, activations, NCCL buffers). Real measurements from the community suggest actual KV pool runs <strong>10&ndash;23% below theoretical</strong> depending on GPU, model, and TP degree. One vLLM report showed ~23% gap on H100 70B TP=2.<br><br>
+          <strong>Have L40S / H100 / H200 / B200?</strong> Run this and share your numbers:<br>
+          <span style="font-family:var(--mono);font-size:10px;background:var(--bg2);padding:3px 7px;border-radius:4px;display:inline-block;margin-top:4px">llm = LLM(model=&quot;meta-llama/Llama-3.1-8B&quot;)<br>print(llm.llm_engine.cache_config.num_gpu_blocks)</span><br>
+          <a href="https://github.com/nb-qbits/gpu-calc/issues" target="_blank" style="color:var(--amber);font-weight:600">Submit real data &rarr; GitHub</a> &mdash; we&apos;ll update the validation table and credit your GPU.
+        </div>
       </div>
     </div>
   </div>
@@ -677,21 +732,28 @@ tr.selected td{background:rgba(37,99,235,.04)}
       <!-- MODEL -->
       <div class="ic">
         <div class="ict">Model — HuggingFace ID or manual</div>
-        <div class="hfrow">
-          <input class="hfinp" id="hf-inp" type="text" placeholder="meta-llama/Llama-3.1-8B" autocomplete="off"
-            oninput="onHFInput()" onkeydown="if(event.key==='Enter')fetchHF()">
-          <button class="hfbtn" id="hf-btn" onclick="fetchHF()">Lookup</button>
+        <div style="position:relative">
+          <div class="hfrow">
+            <input class="hfinp" id="hf-inp" type="text"
+              placeholder="Search RedHatAI, NVIDIA, any HF model..."
+              autocomplete="off"
+              oninput="onACInput(this.value)"
+              onfocus="onACInput(this.value)"
+              onblur="setTimeout(hideAC,200)"
+              onkeydown="onACKey(event)">
+            <button class="hfbtn" id="hf-btn" onclick="fetchHF()">Lookup</button>
+          </div>
+          <div id="ac-drop" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:99;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.1);max-height:260px;overflow-y:auto;margin-top:3px"></div>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin:6px 0 2px">
+          <button class="ac-cat on" data-cat="all" onclick="setACCat('all',this)">All</button>
+          <button class="ac-cat" data-cat="redhat" onclick="setACCat('redhat',this)">&#9632; RedHatAI</button>
+          <button class="ac-cat" data-cat="nvidia" onclick="setACCat('nvidia',this)">&#9632; NVIDIA</button>
+          <button class="ac-cat" data-cat="meta" onclick="setACCat('meta',this)">Meta</button>
+          <button class="ac-cat" data-cat="qwen" onclick="setACCat('qwen',this)">Qwen</button>
+          <button class="ac-cat" data-cat="other" onclick="setACCat('other',this)">Other</button>
         </div>
         <div class="hfst" id="hf-st"></div>
-        <div class="qpicks" id="qpicks">
-          <div class="qchip" onclick="qm('meta-llama/Llama-3.1-8B')">Llama 3.1 8B</div>
-          <div class="qchip" onclick="qm('meta-llama/Llama-3.1-70B')">Llama 3.1 70B</div>
-          <div class="qchip" onclick="qm('Qwen/Qwen2.5-7B')">Qwen 2.5 7B</div>
-          <div class="qchip" onclick="qm('Qwen/Qwen2.5-72B')">Qwen 2.5 72B</div>
-          <div class="qchip" onclick="qm('mistralai/Mistral-7B-v0.3')">Mistral 7B</div>
-          <div class="qchip" onclick="qm('microsoft/phi-4')">Phi-4</div>
-        </div>
-        <div class="minfo" id="minfo"></div>
         <div class="divider"></div>
         <div class="clbl">Manual override</div>
         <div class="srow">
@@ -1225,7 +1287,11 @@ tr.selected td{background:rgba(37,99,235,.04)}
       <th class="s" onclick="sortP('tpp_per_100')">$/100TPP &#8597;</th>
     </tr></thead>
     <tbody id="ptbody"></tbody></table>
-    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);padding:8px 10px;line-height:1.7">Prices are indicative estimates. TPP = tokens/sec. Validate with vendors before procurement.</div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);padding:10px 12px;line-height:1.8;border-top:1px solid var(--border)">
+      <span style="color:var(--amber);font-weight:600">Data &amp; Attribution</span> &mdash; Purchase prices are indicative market estimates compiled from public sources (TechPowerUp, ServeTheHome, vendor announcements) as of early 2025. Prices vary significantly by vendor, volume, region, and market conditions.<br>
+      Cloud rates reflect public on-demand pricing &mdash; reserved/spot/negotiated pricing may be 35&ndash;70% lower. TPP (tokens per second) figures are representative benchmarks for FP16 inference on a typical 7B&ndash;70B model; actual throughput depends on model architecture, batch size, and framework.<br>
+      <span style="color:var(--amber);font-weight:600">Disclaimer</span> &mdash; This data is provided for comparative sizing purposes only. No warranty of accuracy or completeness. Validate all figures directly with vendors before procurement decisions.
+    </div>
   </div>
 </div>
 </div>
@@ -1235,19 +1301,19 @@ tr.selected td{background:rgba(37,99,235,.04)}
 <div class="liwrap" id="liwrap">
   <div class="licard">
     <button class="lidis" onclick="disLI()">&#215;</button>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <div class="liav">VG</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div class="liav" style="width:40px;height:40px;border-radius:50%;background:var(--bdim);border:2px solid var(--bbord);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:15px;font-weight:800;color:var(--blue);flex-shrink:0">VG</div>
       <div>
-        <div style="font-size:12px;font-weight:500;color:var(--text)">Vikas Grover</div>
-        <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">AI Infrastructure</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);font-family:var(--display)">Vikas Grover</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:1px">AI Infrastructure &middot; Red Hat</div>
       </div>
     </div>
-    <div style="font-size:11px;color:var(--text3);line-height:1.5">Building AI infra tools. Follow for LLM serving content.</div>
+    <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:10px">Building open-source AI infra tooling. Follow for LLM inference, GPU sizing, and platform engineering content.</div>
     <a class="libtn" href="https://www.linkedin.com/in/vgrover1515/" target="_blank" rel="noopener">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
         <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
       </svg>
-      Follow on LinkedIn
+      Connect on LinkedIn
     </a>
   </div>
 </div>
@@ -1262,10 +1328,10 @@ tr.selected td{background:rgba(37,99,235,.04)}
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v5.0</span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v5.1</span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank"
       style="font-family:var(--mono);font-size:10px;color:var(--text3);text-decoration:none">&#9733; GitHub</a>
-    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">&#169; 2025 Vikas Grover &middot; <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" style="color:var(--text3)">CC BY-NC 4.0</a></span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">&#169; 2025 &middot; <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" style="color:var(--text3)">CC BY-NC 4.0</a></span>
   </div>
 </div>
 
@@ -1412,6 +1478,128 @@ function onHFInput() {
   S.numKvHeads = null; S.headDim = null; S.numLayers = null; S.hfId = null;
   document.getElementById('minfo').className = 'minfo';
   document.getElementById('hf-st').textContent = '';
+}
+
+// ===== AUTOCOMPLETE =====
+var AC_MODELS = [
+  {id:'RedHatAI/Llama-3.1-8B-Instruct-quantized.w8a8',   cat:'redhat', badge:'rh', params:8,   q:'W8A8'},
+  {id:'RedHatAI/Llama-3.1-8B-Instruct-quantized.w8a16',  cat:'redhat', badge:'rh', params:8,   q:'W8A16'},
+  {id:'RedHatAI/Llama-3.1-70B-Instruct-quantized.w8a8',  cat:'redhat', badge:'rh', params:70,  q:'W8A8'},
+  {id:'RedHatAI/Llama-3.1-70B-Instruct-quantized.w8a16', cat:'redhat', badge:'rh', params:70,  q:'W8A16'},
+  {id:'RedHatAI/Llama-3.1-405B-Instruct-quantized.w8a8', cat:'redhat', badge:'rh', params:405, q:'W8A8'},
+  {id:'RedHatAI/Meta-Llama-3-8B-Instruct-quantized.w8a8',cat:'redhat', badge:'rh', params:8,   q:'W8A8'},
+  {id:'RedHatAI/Meta-Llama-3-70B-Instruct-quantized.w8a8',cat:'redhat',badge:'rh', params:70,  q:'W8A8'},
+  {id:'RedHatAI/Meta-Llama-3.2-1B-Instruct-quantized.w8a8',cat:'redhat',badge:'rh',params:1,  q:'W8A8'},
+  {id:'RedHatAI/Meta-Llama-3.2-3B-Instruct-quantized.w8a8',cat:'redhat',badge:'rh',params:3,  q:'W8A8'},
+  {id:'RedHatAI/Mistral-7B-Instruct-v0.3-quantized.w8a8', cat:'redhat',badge:'rh', params:7,  q:'W8A8'},
+  {id:'RedHatAI/Mixtral-8x7B-Instruct-v0.1-quantized.w8a8',cat:'redhat',badge:'rh',params:47, q:'W8A8'},
+  {id:'RedHatAI/Phi-3-mini-128k-instruct-quantized.w8a8', cat:'redhat',badge:'rh', params:3.8,q:'W8A8'},
+  {id:'RedHatAI/Phi-3.5-mini-instruct-quantized.w8a8',    cat:'redhat',badge:'rh', params:3.8,q:'W8A8'},
+  {id:'RedHatAI/granite-3.1-8b-instruct-quantized.w8a8',  cat:'redhat',badge:'rh', params:8,  q:'W8A8'},
+  {id:'RedHatAI/Qwen2.5-7B-Instruct-quantized.w8a8',      cat:'redhat',badge:'rh', params:7,  q:'W8A8'},
+  {id:'RedHatAI/Qwen2.5-72B-Instruct-quantized.w8a8',     cat:'redhat',badge:'rh', params:72, q:'W8A8'},
+  {id:'RedHatAI/starcoder2-15b-quantized.w8a16',           cat:'redhat',badge:'rh', params:15, q:'W8A16'},
+  {id:'nvidia/Llama-3.1-Nemotron-70B-Instruct-HF',  cat:'nvidia', badge:'nv', params:70},
+  {id:'nvidia/Llama-3.1-Nemotron-51B-Instruct',     cat:'nvidia', badge:'nv', params:51},
+  {id:'nvidia/Llama-3.3-Nemotron-Super-49B-v1',     cat:'nvidia', badge:'nv', params:49},
+  {id:'nvidia/Mistral-NeMo-Minitron-8B-Instruct',   cat:'nvidia', badge:'nv', params:8},
+  {id:'nvidia/Llama-3.2-NeMo-3B-Instruct',          cat:'nvidia', badge:'nv', params:3},
+  {id:'meta-llama/Llama-3.1-8B-Instruct',   cat:'meta', badge:'hf', params:8},
+  {id:'meta-llama/Llama-3.1-70B-Instruct',  cat:'meta', badge:'hf', params:70},
+  {id:'meta-llama/Llama-3.1-405B-Instruct', cat:'meta', badge:'hf', params:405},
+  {id:'meta-llama/Llama-3.2-1B-Instruct',   cat:'meta', badge:'hf', params:1},
+  {id:'meta-llama/Llama-3.2-3B-Instruct',   cat:'meta', badge:'hf', params:3},
+  {id:'meta-llama/Llama-3.3-70B-Instruct',  cat:'meta', badge:'hf', params:70},
+  {id:'Qwen/Qwen2.5-7B-Instruct',   cat:'qwen', badge:'hf', params:7},
+  {id:'Qwen/Qwen2.5-14B-Instruct',  cat:'qwen', badge:'hf', params:14},
+  {id:'Qwen/Qwen2.5-32B-Instruct',  cat:'qwen', badge:'hf', params:32},
+  {id:'Qwen/Qwen2.5-72B-Instruct',  cat:'qwen', badge:'hf', params:72},
+  {id:'Qwen/QwQ-32B',               cat:'qwen', badge:'hf', params:32},
+  {id:'mistralai/Mistral-7B-Instruct-v0.3',   cat:'other', badge:'hf', params:7},
+  {id:'mistralai/Mixtral-8x7B-Instruct-v0.1', cat:'other', badge:'hf', params:47},
+  {id:'microsoft/phi-4',                       cat:'other', badge:'hf', params:14},
+  {id:'google/gemma-2-9b-it',                  cat:'other', badge:'hf', params:9},
+  {id:'google/gemma-2-27b-it',                 cat:'other', badge:'hf', params:27},
+  {id:'deepseek-ai/DeepSeek-R1-Distill-Llama-8B',  cat:'other', badge:'hf', params:8},
+  {id:'deepseek-ai/DeepSeek-R1-Distill-Llama-70B', cat:'other', badge:'hf', params:70},
+];
+var acCat='all', acIdx=-1, acVis=[], acTimer=null;
+
+function setACCat(cat, btn) {
+  acCat = cat;
+  document.querySelectorAll('.ac-cat').forEach(function(b){b.classList.remove('on');});
+  btn.classList.add('on');
+  onACInput(document.getElementById('hf-inp').value);
+}
+
+function onACInput(val) {
+  onHFInput();
+  clearTimeout(acTimer);
+  val = (val||'').trim();
+  var q = val.toLowerCase();
+  var src = AC_MODELS;
+  if (!q && acCat === 'all') {
+    // Default: RedHatAI first
+    src = AC_MODELS.filter(function(m){return m.cat==='redhat';})
+      .concat(AC_MODELS.filter(function(m){return m.cat==='nvidia';}))
+      .concat(AC_MODELS.filter(function(m){return m.cat!=='redhat'&&m.cat!=='nvidia';}));
+  }
+  var filt = src.filter(function(m){
+    var catOk = acCat==='all' || m.cat===acCat;
+    var txtOk = !q || m.id.toLowerCase().indexOf(q)>=0;
+    return catOk && txtOk;
+  });
+  acVis = filt.slice(0,18); acIdx=-1;
+  renderAC(acVis);
+  if (val.length > 2 && !filt.length) {
+    acTimer = setTimeout(function(){searchHFLive(val);}, 400);
+  }
+}
+
+function searchHFLive(q) {
+  fetch('https://huggingface.co/api/quicksearch?q='+encodeURIComponent(q)+'&type=model&limit=6')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      acVis=(d.models||[]).map(function(m){return{id:m.id,cat:'other',badge:'hf',params:null};});
+      renderAC(acVis);
+    }).catch(function(){});
+}
+
+function renderAC(items) {
+  var drop = document.getElementById('ac-drop');
+  if (!items.length) { drop.style.display='none'; return; }
+  drop.innerHTML = items.map(function(m,i){
+    var bl = m.badge==='rh'?'RedHatAI':m.badge==='nv'?'NVIDIA':'HF';
+    var sub = m.params ? m.params+'B' : '';
+    if (m.q) sub += ' \u00b7 '+m.q;
+    return '\x3cdiv class="ac-item" onmousedown="selAC('+i+')">'
+      +'\x3cspan class="ac-badge '+m.badge+'">'+bl+'\x3c/span>'
+      +'\x3cspan class="ac-name">'+m.id+'\x3c/span>'
+      +(sub?'\x3cspan class="ac-sub">'+sub+'\x3c/span>':'')
+      +'\x3c/div>';
+  }).join('');
+  drop.style.display='block';
+}
+
+function selAC(i) {
+  var m = acVis[i]; if(!m)return;
+  document.getElementById('hf-inp').value = m.id;
+  hideAC();
+  qm(m.id);
+}
+
+function hideAC() { document.getElementById('ac-drop').style.display='none'; }
+
+function onACKey(e) {
+  var drop = document.getElementById('ac-drop');
+  if (drop.style.display==='none') { if(e.key==='Enter')fetchHF(); return; }
+  var items = drop.querySelectorAll('.ac-item');
+  if (e.key==='ArrowDown'){e.preventDefault();acIdx=Math.min(acIdx+1,items.length-1);}
+  else if(e.key==='ArrowUp'){e.preventDefault();acIdx=Math.max(acIdx-1,-1);}
+  else if(e.key==='Enter'){e.preventDefault();if(acIdx>=0)selAC(acIdx);else{hideAC();fetchHF();}return;}
+  else if(e.key==='Escape'){hideAC();return;}
+  items.forEach(function(it,j){it.classList.toggle('ac-sel',j===acIdx);});
+  if(acIdx>=0&&items[acIdx])items[acIdx].scrollIntoView({block:'nearest'});
 }
 function qm(id) {
   document.getElementById('hf-inp').value = id;
@@ -2592,6 +2780,52 @@ function wizRenderResults() {
   document.getElementById('wans-ctx').innerHTML = S.ctx + 'K tokens <span class="wiz-edit">edit</span>';
   document.getElementById('wans-users').innerHTML = S.users + ' concurrent <span class="wiz-edit">edit</span>';
   document.getElementById('wans-prec').innerHTML = (WS.precLabel||'BF16') + ' <span class="wiz-edit">edit</span>';
+
+  // KV formula display
+  var heads = S.numKvHeads || (S.attn==='gqa' ? Math.round(S.model*0.5) : Math.round(S.model*1));
+  var dim = S.headDim || 128;
+  var layers = S.numLayers || Math.round(S.model * 4);
+  var bytes = S.wp;
+  var ctx_tok = S.ctx * 1000;
+  document.getElementById('wkv-heads').textContent = heads;
+  document.getElementById('wkv-dim').textContent = dim;
+  document.getElementById('wkv-layers').textContent = layers;
+  document.getElementById('wkv-bytes').textContent = bytes + 'B';
+  document.getElementById('wkv-ctx').textContent = ctx_tok.toLocaleString();
+  var exact = !!(S.numKvHeads);
+  document.getElementById('wkv-exact-badge').style.display = exact ? '' : 'none';
+  var kvGB = 2 * heads * dim * layers * bytes * ctx_tok / 1e9;
+  document.getElementById('wkv-result').textContent = kvGB >= 1 ? kvGB.toFixed(2)+' GB' : (kvGB*1000).toFixed(0)+' MB';
+  document.getElementById('wkv-mbtok').textContent = (kvGB / S.ctx * 1000).toFixed(3);
+
+  // Balloon bar chart
+  var wt = S.model * S.wp;
+  var oh = S.gpu * 0.08;
+  var pool = r.aPA;
+  var kvUser = kvGB;
+  var kvAll = kvGB * S.users;
+  var gpuVram = S.gpu;
+  var bars = [
+    {lbl:'Weights', val:wt, color:'#4a5568'},
+    {lbl:'Overhead', val:oh, color:'#6b7280'},
+    {lbl:'KV pool', val:pool, color:'var(--blue)'},
+    {lbl:'KV/user', val:kvUser, color:'#f59e0b'},
+    {lbl:'All users\nKV', val:kvAll, color:'var(--red)'},
+    {lbl:'GPU\nVRAM', val:gpuVram, color:'#374151'},
+  ];
+  var maxV = Math.max.apply(null, bars.map(function(b){return b.val;}));
+  var barsEl = document.getElementById('wkv-bars');
+  if (barsEl) {
+    barsEl.innerHTML = bars.map(function(b){
+      var h = Math.max(4, Math.round(b.val/maxV*72));
+      var lbl = b.val >= 100 ? Math.round(b.val) : b.val >= 1 ? b.val.toFixed(1) : b.val.toFixed(2);
+      return '\x3cdiv class="kv-bar-col">'
+        +'\x3cdiv class="kv-bar-val">'+lbl+'\x3c/div>'
+        +'\x3cdiv class="kv-bar-fill" style="height:'+h+'px;background:'+b.color+'">\x3c/div>'
+        +'\x3cdiv class="kv-bar-lbl">'+b.lbl+'\x3c/div>'
+        +'\x3c/div>';
+    }).join('');
+  }
 }
 
 // Push wizard state into Advanced calc UI and navigate there
