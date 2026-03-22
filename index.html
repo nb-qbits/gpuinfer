@@ -382,6 +382,14 @@ html.dark .cnvb{color:#76b900}.html.dark .camdb{color:#f76f6f}
 .mod-advanced .mod-title{font-size:13px;margin-bottom:2px}
 .mod-advanced .mod-desc{margin-bottom:0;font-size:11px}
 /* WIZARD */
+
+/* What's in it for you cards */
+.wiify-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 14px 12px;display:flex;flex-direction:column;gap:5px}
+.wiify-card:hover{border-color:var(--border2)}
+.wiify-role{font-family:var(--display);font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px}
+.wiify-line{font-size:11px;color:var(--text2);line-height:1.45;color:var(--text2)}
+.wiify-line{display:flex;gap:5px;align-items:baseline}
+
 .wiz-progress{display:flex;align-items:center;gap:6px;padding:14px 16px 0;flex-wrap:wrap}
 .wiz-step-dot{width:6px;height:6px;border-radius:50%;background:var(--bg4);transition:all .2s}
 .wiz-step-dot.done{background:var(--green)}.wiz-step-dot.cur{background:var(--blue);transform:scale(1.4)}
@@ -649,6 +657,90 @@ tr.selected td{background:rgba(37,99,235,.04)}
       <p class="mod-desc">Compare NVIDIA, AMD, and cloud GPUs by VRAM, price, and throughput.</p>
       <div class="mod-cta">Explore &rarr;</div>
     </button>
+  </div>
+
+  <!-- STORY SECTION -->
+  <div style="max-width:580px;margin:40px auto 0;padding:28px 0;border-top:1px solid var(--border)">
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px">Why this exists</div>
+    <p style="font-size:14px;color:var(--text2);line-height:1.8;margin-bottom:14px">
+      Every time someone asked me how many GPUs they needed to serve an LLM, I opened the same spreadsheet and ran the same math. KV cache per user, available pool after weights, tensor parallel degree, replicas. Then cost. Then cloud vs on-prem breakeven.
+    </p>
+    <p style="font-size:14px;color:var(--text2);line-height:1.8;margin-bottom:20px">
+      I built this so I don't have to explain it from scratch every time &mdash; and so the people asking can see the reasoning, not just the number.
+    </p>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:36px;height:36px;border-radius:50%;background:var(--bdim);border:1.5px solid var(--bbord);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:13px;font-weight:700;color:var(--blue);flex-shrink:0">VG</div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text);font-family:var(--display)">Vikas Grover</div>
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">AI Infrastructure &middot; LLM Inference</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="https://www.linkedin.com/in/vgrover1515/" target="_blank" rel="noopener"
+           style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:#0a66c2;color:#fff;border-radius:6px;text-decoration:none;font-size:11px;font-weight:500">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          Connect
+        </a>
+        <a href="https://huggingface.co/vikasgrover2004" target="_blank" rel="noopener"
+           style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);border-radius:6px;text-decoration:none;font-size:11px">
+          &#129303; HuggingFace
+        </a>
+
+      </div>
+    </div>
+
+    <!-- WHAT'S IN IT FOR YOU -->
+    <div style="margin-top:36px">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px">What&rsquo;s in it for you</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
+
+        <div class="wiify-card">
+          <div style="font-size:18px;margin-bottom:6px">&#127891;</div>
+          <div class="wiify-role">New to AI inference</div>
+          <div class="wiify-line">&#10003; Understand KV cache &amp; why it matters</div>
+          <div class="wiify-line">&#10003; See why context &gt; model size for cost</div>
+          <div class="wiify-line">&#10003; Learn the math behind GPU count</div>
+        </div>
+
+        <div class="wiify-card">
+          <div style="font-size:18px;margin-bottom:6px">&#9881;</div>
+          <div class="wiify-role">Platform Engineer</div>
+          <div class="wiify-line">&#10003; Exact KV from HuggingFace arch</div>
+          <div class="wiify-line">&#10003; TP, replicas, vLLM config</div>
+          <div class="wiify-line">&#10003; FP8 / W8A8 / llm-d impact</div>
+        </div>
+
+        <div class="wiify-card">
+          <div style="font-size:18px;margin-bottom:6px">&#128640;</div>
+          <div class="wiify-role">Startup Founder</div>
+          <div class="wiify-line">&#10003; Cloud vs on-prem break-even</div>
+          <div class="wiify-line">&#10003; Size infra before you raise</div>
+          <div class="wiify-line">&#10003; Validate with AI in one click</div>
+        </div>
+
+        <div class="wiify-card">
+          <div style="font-size:18px;margin-bottom:6px">&#128200;</div>
+          <div class="wiify-role">Finance Leader</div>
+          <div class="wiify-line">&#10003; 5-yr cost — no vendor quotes</div>
+          <div class="wiify-line">&#10003; One-click CFO prompt</div>
+          <div class="wiify-line">&#10003; Export comparison to PDF / Excel</div>
+        </div>
+
+        <div class="wiify-card">
+          <div style="font-size:18px;margin-bottom:6px">&#127970;</div>
+          <div class="wiify-role">Enterprise IT</div>
+          <div class="wiify-line">&#10003; NVIDIA vs AMD GPU comparison</div>
+          <div class="wiify-line">&#10003; Production headroom estimate</div>
+          <div class="wiify-line">&#10003; Save &amp; compare multiple workloads</div>
+        </div>
+
+      </div>
+    </div>
+    <div style="margin-top:24px;font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.7">
+      Sizing infrastructure, evaluating cloud vs on-prem, or just want to understand the math? &mdash;
+      <a href="https://www.linkedin.com/in/vgrover1515/" target="_blank" rel="noopener" style="color:var(--blue)">let&rsquo;s talk</a>
+    </div>
   </div>
 </div>
 </div>
@@ -1553,7 +1645,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v5.2</span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v5.9</span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank"
       style="font-family:var(--mono);font-size:10px;color:var(--text3);text-decoration:none">&#9733; GitHub</a>
     <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">
@@ -2421,7 +2513,17 @@ function renderTopo(r) {
 function manualModel(v) {
   if (!v) return;
   S.model = v; S.modelLabel = v + 'B';
+  // Clear exact arch params — we no longer have the HF model loaded
   S.numKvHeads = null; S.headDim = null; S.numLayers = null;
+  // Only reset wp to BF16 if this model was loaded from HF (where dtype drove wp)
+  // If user manually set FP8/INT4 via chip, preserve their choice
+  if (S.hfId) {
+    S.hfId = null;
+    S.wp = 2;
+    document.querySelectorAll('#wp-chips .chip').forEach(function(c) {
+      c.classList.toggle('on', +c.dataset.v === 2);
+    });
+  }
   document.getElementById('sv-params').textContent = v + 'B';
   renderResult();
 }
@@ -2956,7 +3058,7 @@ function saveResult() {
     // KV
     kvUser: fGB(r.kvB),
     kvPool: fGB(r.aPA),
-    mbTok: (r.kvBpt*1000).toFixed(3)+' MB/tok',
+    mbTok: r.kvBpt.toFixed(3)+' MB/tok',
     // GPU sizing
     gpus: r.t1,
     tp: 'TP='+r.tpMin,
@@ -3068,13 +3170,17 @@ function renderSavedTable() {
   }
   function tdInsight(r,i){
     var kvB=parseFloat(r.raw.kvB)||0,ctx=parseInt(r.ctx)||8,be=beBadge(r),t1=r.raw.t1||0;
+    var prec=(r.prec||'BF16');
+    var kvAlreadyFp8=(prec.indexOf('FP8')>=0||prec.indexOf('W8')>=0||prec.indexOf('INT8')>=0);
     var msg='';
-    if(kvB>10) msg='<strong>'+ctx+'K context drives high KV.</strong> FP8 KV quantization would halve memory.';
-    else if(i===bestGpu&&n>1) msg='<strong>Fewest GPUs</strong> of the group.'+(be!=='?'&&+be<=12?' Fastest payback at month '+be+'.':'');
-    else if(i===worstGpu&&n>1) msg='<strong>Highest GPU count.</strong> Consider longer context reduction or larger GPU.';
-    else if(be!=='?'&&+be<=12) msg='Fast on-prem payback — <strong>month '+be+'.</strong>';
-    else{var ratio=(dollarToNum(r.clTot)/Math.max(1,dollarToNum(r.opTot))).toFixed(1);msg='On-prem saves <strong>'+ratio+'×</strong> vs cloud over '+(r.raw.yrs||5)+' yrs.';}
-    return '<td style="padding:6px 10px 4px 0;font-size:11px;color:var(--text2);line-height:1.5">'+msg+'</td>';
+    if(kvB>10&&!kvAlreadyFp8) msg='\x3cstrong>'+ctx+'K context drives high KV.\x3c/strong> FP8 KV quantization would halve memory.';
+    else if(kvB>10&&kvAlreadyFp8&&t1>=32) msg='\x3cstrong>'+ctx+'K context + '+prec+' — KV already optimized.\x3c/strong> llm-d disaggregation could reduce GPU count at this scale.';
+    else if(kvB>10&&kvAlreadyFp8) msg='\x3cstrong>'+ctx+'K context drives high KV.\x3c/strong> KV already '+prec+' — try smaller context or larger GPU.';
+    else if(i===bestGpu&&n>1) msg='\x3cstrong>Fewest GPUs\x3c/strong> of the group.'+(be!=='?'&&+be<=12?' Fastest payback at month '+be+'.':'');
+    else if(i===worstGpu&&n>1) msg='\x3cstrong>Highest GPU count.\x3c/strong> Consider longer context reduction or larger GPU.';
+    else if(be!=='?'&&+be<=12) msg='Fast on-prem payback — \x3cstrong>month '+be+'.\x3c/strong>';
+    else{var ratio=(dollarToNum(r.clTot)/Math.max(1,dollarToNum(r.opTot))).toFixed(1);msg='On-prem saves \x3cstrong>'+ratio+'×\x3c/strong> vs cloud over '+(r.raw.yrs||5)+' yrs.';}
+    return '\x3ctd style="padding:6px 10px 4px 0;font-size:11px;color:var(--text2);line-height:1.5">'+msg+'\x3c/td>';
   }
   var hdr='<th style="min-width:120px;padding:7px 8px 7px 0;font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--border2)">Metric</th>'
     +savedResults.map(function(r,i){
@@ -3527,7 +3633,7 @@ function wizRenderResults() {
   document.getElementById('wkv-exact-badge').style.display = exact ? '' : 'none';
   var kvGB = 2 * heads * dim * layers * bytes * ctx_tok / 1e9;
   document.getElementById('wkv-result').textContent = kvGB >= 1 ? kvGB.toFixed(2)+' GB' : (kvGB*1000).toFixed(0)+' MB';
-  document.getElementById('wkv-mbtok').textContent = (kvGB / S.ctx * 1000).toFixed(3);
+  document.getElementById('wkv-mbtok').textContent = (kvGB / S.ctx).toFixed(3);
 
   // Balloon bar chart
   var wt = S.model * S.wp;
@@ -3569,24 +3675,30 @@ function wizOpenAdvanced() {
       c.classList.add('on');
     }
   });
-  // Sync model slider
+  // Sync model slider (silent — no renderResult)
   el('s-params').value = Math.min(S.model, 405);
   el('sv-params').textContent = S.model + 'B';
-  // Sync users
-  setU(S.users);
-  // Sync context
-  setC(S.ctx);
-  // Sync precision chips
+  // Sync users (silent — avoid intermediate renderResult before wp is synced)
+  S.users = S.users;
+  el('s-users').value = Math.min(S.users, 500);
+  el('sv-users').textContent = S.users;
+  el('n-users').value = S.users;
+  // Sync context (silent)
+  el('s-ctx').value = Math.min(S.ctx, 512);
+  el('sv-ctx').textContent = S.ctx + 'K';
+  el('n-ctx').value = S.ctx;
+  hlCtx(S.ctx);
+  // Sync precision chips — MUST happen before renderResult
   document.querySelectorAll('#wp-chips .chip').forEach(function(c) {
     c.classList.toggle('on', +c.dataset.v === S.wp);
   });
-  // Sync cost assumptions
+  // Sync all other assumptions
   syncAssumptions();
-  // Clear HF status (model set manually via wizard)
+  // Sync HF input
   el('hf-inp').value = S.hfId || '';
   el('hf-st').textContent = S.hfId ? '\u2713 Loaded from wizard' : '';
   el('hf-st').className = S.hfId ? 'hfst ok' : 'hfst';
-  // Navigate
+  // Navigate then render ONCE with correct state
   var advTab = document.querySelectorAll('.ntab')[2];
   switchPage('calc', advTab);
   renderResult();
