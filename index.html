@@ -1646,7 +1646,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v6.3</span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v6.7</span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank"
       style="font-family:var(--mono);font-size:10px;color:var(--text3);text-decoration:none">&#9733; GitHub</a>
     <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">
@@ -1703,8 +1703,8 @@ tr.selected td{background:rgba(37,99,235,.04)}
             <input id="hb-inp-sunk" type="number" min="0" max="100000000" step="10000" value="0" onblur="hbEndEdit('sunk')" onkeydown="if(event.key==='Enter')hbEndEdit('sunk')" style="display:none;width:80px;padding:2px 6px;font-size:12px;border:1px solid #854F0B;border-radius:4px;background:var(--bg);color:var(--text);font-family:var(--mono)">
           </div>
           <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
-            <div style="flex:1;font-size:12px;color:var(--text2)">Peak utilisation (affects on-prem sizing)</div>
-            <input type="range" min="5" max="100" step="5" value="30" id="hb-sl-util" oninput="hbRecalc()" style="flex:1">
+            <div style="flex:1;font-size:12px;color:var(--text2)">Avg utilisation % <span style="font-weight:400;font-size:10px;color:var(--text3)">(sets on-prem base)</span></div>
+            <input type="range" min="5" max="100" step="5" value="30" id="hb-sl-util" oninput="hbSyncUtilToSplit()" style="flex:1">
             <span id="hb-v-util" style="font-size:12px;font-weight:600;min-width:36px;text-align:right;font-family:var(--mono)">30%</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;padding:6px 0">
@@ -1769,7 +1769,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
 
         <!-- Hybrid slider -->
         <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px">
-          <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:10px">Hybrid split — drag to adjust</div>
+          <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:10px">Hybrid split <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">— auto-set from utilisation · drag to override</span></div>
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
             <div style="font-size:12px;color:var(--text2);min-width:80px">On-prem base</div>
             <input type="range" min="0" max="100" step="5" value="70" id="hb-sl-split" oninput="hbRecalc()" style="flex:1">
@@ -1861,6 +1861,103 @@ tr.selected td{background:rgba(37,99,235,.04)}
           <div style="font-size:11px;color:var(--text2);line-height:1.6" id="hb-sunk-msg">—</div>
         </div>
                 <div id="hb-insight" style="border-left:3px solid var(--blue);padding:10px 14px;background:var(--bdim);border-radius:0 8px 8px 0;font-size:12px;color:var(--text2);line-height:1.7">—</div>
+
+        <div style="margin-top:16px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+          <button onclick="hpToggle()" style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg2);border:none;cursor:pointer;text-align:left;color:var(--text)">
+            <div>
+              <div style="font-size:13px;font-weight:600">How hybrid actually works</div>
+              <div style="font-size:11px;color:var(--text2);margin-top:2px">3 patterns that work in practice — and what hybrid is not</div>
+            </div>
+            <span id="hp-chevron" style="font-size:16px;color:var(--text3);transition:transform .2s">&#9660;</span>
+          </button>
+
+          <div id="hp-body" style="display:none;padding:16px;border-top:1px solid var(--border)">
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px" id="hp-btns">
+              <button class="chip on" onclick="hpShow(1,this)" style="font-size:11px">Workload split</button>
+              <button class="chip" onclick="hpShow(2,this)" style="font-size:11px">Model split</button>
+              <button class="chip" onclick="hpShow(3,this)" style="font-size:11px">Time split</button>
+            </div>
+
+            <div id="hp1">
+              <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px">Different work types go to different places</div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Not the same traffic split dynamically</div>
+              <div style="display:flex;gap:8px;margin-bottom:10px">
+                <div style="flex:1;background:#EAF3DE;border:1px solid #97C459;border-radius:8px;padding:10px 12px">
+                  <div style="font-size:9px;font-weight:600;color:#3B6D11;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">On-prem &mdash; always</div>
+                  <div style="font-size:11px;font-weight:500;color:#27500A;line-height:1.6">Production inference<br>Customer-facing API<br>Batch inference</div>
+                </div>
+                <div style="display:flex;align-items:center;color:var(--text3);font-size:14px">&#8644;</div>
+                <div style="flex:1;background:#E6F1FB;border:1px solid #85B7EB;border-radius:8px;padding:10px 12px">
+                  <div style="font-size:9px;font-weight:600;color:#185FA5;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Cloud &mdash; on demand</div>
+                  <div style="font-size:11px;font-weight:500;color:#0C447C;line-height:1.6">Fine-tuning runs<br>Experiments<br>One-off evaluations</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">
+                <div style="background:var(--bg2);border-radius:6px;padding:8px 10px"><div style="font-size:12px;font-weight:600;color:#3B6D11">$0 / run</div><div style="font-size:10px;color:var(--text2);margin-top:2px">on-prem cost once hardware owned</div></div>
+                <div style="background:var(--bg2);border-radius:6px;padding:8px 10px"><div style="font-size:12px;font-weight:600;color:var(--blue)">Pay only when used</div><div style="font-size:10px;color:var(--text2);margin-top:2px">cloud for experiments &mdash; no idle cost</div></div>
+                <div style="background:var(--bg2);border-radius:6px;padding:8px 10px"><div style="font-size:12px;font-weight:600;color:#854F0B">No router needed</div><div style="font-size:10px;color:var(--text2);margin-top:2px">two endpoints, two job types</div></div>
+              </div>
+              <div style="border-left:3px solid var(--blue);padding:8px 12px;background:var(--bdim);border-radius:0 6px 6px 0;font-size:11px;color:var(--text2);line-height:1.6">
+                Production inference runs predictably 24/7 &mdash; ideal for owned hardware with zero marginal cost per request.
+                Fine-tuning is irregular and GPU-intensive &mdash; ideal for cloud where you pay only for the hours you run.
+              </div>
+            </div>
+
+            <div id="hp2" style="display:none">
+              <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px">Small models on-prem. Large models in cloud.</div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:10px">A router decides &mdash; not the user</div>
+              <div style="display:flex;gap:8px;margin-bottom:10px">
+                <div style="flex:1;background:#EAF3DE;border:1px solid #97C459;border-radius:8px;padding:10px 12px">
+                  <div style="font-size:9px;font-weight:600;color:#3B6D11;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">On-prem &mdash; always running</div>
+                  <div style="font-size:11px;font-weight:500;color:#27500A;line-height:1.6">Llama 3.1 8B<br>Mistral 7B<br>Qwen 2.5 7B</div>
+                  <div style="font-size:10px;color:#3B6D11;margin-top:4px">16 GB &middot; 1 GPU &middot; always loaded</div>
+                </div>
+                <div style="display:flex;align-items:center;color:var(--text3);font-size:14px">&#8644;</div>
+                <div style="flex:1;background:#E6F1FB;border:1px solid #85B7EB;border-radius:8px;padding:10px 12px">
+                  <div style="font-size:9px;font-weight:600;color:#185FA5;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Cloud &mdash; occasional</div>
+                  <div style="font-size:11px;font-weight:500;color:#0C447C;line-height:1.6">Llama 3.1 70B<br>Llama 3.1 405B<br>Qwen 2.5 72B</div>
+                  <div style="font-size:10px;color:#185FA5;margin-top:4px">140&ndash;810 GB &middot; 2&ndash;8 GPUs</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">
+                <div style="background:var(--bg2);border-radius:6px;padding:8px 10px"><div style="font-size:12px;font-weight:600;color:#3B6D11">Most requests</div><div style="font-size:10px;color:var(--text2);margin-top:2px">handled by on-prem small model</div></div>
+                <div style="background:var(--bg2);border-radius:6px;padding:8px 10px"><div style="font-size:12px;font-weight:600;color:var(--blue)">Few requests</div><div style="font-size:10px;color:var(--text2);margin-top:2px">need 70B+ reasoning depth</div></div>
+                <div style="background:var(--bg2);border-radius:6px;padding:8px 10px"><div style="font-size:12px;font-weight:600;color:#854F0B">1 config line</div><div style="font-size:10px;color:var(--text2);margin-top:2px">OpenShift AI routes by model name</div></div>
+              </div>
+              <div style="border-left:3px solid var(--blue);padding:8px 12px;background:var(--bdim);border-radius:0 6px 6px 0;font-size:11px;color:var(--text2);line-height:1.6">
+                Most queries &mdash; summarisation, classification, Q&amp;A &mdash; don&rsquo;t need a 70B model.
+                Route simple requests to on-prem 8B: fast, zero marginal cost. Only route deep reasoning tasks to cloud 70B.
+              </div>
+            </div>
+
+            <div id="hp3" style="display:none">
+              <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px">Own the day. Rent the night.</div>
+              <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Schedule the difference &mdash; no load balancer needed</div>
+              <div style="display:flex;gap:0;border-radius:6px;overflow:hidden;height:28px;margin-bottom:4px">
+                <div style="width:38%;background:#C0DD97;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#27500A">Business hours &middot; on-prem</div>
+                <div style="width:12%;background:#D3D1C7;display:flex;align-items:center;justify-content:center;font-size:9px;color:#5F5E5A">evening</div>
+                <div style="width:33%;background:#B5D4F4;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#0C447C">Overnight &middot; cloud</div>
+                <div style="width:17%;background:#D3D1C7;display:flex;align-items:center;justify-content:center;font-size:9px;color:#5F5E5A">morning</div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-bottom:10px"><span>9am</span><span>6pm</span><span>midnight</span><span>6am</span><span>9am</span></div>
+              <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">
+                <div style="background:var(--bg2);border-radius:6px;padding:8px 10px"><div style="font-size:12px;font-weight:600;color:#3B6D11">High utilisation</div><div style="font-size:10px;color:var(--text2);margin-top:2px">on-prem GPUs busy all day &mdash; fast payback</div></div>
+                <div style="background:var(--bg2);border-radius:6px;padding:8px 10px"><div style="font-size:12px;font-weight:600;color:var(--blue)">Spot pricing</div><div style="font-size:10px;color:var(--text2);margin-top:2px">60&ndash;70% cheaper overnight</div></div>
+                <div style="background:var(--bg2);border-radius:6px;padding:8px 10px"><div style="font-size:12px;font-weight:600;color:#854F0B">A cron job</div><div style="font-size:10px;color:var(--text2);margin-top:2px">schedule batch at 11pm &mdash; done</div></div>
+              </div>
+              <div style="border-left:3px solid var(--blue);padding:8px 12px;background:var(--bdim);border-radius:0 6px 6px 0;font-size:11px;color:var(--text2);line-height:1.6">
+                On-prem GPUs earn their keep during business hours. Overnight batch jobs have no latency requirement &mdash; perfect for spot instances at 60&ndash;70% discount. Implementation is a cron job, not an infrastructure project.
+              </div>
+            </div>
+
+            <div style="margin-top:12px;background:var(--bg3);border-radius:6px;padding:10px 12px;font-size:11px;color:var(--text3);line-height:1.6">
+              <strong style="color:var(--text2)">What hybrid is not:</strong>
+              Real-time traffic shifting based on load. Model weights must already be loaded on whichever GPU serves the request &mdash; you can&rsquo;t move a live request mid-stream.
+              Hybrid works because different types of work have different requirements.
+            </div>
+          </div>
+        </div>
 
       </div><!-- /col-r -->
     </div><!-- /row -->
@@ -3995,11 +4092,20 @@ var HB = {
   gpus: 8, have: 16, price: 25000, sunk: 0,
   extraCosts: [],
   cloudRates: [
-    {p:'GCP',       g:'H100 SXM', r:3.00, sel:true},
-    {p:'AWS',       g:'H100 SXM', r:3.90, sel:false},
-    {p:'Lambda',    g:'H100 SXM', r:2.99, sel:false},
-    {p:'CoreWeave', g:'H100 SXM', r:2.45, sel:false},
-    {p:'RunPod',    g:'H100 SXM', r:2.72, sel:false},
+    {p:'GCP',       g:'H100 SXM',  r:3.00, sel:true},
+    {p:'AWS',       g:'H100 SXM',  r:3.90, sel:false},
+    {p:'Lambda',    g:'H100 SXM',  r:2.99, sel:false},
+    {p:'CoreWeave', g:'H100 SXM',  r:2.45, sel:false},
+    {p:'RunPod',    g:'H100 SXM',  r:2.72, sel:false},
+    {p:'Lambda',    g:'H200 SXM',  r:4.99, sel:false},
+    {p:'CoreWeave', g:'H200 SXM',  r:4.25, sel:false},
+    {p:'RunPod',    g:'B200 SXM',  r:5.58, sel:false},
+    {p:'Lambda',    g:'B200 SXM',  r:5.87, sel:false},
+    {p:'AWS',       g:'A100 80GB', r:3.97, sel:false},
+    {p:'Lambda',    g:'A100 80GB', r:2.49, sel:false},
+    {p:'RunPod',    g:'A100 80GB', r:1.90, sel:false},
+    {p:'CoreWeave', g:'L40S',      r:1.50, sel:false},
+    {p:'RunPod',    g:'L40S',      r:1.22, sel:false},
   ]
 };
 
@@ -4043,7 +4149,7 @@ function hbRenderCloud(){
     tr.innerHTML='<td style="padding:5px 6px">'
       +'<span style="width:8px;height:8px;border-radius:50%;display:inline-block;cursor:pointer;background:'+(r.sel?'var(--blue)':'transparent')+';border:1px solid '+(r.sel?'var(--blue)':'var(--border2)')+';" onclick="hbSelCloud('+i+')"></span></td>'
       +'<td style="padding:5px 6px;font-size:12px;'+(r.sel?'color:var(--blue);font-weight:600':'color:var(--text)')+'">'+r.p+'</td>'
-      +'<td style="padding:5px 6px;font-size:11px;color:var(--text3)">'+r.g+'</td>'
+      +'<td style="padding:5px 6px"><input type="text" value="'+r.g+'" onchange="HB.cloudRates['+i+'].g=this.value" style="width:72px;padding:2px 4px;font-size:11px;border:0.5px solid var(--border);border-radius:3px;background:transparent;color:var(--text2);font-family:var(--mono)"></td>'
       +'<td style="padding:5px 6px"><input type="number" step="0.01" min="0.1" value="'+r.r.toFixed(2)+'" onclick="hbSelCloud('+i+')" onchange="HB.cloudRates['+i+'].r=+this.value;hbRecalc()" style="width:58px;padding:2px 5px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:var(--mono)"></td>'
       +'<td style="padding:5px 4px"><button onclick="HB.cloudRates.splice('+i+',1);hbRenderCloud();hbRecalc()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;padding:0 2px">×</button></td>';
     tb.appendChild(tr);
@@ -4054,7 +4160,7 @@ function hbSelCloud(i){
   hbRenderCloud(); hbRecalc();
 }
 function hbAddCloud(){
-  HB.cloudRates.push({p:'Custom',g:'GPU',r:3.00,sel:false});
+  HB.cloudRates.push({p:'Custom',g:'H100 SXM',r:3.00,sel:false});
   hbRenderCloud();
 }
 
@@ -4093,6 +4199,14 @@ function hbPullFromAdvanced(){
   } catch(e) {}
 }
 
+function hbSyncUtilToSplit(){
+  // util% = avg load fraction = recommended on-prem %
+  // e.g. 50% util → own 50% of GPUs for base, rent 50% for peaks
+  var util = +document.getElementById('hb-sl-util').value;
+  document.getElementById('hb-sl-split').value = util;
+  hbRecalc();
+}
+
 function hbRecalc(){
   var gpus  = HB.gpus;
   var have  = HB.have;
@@ -4109,9 +4223,15 @@ function hbRecalc(){
   document.getElementById('hb-disp-have').textContent  = have;
   document.getElementById('hb-disp-price').textContent = '$'+(price/1000).toFixed(0)+'K';
 
+  // util affects how many GPUs you actually need on-prem for base load
+  // At 30% util: only 30% of time at peak, so you can own fewer and burst for spikes
+  // opGpus = max of (split-based) and (util-based) — user controls split explicitly
   var opGpus = Math.max(1,Math.round(gpus*split));
   var clGpus = Math.max(0,gpus-opGpus);
   var sp     = Math.round(split*100);
+  // Util-based recommendation (shown as advisory, doesn't override split)
+  var utilRecommendedOp = Math.max(1,Math.round(gpus*util));
+  var utilRecommendedCl = Math.max(0,gpus-utilRecommendedOp);
 
   var sunk = HB.sunk;
 
@@ -4213,14 +4333,16 @@ function hbRecalc(){
 
   // Insight
   var cheap=hbCheapest();
+  var utilAdvisory='';
   var ins='Own <strong>'+opGpus+' GPU'+(opGpus!==1?'s':'')+' on-prem</strong> for base load';
   if(clGpus>0) ins+=', rent <strong>'+clGpus+' GPU'+(clGpus!==1?'s':'')+' on '+cheap.p+'</strong> ($'+cheap.r.toFixed(2)+'/hr) for burst';
-  ins+='. You save <strong>'+hbFmt$(cloudTot-hybridTot)+'</strong> vs pure cloud over '+amort+' years';
+  ins+='. At <strong>'+Math.round(util*100)+'% avg utilisation</strong>, on-prem GPUs stay busy and pay off. You save <strong>'+hbFmt$(cloudTot-hybridTot)+'</strong> vs pure cloud over '+amort+' years';
   if(be>0) ins+='. On-prem hardware pays off at <strong>Month '+be+'</strong>.';
   var underGpus=Math.max(0,gpus-have);
   if(extraGpus>0) ins+=' <span style="color:#E24B4A">You’re over-provisioned by '+extraGpus+' GPUs — right-sizing saves an extra <strong>'+hbFmt$(wasteYr)+'/yr</strong>.</span>';
   if(underGpus>0) ins+=' <span style="color:#854F0B">Note: you currently run <strong>'+underGpus+' fewer GPUs</strong> than sizing recommends — capacity may be insufficient at peak.</span>';
   if(extraYr>0) ins+=' Includes <strong>'+hbFmt$(extraYr)+'/yr</strong> in additional costs.';
+  ins+=utilAdvisory;
   document.getElementById('hb-insight').innerHTML=ins;
 }
 
@@ -4235,6 +4357,27 @@ switchPage=function(id,elem){
   }
 };
 
+
+function hpToggle() {
+  var body = document.getElementById('hp-body');
+  var chev = document.getElementById('hp-chevron');
+  if (!body) return;
+  var open = body.style.display === 'none' || body.style.display === '';
+  body.style.display = open ? '' : 'none';
+  if (chev) chev.style.transform = open ? 'rotate(180deg)' : '';
+}
+
+function hpShow(n, btn) {
+  [1,2,3].forEach(function(i){
+    var el=document.getElementById('hp'+i);
+    if(el) el.style.display=(i===n?'':'none');
+  });
+  var btns=document.getElementById('hp-btns');
+  if(btns) btns.querySelectorAll('.chip').forEach(function(b){
+    b.classList.remove('on');
+  });
+  if(btn) btn.classList.add('on');
+}
 
 </script>
 </body>
