@@ -555,7 +555,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
   *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   nav,.ntabs,.liwrap,.cbar,.rnav,#page-home,#page-wizard,#page-calc,#page-explorer,
   #saved-validate-wrap,.sv-del,button,#action-bar-top{display:none!important}
-  #page-saved{display:block!important}
+  #page-saved,#page-hybrid{display:block!important}
   body{background:#fff!important;color:#000!important;font-size:10px}
   @page{size:A4 landscape;margin:10mm}
   /* Compact table */
@@ -612,6 +612,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
     <button class="ntab" onclick="switchPage('calc',this)">Advanced</button>
     <button class="ntab" onclick="switchPage('explorer',this)">GPU Explorer</button>
     <button class="ntab" onclick="switchPage('saved',this)" id="saved-tab">&#128190; Saved <span id="saved-count" style="background:var(--blue);color:#fff;border-radius:8px;padding:1px 6px;font-size:10px;margin-left:3px;display:none">0</span></button>
+    <button class="ntab" onclick="switchPage('hybrid',this)" id="hybrid-tab">&#128200; Hybrid savings</button>
   </div>
   <div class="nright">
     <button class="tbtn" id="tbtn" onclick="toggleTheme()"><span id="ti">☾</span>&nbsp;<span id="tl">Dark</span></button>
@@ -1645,7 +1646,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v5.9</span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v6.0</span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank"
       style="font-family:var(--mono);font-size:10px;color:var(--text3);text-decoration:none">&#9733; GitHub</a>
     <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">
@@ -1656,6 +1657,193 @@ tr.selected td{background:rgba(37,99,235,.04)}
     </span>
   </div>
 </div>
+
+</div><!-- /page-explorer -->
+
+<div class="page" id="page-hybrid">
+  <div style="max-width:1100px;margin:0 auto;padding:16px 0 40px">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <div>
+        <div style="font-family:var(--display);font-size:18px;font-weight:700">Hybrid savings</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px">All numbers editable · click any blue value to change it</div>
+      </div>
+      <div id="hybrid-source-badge" style="font-size:11px;color:var(--text3);background:var(--bg2);padding:4px 12px;border-radius:20px;font-family:var(--mono)">
+        pull from Advanced tab
+      </div>
+    </div>
+
+    <div style="display:flex;gap:18px;align-items:flex-start">
+
+      <!-- LEFT PANEL -->
+      <div style="flex:0 0 300px">
+
+        <div class="cbar" style="font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Your workload</div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px">
+
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+            <div style="flex:1;font-size:12px;color:var(--text2)">GPUs needed</div>
+            <span id="hb-disp-gpus" onclick="hbEdit('gpus')" style="font-size:12px;font-weight:600;padding:2px 8px;border:1px dashed var(--blue);border-radius:4px;color:var(--blue);cursor:pointer;font-family:var(--mono)">8</span>
+            <input id="hb-inp-gpus" type="number" min="1" max="512" value="8" onblur="hbEndEdit('gpus')" onkeydown="if(event.key==='Enter')hbEndEdit('gpus')" style="display:none;width:60px;padding:2px 6px;font-size:12px;border:1px solid var(--blue);border-radius:4px;background:var(--bg);color:var(--text);font-family:var(--mono)">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+            <div style="flex:1;font-size:12px;color:var(--text2)">GPUs currently running</div>
+            <span id="hb-disp-have" onclick="hbEdit('have')" style="font-size:12px;font-weight:600;padding:2px 8px;border:1px dashed #E24B4A;border-radius:4px;color:#E24B4A;cursor:pointer;font-family:var(--mono)">16</span>
+            <input id="hb-inp-have" type="number" min="1" max="512" value="16" onblur="hbEndEdit('have')" onkeydown="if(event.key==='Enter')hbEndEdit('have')" style="display:none;width:60px;padding:2px 6px;font-size:12px;border:1px solid var(--blue);border-radius:4px;background:var(--bg);color:var(--text);font-family:var(--mono)">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+            <div style="flex:1;font-size:12px;color:var(--text2)">GPU purchase price</div>
+            <span id="hb-disp-price" onclick="hbEdit('price')" style="font-size:12px;font-weight:600;padding:2px 8px;border:1px dashed var(--blue);border-radius:4px;color:var(--blue);cursor:pointer;font-family:var(--mono)">$25K</span>
+            <input id="hb-inp-price" type="number" min="1000" max="200000" step="1000" value="25000" onblur="hbEndEdit('price')" onkeydown="if(event.key==='Enter')hbEndEdit('price')" style="display:none;width:70px;padding:2px 6px;font-size:12px;border:1px solid var(--blue);border-radius:4px;background:var(--bg);color:var(--text);font-family:var(--mono)">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+            <div style="flex:1;font-size:12px;color:var(--text2)">Avg utilisation</div>
+            <input type="range" min="5" max="100" step="5" value="30" id="hb-sl-util" oninput="hbRecalc()" style="flex:1">
+            <span id="hb-v-util" style="font-size:12px;font-weight:600;min-width:36px;text-align:right;font-family:var(--mono)">30%</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0">
+            <div style="flex:1;font-size:12px;color:var(--text2)">Amortisation</div>
+            <input type="range" min="2" max="7" step="1" value="5" id="hb-sl-amort" oninput="hbRecalc()" style="flex:1">
+            <span id="hb-v-amort" style="font-size:12px;font-weight:600;min-width:42px;text-align:right;font-family:var(--mono)">5 yrs</span>
+          </div>
+
+          <!-- Extra costs -->
+          <div id="hb-extra-wrap"></div>
+          <div style="padding-top:8px;border-top:1px solid var(--border);margin-top:6px">
+            <button onclick="hbAddCost()" style="font-size:11px;color:var(--blue);background:none;border:none;cursor:pointer;padding:0;font-family:var(--body)">+ add cost (power, ops, networking…)</button>
+          </div>
+        </div>
+
+        <div class="cbar" style="font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Cloud provider</div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+          <table style="width:100%;border-collapse:collapse;font-size:12px" id="hb-cloud-table">
+            <thead><tr>
+              <th style="width:14px"></th>
+              <th style="text-align:left;font-size:10px;color:var(--text3);font-weight:500;padding:4px 6px;letter-spacing:.05em;text-transform:uppercase">Provider</th>
+              <th style="text-align:left;font-size:10px;color:var(--text3);font-weight:500;padding:4px 6px;letter-spacing:.05em;text-transform:uppercase">GPU</th>
+              <th style="text-align:left;font-size:10px;color:var(--text3);font-weight:500;padding:4px 6px;letter-spacing:.05em;text-transform:uppercase">$/hr</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="hb-cloud-tbody"></tbody>
+          </table>
+          <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border)">
+            <button onclick="hbAddCloud()" style="font-size:11px;color:var(--blue);background:none;border:none;cursor:pointer;padding:0;font-family:var(--body)">+ add provider / instance</button>
+          </div>
+        </div>
+
+      </div><!-- /col-l -->
+
+      <!-- RIGHT PANEL -->
+      <div style="flex:1;min-width:0">
+
+        <!-- Over-provisioning -->
+        <div style="background:#FCEBEB22;border:1px solid #F7C1C1;border-radius:10px;padding:14px 16px;margin-bottom:14px" id="hb-overprov">
+          <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#A32D2D;margin-bottom:8px">Over-provisioning audit</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="display:flex;align-items:baseline;gap:18px">
+              <div><span style="font-size:26px;font-weight:700;color:#E24B4A" id="hb-ov-have">16</span><span style="font-size:11px;color:var(--text2);margin-left:4px">running</span></div>
+              <div style="color:var(--text3)">&#8594;</div>
+              <div><span style="font-size:26px;font-weight:700;color:#3B6D11" id="hb-ov-need">8</span><span style="font-size:11px;color:var(--text2);margin-left:4px">needed</span></div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:10px;color:var(--text3);margin-bottom:2px">WASTED / YEAR</div>
+              <div style="font-size:22px;font-weight:700;color:#E24B4A" id="hb-ov-waste">$140K</div>
+              <div style="font-size:10px;color:var(--text3)" id="hb-ov-sub">8 extra GPUs</div>
+            </div>
+          </div>
+          <div style="margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px"><span>Current (over-provisioned)</span><span id="hb-ov-cur-lbl">$421K/yr</span></div>
+            <div style="height:20px;background:var(--bg3);border-radius:4px;overflow:hidden"><div id="hb-bar-ov-cur" style="height:100%;background:#F09595;border-radius:4px;display:flex;align-items:center;padding-left:8px;font-size:11px;font-weight:600;color:#791F1F;width:100%">$421K</div></div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px"><span>Right-sized</span><span id="hb-ov-rs-lbl">$210K/yr</span></div>
+            <div style="height:20px;background:var(--bg3);border-radius:4px;overflow:hidden"><div id="hb-bar-ov-rs" style="height:100%;background:#97C459;border-radius:4px;display:flex;align-items:center;padding-left:8px;font-size:11px;font-weight:600;color:#27500A;width:50%">$210K</div></div>
+          </div>
+        </div>
+
+        <!-- Hybrid slider -->
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px">
+          <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:10px">Hybrid split — drag to adjust</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <div style="font-size:12px;color:var(--text2);min-width:80px">On-prem base</div>
+            <input type="range" min="0" max="100" step="5" value="70" id="hb-sl-split" oninput="hbRecalc()" style="flex:1">
+            <div style="font-size:12px;color:var(--text2);min-width:60px;text-align:right">Cloud burst</div>
+          </div>
+          <div style="height:28px;border-radius:6px;overflow:hidden;display:flex;margin-bottom:8px" id="hb-split-track">
+            <div id="hb-ht-op" style="background:#97C459;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#27500A;width:70%;transition:width .2s">70% on-prem</div>
+            <div id="hb-ht-cl" style="background:#85B7EB;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#0C447C;flex:1">30% cloud</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2)">
+            <div><span style="font-weight:600" id="hb-hl-opgpus">6 GPUs</span> owned · <span id="hb-hl-opcost">$150K</span> hardware</div>
+            <div><span style="font-weight:600" id="hb-hl-clgpus">2 GPUs</span> rented · <span id="hb-hl-clrate">$3.00/hr</span></div>
+          </div>
+        </div>
+
+        <!-- 3-way comparison -->
+        <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:8px">5-year cost comparison</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+            <div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Pure cloud</div>
+            <div style="font-size:22px;font-weight:700;color:#E24B4A" id="hb-m-cloud">—</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px">all rented</div>
+          </div>
+          <div style="background:var(--bdim);border:1.5px solid var(--blue);border-radius:8px;padding:10px 12px">
+            <div style="font-size:10px;color:var(--blue);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">✦ Hybrid</div>
+            <div style="font-size:22px;font-weight:700;color:var(--blue)" id="hb-m-hybrid">—</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px" id="hb-m-hybrid-sub">70% own · 30% rent</div>
+          </div>
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+            <div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Pure on-prem</div>
+            <div style="font-size:22px;font-weight:700;color:#3B6D11" id="hb-m-onprem">—</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px">hardware only</div>
+          </div>
+        </div>
+
+        <!-- Bars -->
+        <div style="margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px"><span>Pure cloud 5yr</span><span id="hb-bl-cloud">—</span></div>
+          <div style="height:22px;background:var(--bg3);border-radius:4px;overflow:hidden"><div id="hb-bar-cloud" style="width:100%;height:100%;background:#F09595;border-radius:4px;display:flex;align-items:center;padding-left:8px;font-size:11px;font-weight:600;color:#791F1F">—</div></div>
+        </div>
+        <div style="margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px"><span id="hb-bl-hybrid-lbl">Hybrid</span><span id="hb-bl-hybrid">—</span></div>
+          <div style="height:22px;background:var(--bg3);border-radius:4px;overflow:hidden"><div id="hb-bar-hybrid" style="width:60%;height:100%;background:#85B7EB;border-radius:4px;display:flex;align-items:center;padding-left:8px;font-size:11px;font-weight:600;color:#0C447C">—</div></div>
+        </div>
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px"><span>Pure on-prem</span><span id="hb-bl-onprem">—</span></div>
+          <div style="height:22px;background:var(--bg3);border-radius:4px;overflow:hidden"><div id="hb-bar-onprem" style="width:20%;height:100%;background:#97C459;border-radius:4px;display:flex;align-items:center;padding-left:8px;font-size:11px;font-weight:600;color:#27500A">—</div></div>
+        </div>
+
+        <!-- Summary metrics -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em">Hybrid saves vs cloud</div>
+            <div style="font-size:18px;font-weight:700;color:#3B6D11" id="hb-m-save">—</div>
+          </div>
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em">On-prem GPUs</div>
+            <div style="font-size:18px;font-weight:700" id="hb-m-opgpus">—</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px">base load</div>
+          </div>
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em">Cloud burst GPUs</div>
+            <div style="font-size:18px;font-weight:700" id="hb-m-clgpus">—</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px">peak only</div>
+          </div>
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em">Break-even</div>
+            <div style="font-size:18px;font-weight:700" id="hb-m-be">—</div>
+          </div>
+        </div>
+
+        <!-- Insight -->
+        <div id="hb-insight" style="border-left:3px solid var(--blue);padding:10px 14px;background:var(--bdim);border-radius:0 8px 8px 0;font-size:12px;color:var(--text2);line-height:1.7">—</div>
+
+      </div><!-- /col-r -->
+    </div><!-- /row -->
+  </div>
+</div><!-- /page-hybrid -->
+
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script>
@@ -3778,6 +3966,218 @@ function expRenderTable(){
   }
   document.getElementById('ptbody').innerHTML=rows.join('');
 }
+
+// ===== HYBRID SAVINGS TAB =====
+var HB = {
+  gpus: 8, have: 16, price: 25000,
+  extraCosts: [],
+  cloudRates: [
+    {p:'GCP',       g:'H100 SXM', r:3.00, sel:true},
+    {p:'AWS',       g:'H100 SXM', r:3.90, sel:false},
+    {p:'Lambda',    g:'H100 SXM', r:2.99, sel:false},
+    {p:'CoreWeave', g:'H100 SXM', r:2.45, sel:false},
+    {p:'RunPod',    g:'H100 SXM', r:2.72, sel:false},
+  ]
+};
+
+function hbFmt$(n){
+  if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M';
+  if(n>=1e3) return '$'+Math.round(n/1000)+'K';
+  return '$'+Math.round(n);
+}
+function hbSelRate(){
+  var r=HB.cloudRates.find(function(x){return x.sel;});
+  return r?r.r:3.00;
+}
+function hbCheapest(){
+  return HB.cloudRates.reduce(function(a,b){return a.r<b.r?a:b;});
+}
+
+function hbEdit(k){
+  document.getElementById('hb-disp-'+k).style.display='none';
+  var inp=document.getElementById('hb-inp-'+k);
+  inp.style.display='inline-block'; inp.focus(); inp.select();
+}
+function hbEndEdit(k){
+  var inp=document.getElementById('hb-inp-'+k);
+  var v=+inp.value;
+  if(k==='gpus'&&v>0) HB.gpus=v;
+  if(k==='have'&&v>0) HB.have=v;
+  if(k==='price'&&v>0) HB.price=v;
+  inp.style.display='none';
+  document.getElementById('hb-disp-'+k).style.display='';
+  hbRecalc();
+}
+
+function hbRenderCloud(){
+  var tb=document.getElementById('hb-cloud-tbody');
+  if(!tb) return;
+  tb.innerHTML='';
+  HB.cloudRates.forEach(function(r,i){
+    var tr=document.createElement('tr');
+    tr.style.borderBottom='1px solid var(--border)';
+    tr.innerHTML='<td style="padding:5px 6px">'
+      +'<span style="width:8px;height:8px;border-radius:50%;display:inline-block;cursor:pointer;background:'+(r.sel?'var(--blue)':'transparent')+';border:1px solid '+(r.sel?'var(--blue)':'var(--border2)')+';" onclick="hbSelCloud('+i+')"></span></td>'
+      +'<td style="padding:5px 6px;font-size:12px;'+(r.sel?'color:var(--blue);font-weight:600':'color:var(--text)')+'">'+r.p+'</td>'
+      +'<td style="padding:5px 6px;font-size:11px;color:var(--text3)">'+r.g+'</td>'
+      +'<td style="padding:5px 6px"><input type="number" step="0.01" min="0.1" value="'+r.r.toFixed(2)+'" onclick="hbSelCloud('+i+')" onchange="HB.cloudRates['+i+'].r=+this.value;hbRecalc()" style="width:58px;padding:2px 5px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-family:var(--mono)"></td>'
+      +'<td style="padding:5px 4px"><button onclick="HB.cloudRates.splice('+i+',1);hbRenderCloud();hbRecalc()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;padding:0 2px">×</button></td>';
+    tb.appendChild(tr);
+  });
+}
+function hbSelCloud(i){
+  HB.cloudRates.forEach(function(r,j){r.sel=(j===i);});
+  hbRenderCloud(); hbRecalc();
+}
+function hbAddCloud(){
+  HB.cloudRates.push({p:'Custom',g:'GPU',r:3.00,sel:false});
+  hbRenderCloud();
+}
+
+function hbAddCost(){
+  HB.extraCosts.push({label:'Power & cooling',amount:0});
+  hbRenderExtras();
+}
+function hbRenderExtras(){
+  var w=document.getElementById('hb-extra-wrap');
+  if(!w) return;
+  w.innerHTML='';
+  HB.extraCosts.forEach(function(e,i){
+    var d=document.createElement('div');
+    d.style.cssText='display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--border)';
+    d.innerHTML='<input type="text" value="'+e.label+'" placeholder="Cost label" onchange="HB.extraCosts['+i+'].label=this.value" style="flex:1;border:none;background:transparent;font-size:12px;color:var(--text);outline:none">'
+      +'<input type="number" value="'+e.amount+'" placeholder="$/yr" step="1000" onchange="HB.extraCosts['+i+'].amount=+this.value;hbRecalc()" style="width:80px;padding:2px 6px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text);font-family:var(--mono)">'
+      +'<span style="font-size:10px;color:var(--text3)">/yr</span>'
+      +'<button onclick="HB.extraCosts.splice('+i+',1);hbRenderExtras();hbRecalc()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;padding:0 2px">×</button>';
+    w.appendChild(d);
+  });
+}
+
+function hbPullFromAdvanced(){
+  // Pull t1 from current calc result if available
+  try {
+    var r = calcTiers();
+    HB.gpus = r.t1;
+    HB.price = S.onpremYr;
+    // Find matching cloud rate
+    var found = HB.cloudRates.find(function(x){return Math.abs(x.r-S.awsHr)<0.1;});
+    if(found) HB.cloudRates.forEach(function(x,i){x.sel=(x===found);});
+    hbRenderCloud();
+    hbRecalc();
+    document.getElementById('hb-source-badge').textContent =
+      '✓ synced from Advanced · '+S.modelLabel+' · '+S.users+' users · '+S.ctx+'K ctx';
+  } catch(e) {}
+}
+
+function hbRecalc(){
+  var gpus  = HB.gpus;
+  var have  = HB.have;
+  var price = HB.price;
+  var util  = +document.getElementById('hb-sl-util').value/100;
+  var amort = +document.getElementById('hb-sl-amort').value;
+  var split = +document.getElementById('hb-sl-split').value/100;
+  var hr    = hbSelRate();
+  var extraYr = HB.extraCosts.reduce(function(s,e){return s+(+e.amount||0);},0);
+
+  document.getElementById('hb-v-util').textContent  = Math.round(util*100)+'%';
+  document.getElementById('hb-v-amort').textContent = amort+' yrs';
+  document.getElementById('hb-disp-gpus').textContent  = gpus;
+  document.getElementById('hb-disp-have').textContent  = have;
+  document.getElementById('hb-disp-price').textContent = '$'+(price/1000).toFixed(0)+'K';
+
+  var opGpus = Math.max(1,Math.round(gpus*split));
+  var clGpus = Math.max(0,gpus-opGpus);
+  var sp     = Math.round(split*100);
+
+  // Cloud 5yr
+  var cloudMo=gpus*hr*720;
+  var cloudTot=0,mo=cloudMo;
+  for(var y=0;y<5;y++){cloudTot+=mo*12;mo*=1.03;}
+  cloudTot+=extraYr*5;
+
+  // On-prem 5yr
+  var onpremTot=gpus*price+extraYr*5;
+
+  // Hybrid 5yr
+  var opHw=opGpus*price;
+  var clBurstMo=clGpus*hr*720*util;
+  var clBurst5=0,bmo=clBurstMo;
+  for(var y2=0;y2<5;y2++){clBurst5+=bmo*12;bmo*=1.03;}
+  var hybridTot=opHw+clBurst5+extraYr*5;
+
+  var be=opGpus>0?Math.ceil(opHw/(opGpus*hr*720)):0;
+
+  // Overprov
+  var extraGpus=Math.max(0,have-gpus);
+  var wasteYr=extraGpus*hr*720*12;
+  var curYr=have*hr*720*12;
+  var rsYr=gpus*hr*720*12;
+
+  // Update over-prov
+  document.getElementById('hb-ov-have').textContent = have;
+  document.getElementById('hb-ov-need').textContent = gpus;
+  document.getElementById('hb-ov-waste').textContent = hbFmt$(wasteYr);
+  document.getElementById('hb-ov-sub').textContent   = extraGpus+' extra GPUs × $'+hr.toFixed(2)+'/hr';
+  document.getElementById('hb-ov-cur-lbl').textContent = hbFmt$(curYr)+'/yr';
+  document.getElementById('hb-ov-rs-lbl').textContent  = hbFmt$(rsYr)+'/yr';
+  document.getElementById('hb-bar-ov-cur').textContent = hbFmt$(curYr);
+  document.getElementById('hb-bar-ov-rs').textContent  = hbFmt$(rsYr);
+  document.getElementById('hb-bar-ov-rs').style.width  = Math.round(rsYr/Math.max(1,curYr)*100)+'%';
+  document.getElementById('hb-overprov').style.display = (extraGpus>0)?'':'none';
+
+  // Hybrid track
+  document.getElementById('hb-ht-op').style.width = sp+'%';
+  document.getElementById('hb-ht-op').textContent = sp>15?sp+'% on-prem':'';
+  document.getElementById('hb-ht-cl').textContent = (100-sp)>10?(100-sp)+'% cloud':'';
+  document.getElementById('hb-hl-opgpus').textContent = opGpus+' GPU'+(opGpus!==1?'s':'');
+  document.getElementById('hb-hl-opcost').textContent = hbFmt$(opHw)+' hardware';
+  document.getElementById('hb-hl-clgpus').textContent = clGpus+' GPU'+(clGpus!==1?'s':'');
+  document.getElementById('hb-hl-clrate').textContent = '$'+hr.toFixed(2)+'/hr';
+
+  // 3-way
+  document.getElementById('hb-m-cloud').textContent = hbFmt$(cloudTot);
+  document.getElementById('hb-m-hybrid').textContent = hbFmt$(hybridTot);
+  document.getElementById('hb-m-onprem').textContent = hbFmt$(onpremTot);
+  document.getElementById('hb-m-hybrid-sub').textContent = sp+'% own · '+(100-sp)+'% rent';
+
+  var maxV=cloudTot;
+  document.getElementById('hb-bl-cloud').textContent = hbFmt$(cloudTot);
+  document.getElementById('hb-bl-hybrid').textContent = hbFmt$(hybridTot);
+  document.getElementById('hb-bl-onprem').textContent = hbFmt$(onpremTot);
+  document.getElementById('hb-bar-cloud').textContent = hbFmt$(cloudTot);
+  document.getElementById('hb-bar-hybrid').style.width = Math.round(hybridTot/Math.max(1,maxV)*100)+'%';
+  document.getElementById('hb-bar-hybrid').textContent = hbFmt$(hybridTot);
+  document.getElementById('hb-bar-onprem').style.width = Math.round(onpremTot/Math.max(1,maxV)*100)+'%';
+  document.getElementById('hb-bar-onprem').textContent = hbFmt$(onpremTot);
+  document.getElementById('hb-bl-hybrid-lbl').textContent = 'Hybrid ('+sp+'% on-prem)';
+
+  document.getElementById('hb-m-save').textContent   = hbFmt$(cloudTot-hybridTot);
+  document.getElementById('hb-m-opgpus').textContent = opGpus;
+  document.getElementById('hb-m-clgpus').textContent = clGpus;
+  document.getElementById('hb-m-be').textContent     = be>0?'month '+be:'—';
+
+  // Insight
+  var cheap=hbCheapest();
+  var ins='Own <strong>'+opGpus+' GPU'+(opGpus!==1?'s':'')+' on-prem</strong> for base load';
+  if(clGpus>0) ins+=', rent <strong>'+clGpus+' GPU'+(clGpus!==1?'s':'')+' on '+cheap.p+'</strong> ($'+cheap.r.toFixed(2)+'/hr) for burst';
+  ins+='. You save <strong>'+hbFmt$(cloudTot-hybridTot)+'</strong> vs pure cloud over 5 years';
+  if(be>0) ins+='. On-prem hardware pays off at <strong>Month '+be+'</strong>.';
+  if(extraGpus>0) ins+=' <span style="color:#E24B4A">You’re over-provisioned by '+extraGpus+' GPUs — right-sizing saves an extra <strong>'+hbFmt$(wasteYr)+'/yr</strong>.</span>';
+  if(extraYr>0) ins+=' Includes <strong>'+hbFmt$(extraYr)+'/yr</strong> in additional costs.';
+  document.getElementById('hb-insight').innerHTML=ins;
+}
+
+// Auto-sync when switching to hybrid tab
+var _hbOrigSwitch=switchPage;
+switchPage=function(id,elem){
+  _hbOrigSwitch(id,elem);
+  if(id==='hybrid'){
+    hbRenderCloud();
+    hbRenderExtras();
+    hbPullFromAdvanced();
+  }
+};
+
 
 </script>
 </body>
