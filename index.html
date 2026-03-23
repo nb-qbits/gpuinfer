@@ -443,6 +443,18 @@ html.dark .cnvb{color:#76b900}.html.dark .camdb{color:#f76f6f}
 .wiz-cost-sub{font-family:var(--mono);font-size:10px;color:var(--text2);margin-top:3px}
 .wiz-restart{padding:7px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;font-size:12px;cursor:pointer;font-family:var(--body);margin-bottom:6px;display:block;width:100%;text-align:left}
 /* KV balloon viz */
+.gc-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9000;display:flex;align-items:center;justify-content:center}
+.gc-modal{background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:24px 26px;max-width:380px;width:90%;position:relative}
+.gc-title{font-family:var(--display);font-size:16px;font-weight:700;margin-bottom:6px}
+.gc-sub{font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.6}
+.gc-inp{width:100%;padding:9px 12px;border:1px solid var(--border2);border-radius:8px;font-size:13px;background:var(--bg);color:var(--text);margin-bottom:10px;outline:none}
+.gc-inp:focus{border-color:var(--blue)}
+.gc-btn{width:100%;padding:10px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--body)}
+.gc-btn:hover{opacity:.9}
+.gc-skip{display:block;text-align:center;font-size:11px;color:var(--text3);margin-top:10px;cursor:pointer}
+.gc-skip:hover{color:var(--text2)}
+.gc-lock{display:inline-block;background:var(--bg3);border:1px dashed var(--border2);border-radius:6px;padding:2px 8px;font-size:11px;color:var(--text3);cursor:pointer}
+.gc-lock:hover{border-color:var(--blue);color:var(--blue)}
 .kv-balloon-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px}
 .kv-balloon-title{font-family:var(--mono);font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
 .kv-formula{font-family:var(--mono);font-size:10px;color:var(--text2);background:var(--bg3);padding:7px 10px;border-radius:6px;margin-bottom:10px;line-height:1.8}
@@ -1202,7 +1214,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
 
         <!-- HEADROOM TABLE -->
         <div class="hroom">
-          <div class="htitle">KV Headroom &mdash; users per replica at different context lengths</div>
+          <div class="htitle">KV Headroom &mdash; users per replica at different context lengths <span class="gc-lock" id="gc-lock-badge" onclick="gcUnlockBreakdown()" title="Unlock full breakdown">&#128274; unlock</span></div>
           <div id="hroom-rows"></div>
         </div>
 
@@ -1646,7 +1658,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v6.7</span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v6.8</span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank"
       style="font-family:var(--mono);font-size:10px;color:var(--text3);text-decoration:none">&#9733; GitHub</a>
     <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">
@@ -4377,6 +4389,132 @@ function hpShow(n, btn) {
     b.classList.remove('on');
   });
   if(btn) btn.classList.add('on');
+}
+
+// ===== LEAD CAPTURE =====
+var GC_URL = 'https://script.google.com/macros/s/AKfycbx566ympYuMVPDNVSHhEFDXt1FSOkt6UTX4sbnru71unrdUQ9E2ZrhJ7of8jtU5FK_b/exec';
+var gcEmailCaptured = (localStorage.getItem('gc_email')||'');
+var gcSaveCount = +(localStorage.getItem('gc_saves')||0);
+
+function gcSendToSheet(email, source) {
+  var r;
+  try { r = calcTiers(); } catch(e) { r = {}; }
+  var payload = {
+    email: email,
+    model: S.modelLabel || '',
+    gpu: S.gpuName || '',
+    gpus: r.t1 || '',
+    users: S.users || '',
+    ctx: S.ctx || '',
+    cloudCost: Math.round((r.t1||0)*(S.awsHr||3)*720*12*(S.amortYrs||5)),
+    onpremCost: Math.round((r.t1||0)*(S.onpremYr||25000)),
+    source: source || 'save'
+  };
+  fetch(GC_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  }).catch(function(){});
+  localStorage.setItem('gc_email', email);
+  gcEmailCaptured = email;
+}
+
+function gcShowSaveModal(onSuccess) {
+  var ov = document.createElement('div');
+  ov.className = 'gc-overlay';
+  ov.id = 'gc-overlay';
+  ov.innerHTML = '<div class="gc-modal">'
+    +'<div class="gc-title">&#128190; Save results permanently</div>'
+    +'<div class="gc-sub">Your results disappear when you close this tab.<br>Enter your email to save them across sessions. No spam &mdash; ever.</div>'
+    +'<input class="gc-inp" id="gc-email-inp" type="email" placeholder="you@company.com" autocomplete="email">'
+    +'<button class="gc-btn" onclick="gcSubmitSave()">Save permanently →</button>'
+    +'<span class="gc-skip" onclick="gcCloseSave(false)">Skip &mdash; save to this browser only</span>'
+    +'</div>';
+  document.body.appendChild(ov);
+  setTimeout(function(){var i=document.getElementById('gc-email-inp');if(i)i.focus();},100);
+  ov._onSuccess = onSuccess;
+}
+
+function gcSubmitSave() {
+  var inp = document.getElementById('gc-email-inp');
+  if (!inp) return;
+  var email = inp.value.trim();
+  if (!email || email.indexOf('@') < 0) {
+    inp.style.borderColor='#E24B4A'; inp.focus(); return;
+  }
+  gcSendToSheet(email, 'save_permanently');
+  gcCloseSave(true);
+}
+
+function gcCloseSave(success) {
+  var ov = document.getElementById('gc-overlay');
+  if (ov) {
+    if (ov._onSuccess && success) ov._onSuccess();
+    document.body.removeChild(ov);
+  }
+  if (!success) {
+    // They skipped — just proceed
+    var fn = window._gcPendingSave;
+    if (fn) { fn(); window._gcPendingSave=null; }
+  }
+}
+
+function gcShowBreakdownModal(onUnlock) {
+  var ov = document.createElement('div');
+  ov.className = 'gc-overlay';
+  ov.id = 'gc-overlay';
+  ov.innerHTML = '<div class="gc-modal">'
+    +'<div class="gc-title">&#128202; See the full engineering breakdown</div>'
+    +'<div class="gc-sub">KV pool &middot; TP selection &middot; headroom table &middot; vLLM config.<br>Enter your work email to unlock &mdash; free, always.</div>'
+    +'<input class="gc-inp" id="gc-email-inp" type="email" placeholder="you@company.com" autocomplete="email">'
+    +'<button class="gc-btn" onclick="gcSubmitBreakdown()">Unlock breakdown →</button>'
+    +'<span class="gc-skip" onclick="gcCloseBreakdown()">No thanks, just show the numbers</span>'
+    +'</div>';
+  document.body.appendChild(ov);
+  setTimeout(function(){var i=document.getElementById('gc-email-inp');if(i)i.focus();},100);
+  ov._onUnlock = onUnlock;
+}
+
+function gcSubmitBreakdown() {
+  var inp = document.getElementById('gc-email-inp');
+  if (!inp) return;
+  var email = inp.value.trim();
+  if (!email || email.indexOf('@') < 0) {
+    inp.style.borderColor='#E24B4A'; inp.focus(); return;
+  }
+  gcSendToSheet(email, 'unlock_breakdown');
+  var ov = document.getElementById('gc-overlay');
+  if (ov) { if(ov._onUnlock) ov._onUnlock(); document.body.removeChild(ov); }
+}
+
+function gcCloseBreakdown() {
+  var ov = document.getElementById('gc-overlay');
+  if (ov) { if(ov._onUnlock) ov._onUnlock(); document.body.removeChild(ov); }
+}
+
+// Intercept saveResult to show modal on 2nd save if no email yet
+var _origSaveResult = saveResult;
+saveResult = function() {
+  gcSaveCount++;
+  localStorage.setItem('gc_saves', gcSaveCount);
+  if (gcSaveCount >= 2 && !gcEmailCaptured) {
+    window._gcPendingSave = _origSaveResult;
+    gcShowSaveModal(function(){ _origSaveResult(); });
+  } else {
+    _origSaveResult();
+  }
+};
+
+function gcUnlockBreakdown() {
+  if (gcEmailCaptured) {
+    var b = document.getElementById('gc-lock-badge');
+    if (b) b.style.display = 'none';
+    return;
+  }
+  gcShowBreakdownModal(function() {
+    var b = document.getElementById('gc-lock-badge');
+    if (b) b.style.display = 'none';
+  });
 }
 
 </script>
