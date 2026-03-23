@@ -1169,6 +1169,10 @@ tr.selected td{background:rgba(37,99,235,.04)}
           <div class="wtitle">TP OPTIMISED FOR KV CAPACITY</div>
           <span id="w-kvtp-body"></span>
         </div>
+        <div class="wbox red" id="w-kvfit" style="display:none">
+          <div class="wtitle">CONTEXT TOO LONG — DOES NOT FIT</div>
+          <span id="w-kvfit-body"></span>
+        </div>
 
         <!-- HEADLINE -->
         <div class="rcard">
@@ -1658,7 +1662,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v6.8</span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v6.9</span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank"
       style="font-family:var(--mono);font-size:10px;color:var(--text3);text-decoration:none">&#9733; GitHub</a>
     <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">
@@ -2366,15 +2370,17 @@ function calcTiers() {
 
   // ── TIERS ─────────────────────────────────────────────────────────────
   // t1: baseline — one replica handles as many users as KV allows
-  var upr  = Math.max(1, Math.floor(aPA / Math.max(0.001, kvB)));
-  var reps = Math.ceil(S.users / upr);
-  var t1   = reps * tpMin;
+  var upr  = Math.floor(aPA / Math.max(0.001, kvB));
+  var doesNotFit = (upr <= 0);  // KV/user exceeds available pool
+  var upr_safe = Math.max(1, upr); // for downstream math only
+  var reps = Math.ceil(S.users / upr_safe);
+  var t1   = doesNotFit ? 0 : reps * tpMin;
 
   var upr2 = Math.max(1, Math.floor(aPA / Math.max(0.001, kvC)));
-  var t2   = Math.min(t1, Math.ceil(S.users / upr2) * tpMin);
+  var t2   = doesNotFit ? 0 : Math.min(t1, Math.ceil(S.users / upr2) * tpMin);
 
   var upr3 = Math.max(1, Math.floor(aPA / Math.max(0.001, kvF)));
-  var t3   = Math.min(t2, Math.ceil(S.users / upr3) * tpMin);
+  var t3   = doesNotFit ? 0 : Math.min(t2, Math.ceil(S.users / upr3) * tpMin);
 
   // ── LLM-D P/D DISAGGREGATION ──────────────────────────────────────────
   // Same inputs: concurrent users, context, GPU type.
@@ -2453,7 +2459,7 @@ function calcTiers() {
   var kvTpOpt = tpMin > tpWeights; // TP was bumped beyond weights minimum for KV capacity
 
   return { t1:t1, t2:t2, t3:t3, t4:t4, tpMin:tpMin, tpWeights:tpWeights, wt:wt, ohGB:ohGB, aPA:aPA,
-    upr:upr, reps:reps, kvB:kvB, kvBpt:kvBpt, llmdOk:llmdOk,
+    upr:upr_safe, doesNotFit:doesNotFit, reps:reps, kvB:kvB, kvBpt:kvBpt, llmdOk:llmdOk,
     dec:dec, pre:pre, activeDecodeUsers:activeDecodeUsers,
     nodes:nodes, idle:idle, gpn:gpn, headroom:headroom, exact:exact,
     usable:usable, prefill:prefill, ttft:ttft, kvTpOpt:kvTpOpt };
@@ -2525,6 +2531,22 @@ function _renderResult() {
   setWarn('w-prefill', r.prefill,
     S.ctx + 'K context + ' + S.model + 'B model. Est ~' + r.ttft + 's TTFT on H100-class. '
     + 'Use chunked prefill (vLLM) or dedicated prefill pool (llm-d).');
+  // doesNotFit warning — KV/user exceeds available pool
+  if (r.doesNotFit) {
+    var maxCtxFit = Math.floor(r.aPA / (r.kvBpt || 0.001));
+    var el_kvfit = el('w-kvfit');
+    if (el_kvfit) {
+      el_kvfit.style.display = '';
+      el('w-kvfit-body').textContent =
+        'KV per user (' + r.kvB.toFixed(1) + ' GB) exceeds available pool (' + r.aPA.toFixed(1) + ' GB). '
+        + 'This context length does not fit on ' + S.gpuName + ' with this model. '
+        + 'Max feasible context: ~' + maxCtxFit + 'K tokens. '
+        + 'Try reducing context, using FP8 KV, or switching to H200/B200.';
+    }
+  } else {
+    var el_kvfit2 = el('w-kvfit');
+    if (el_kvfit2) el_kvfit2.style.display = 'none';
+  }
   setWarn('w-kvtp', r.kvTpOpt,
     'TP=' + r.tpMin + ' selected to maximise KV pool, not just fit weights (weights need TP=' + r.tpWeights + '). '
     + r.tpMin + 'x GPUs per replica gives ' + r.aPA.toFixed(0) + 'GB KV vs ' + ((r.usable*r.tpWeights-r.wt)*0.95).toFixed(0) + 'GB at TP=' + r.tpWeights + '. '
@@ -2532,11 +2554,19 @@ function _renderResult() {
 
   // Headline
   el('exact-badge').style.display = r.exact ? '' : 'none';
-  el('r-bignum').textContent = r.t1;
-  el('r-lbl').textContent = S.gpuName + ' GPU' + (r.t1!==1?'s':'') + ' to get started'
-    + (r.tpMin > 1 ? ' \u00b7 ' + r.tpMin + 'x tensor parallel' : '');
-  el('r-ctx').textContent = S.modelLabel + ' \u00b7 ' + S.users + ' users \u00b7 '
-    + S.gpuName + ' ' + S.gpu + 'GB \u00b7 ' + S.ctx + 'K ctx \u00b7 TP=' + r.tpMin;
+  if (r.doesNotFit) {
+    el('r-bignum').textContent = '!';
+    el('r-bignum').style.color = '#E24B4A';
+    el('r-lbl').textContent = 'Context does not fit — see warning above';
+    el('r-ctx').textContent = 'KV/user (' + r.kvB.toFixed(1) + ' GB) > KV pool (' + r.aPA.toFixed(1) + ' GB)';
+  } else {
+    el('r-bignum').textContent = r.t1;
+    el('r-bignum').style.color = '';
+    el('r-lbl').textContent = S.gpuName + ' GPU' + (r.t1!==1?'s':'') + ' to get started'
+      + (r.tpMin > 1 ? ' · ' + r.tpMin + 'x tensor parallel' : '');
+    el('r-ctx').textContent = S.modelLabel + ' · ' + S.users + ' users · '
+      + S.gpuName + ' ' + S.gpu + 'GB · ' + S.ctx + 'K ctx · TP=' + r.tpMin;
+  }
 
   // KV metrics
   el('kv-wt').textContent = r.wt + ' GB';
