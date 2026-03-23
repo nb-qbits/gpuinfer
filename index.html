@@ -1646,7 +1646,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v6.2</span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v6.3</span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank"
       style="font-family:var(--mono);font-size:10px;color:var(--text3);text-decoration:none">&#9733; GitHub</a>
     <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">
@@ -1696,6 +1696,11 @@ tr.selected td{background:rgba(37,99,235,.04)}
             <div style="flex:1;font-size:12px;color:var(--text2)">GPU purchase price</div>
             <span id="hb-disp-price" onclick="hbEdit('price')" style="font-size:12px;font-weight:600;padding:2px 8px;border:1px dashed var(--blue);border-radius:4px;color:var(--blue);cursor:pointer;font-family:var(--mono)">$25K</span>
             <input id="hb-inp-price" type="number" min="1000" max="200000" step="1000" value="25000" onblur="hbEndEdit('price')" onkeydown="if(event.key==='Enter')hbEndEdit('price')" style="display:none;width:70px;padding:2px 6px;font-size:12px;border:1px solid var(--blue);border-radius:4px;background:var(--bg);color:var(--text);font-family:var(--mono)">
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+            <div style="flex:1;font-size:12px;color:var(--text2)">Sunk cost (GPUs already owned)</div>
+            <span id="hb-disp-sunk" onclick="hbEdit('sunk')" style="font-size:12px;font-weight:600;padding:2px 8px;border:1px dashed #854F0B;border-radius:4px;color:#854F0B;cursor:pointer;font-family:var(--mono)">$0</span>
+            <input id="hb-inp-sunk" type="number" min="0" max="100000000" step="10000" value="0" onblur="hbEndEdit('sunk')" onkeydown="if(event.key==='Enter')hbEndEdit('sunk')" style="display:none;width:80px;padding:2px 6px;font-size:12px;border:1px solid #854F0B;border-radius:4px;background:var(--bg);color:var(--text);font-family:var(--mono)">
           </div>
           <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
             <div style="flex:1;font-size:12px;color:var(--text2)">Peak utilisation (affects on-prem sizing)</div>
@@ -1781,7 +1786,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
         </div>
 
         <!-- 3-way comparison -->
-        <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:8px">5-year cost comparison</div>
+        <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:8px" id="hb-period-lbl">5-year cost comparison</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
           <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
             <div style="font-size:10px;color:var(--text3);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Pure cloud</div>
@@ -1802,7 +1807,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
 
         <!-- Bars -->
         <div style="margin-bottom:6px">
-          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px"><span>Pure cloud 5yr</span><span id="hb-bl-cloud">—</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px"><span id="hb-cloud-lbl">Pure cloud 5yr</span><span id="hb-bl-cloud">—</span></div>
           <div style="height:22px;background:var(--bg3);border-radius:4px;overflow:hidden"><div id="hb-bar-cloud" style="width:100%;height:100%;background:#F09595;border-radius:4px;display:flex;align-items:center;padding-left:8px;font-size:11px;font-weight:600;color:#791F1F">—</div></div>
         </div>
         <div style="margin-bottom:6px">
@@ -1837,7 +1842,25 @@ tr.selected td{background:rgba(37,99,235,.04)}
         </div>
 
         <!-- Insight -->
-        <div id="hb-insight" style="border-left:3px solid var(--blue);padding:10px 14px;background:var(--bdim);border-radius:0 8px 8px 0;font-size:12px;color:var(--text2);line-height:1.7">—</div>
+        <div id="hb-sunk-panel" style="display:none;background:#FAEEDA22;border:1px solid #FAC775;border-radius:10px;padding:12px 14px;margin-bottom:12px">
+          <div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#854F0B;margin-bottom:8px">Sunk cost analysis</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div>
+              <div style="font-size:11px;color:var(--text2);margin-bottom:2px">Already spent on hardware</div>
+              <div style="font-size:22px;font-weight:700;color:#854F0B" id="hb-sunk-paid">$0</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:11px;color:var(--text2);margin-bottom:2px">Future cloud spend on top</div>
+              <div style="font-size:22px;font-weight:700;color:#E24B4A" id="hb-sunk-future">$0</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:11px;color:var(--text2);margin-bottom:2px">Total committed spend</div>
+              <div style="font-size:22px;font-weight:700;color:#A32D2D" id="hb-sunk-total">$0</div>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--text2);line-height:1.6" id="hb-sunk-msg">—</div>
+        </div>
+                <div id="hb-insight" style="border-left:3px solid var(--blue);padding:10px 14px;background:var(--bdim);border-radius:0 8px 8px 0;font-size:12px;color:var(--text2);line-height:1.7">—</div>
 
       </div><!-- /col-r -->
     </div><!-- /row -->
@@ -3969,7 +3992,7 @@ function expRenderTable(){
 
 // ===== HYBRID SAVINGS TAB =====
 var HB = {
-  gpus: 8, have: 16, price: 25000,
+  gpus: 8, have: 16, price: 25000, sunk: 0,
   extraCosts: [],
   cloudRates: [
     {p:'GCP',       g:'H100 SXM', r:3.00, sel:true},
@@ -4004,6 +4027,7 @@ function hbEndEdit(k){
   if(k==='gpus'&&v>0) HB.gpus=v;
   if(k==='have'&&v>0) HB.have=v;
   if(k==='price'&&v>0) HB.price=v;
+  if(k==='sunk'&&v>=0) HB.sunk=v;
   inp.style.display='none';
   document.getElementById('hb-disp-'+k).style.display='';
   hbRecalc();
@@ -4089,21 +4113,32 @@ function hbRecalc(){
   var clGpus = Math.max(0,gpus-opGpus);
   var sp     = Math.round(split*100);
 
-  // Cloud 5yr
+  var sunk = HB.sunk;
+
+  // Cloud Nyr (uses amort as comparison period)
   var cloudMo=gpus*hr*720;
   var cloudTot=0,mo=cloudMo;
-  for(var y=0;y<5;y++){cloudTot+=mo*12;mo*=1.03;}
-  cloudTot+=extraYr*5;
+  for(var y=0;y<amort;y++){cloudTot+=mo*12;mo*=1.03;}
+  cloudTot+=extraYr*amort;
 
-  // On-prem 5yr
-  var onpremTot=gpus*price+extraYr*5;
+  // On-prem (hardware only — amort doesn't change purchase price)
+  var onpremTot=gpus*price+extraYr*amort;
 
-  // Hybrid 5yr
+  // Hybrid Nyr
   var opHw=opGpus*price;
-  var clBurstMo=clGpus*hr*720; // cloud GPUs billed 24/7 regardless of utilisation
+  var clBurstMo=clGpus*hr*720; // cloud GPUs billed 24/7
   var clBurst5=0,bmo=clBurstMo;
-  for(var y2=0;y2<5;y2++){clBurst5+=bmo*12;bmo*=1.03;}
-  var hybridTot=opHw+clBurst5+extraYr*5;
+  for(var y2=0;y2<amort;y2++){clBurst5+=bmo*12;bmo*=1.03;}
+  var hybridTot=opHw+clBurst5+extraYr*amort;
+
+  // Sunk cost: money already spent on GPUs sitting idle
+  // Future cloud spend they'll still pay on top of sunk hardware
+  var sunkFutureCloud = sunk>0 ? (function(){
+    var fc=0,fm=gpus*hr*720;
+    for(var ys=0;ys<amort;ys++){fc+=fm*12;fm*=1.03;}
+    return fc;
+  })() : 0;
+  var sunkTotal = sunk + sunkFutureCloud;
 
   var be=opGpus>0?Math.ceil(opHw/(opGpus*hr*720)):0;
 
@@ -4156,11 +4191,31 @@ function hbRecalc(){
   document.getElementById('hb-m-clgpus').textContent = clGpus;
   document.getElementById('hb-m-be').textContent     = be>0?'month '+be:'—';
 
+  // Update period label
+  document.getElementById('hb-period-lbl').textContent = amort+'-year cost comparison';
+  document.getElementById('hb-cloud-lbl').textContent  = 'Pure cloud '+amort+'yr';
+
+  // Sunk cost panel
+  document.getElementById('hb-disp-sunk').textContent = sunk>0?hbFmt$(sunk):'$0';
+  if(sunk>0){
+    document.getElementById('hb-sunk-panel').style.display='';
+    document.getElementById('hb-sunk-paid').textContent   = hbFmt$(sunk);
+    document.getElementById('hb-sunk-future').textContent = hbFmt$(sunkFutureCloud);
+    document.getElementById('hb-sunk-total').textContent  = hbFmt$(sunkTotal);
+    var sunkMsg = 'You’ve already committed '+hbFmt$(sunk)+' to hardware. '
+      + 'Continuing to use cloud will cost an additional '+hbFmt$(sunkFutureCloud)+' over '+amort+' years. '
+      + 'Total committed: '+hbFmt$(sunkTotal)+'. '
+      + 'Switching those idle GPUs to serve inference would reduce future cloud spend by up to '+hbFmt$(sunkFutureCloud)+'.';
+    document.getElementById('hb-sunk-msg').textContent = sunkMsg;
+  } else {
+    document.getElementById('hb-sunk-panel').style.display='none';
+  }
+
   // Insight
   var cheap=hbCheapest();
   var ins='Own <strong>'+opGpus+' GPU'+(opGpus!==1?'s':'')+' on-prem</strong> for base load';
   if(clGpus>0) ins+=', rent <strong>'+clGpus+' GPU'+(clGpus!==1?'s':'')+' on '+cheap.p+'</strong> ($'+cheap.r.toFixed(2)+'/hr) for burst';
-  ins+='. You save <strong>'+hbFmt$(cloudTot-hybridTot)+'</strong> vs pure cloud over 5 years';
+  ins+='. You save <strong>'+hbFmt$(cloudTot-hybridTot)+'</strong> vs pure cloud over '+amort+' years';
   if(be>0) ins+='. On-prem hardware pays off at <strong>Month '+be+'</strong>.';
   var underGpus=Math.max(0,gpus-have);
   if(extraGpus>0) ins+=' <span style="color:#E24B4A">You’re over-provisioned by '+extraGpus+' GPUs — right-sizing saves an extra <strong>'+hbFmt$(wasteYr)+'/yr</strong>.</span>';
