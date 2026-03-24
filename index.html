@@ -1662,7 +1662,7 @@ tr.selected td{background:rgba(37,99,235,.04)}
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v6.9</span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">real-time inference &middot; v7.0</span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank"
       style="font-family:var(--mono);font-size:10px;color:var(--text3);text-decoration:none">&#9733; GitHub</a>
     <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">
@@ -2048,6 +2048,11 @@ var MODEL_CONFIGS = {
   // NVIDIA
   'nvidia/Llama-3.1-Nemotron-70B-Instruct-HF':{params:70,layers:80,kvHeads:8,headDim:128,dtype:'bfloat16',maxCtx:131072,attn:'gqa'},
   'nvidia/Mistral-NeMo-Minitron-8B-Instruct':{params:8,layers:32,kvHeads:8,headDim:128,dtype:'bfloat16',maxCtx:131072,attn:'gqa'},
+  // RedHatAI Qwen3 FP8-dynamic
+  'RedHatAI/Qwen3-8B-FP8-dynamic':  {params:8,  layers:36, kvHeads:8, headDim:128, dtype:'fp8', maxCtx:131072, attn:'gqa'},
+  'RedHatAI/Qwen3-14B-FP8-dynamic': {params:14, layers:48, kvHeads:8, headDim:128, dtype:'fp8', maxCtx:131072, attn:'gqa'},
+  'RedHatAI/Qwen3-32B-FP8-dynamic': {params:32, layers:64, kvHeads:8, headDim:128, dtype:'fp8', maxCtx:131072, attn:'gqa'},
+  'RedHatAI/Qwen3-72B-FP8-dynamic': {params:72, layers:80, kvHeads:8, headDim:128, dtype:'fp8', maxCtx:131072, attn:'gqa'},
 };
 
 function applyModelConfig(id, cfg) {
@@ -2203,6 +2208,13 @@ var AC_MODELS = [
   {id:'nvidia/Llama-3.3-Nemotron-Super-49B-v1',     cat:'nvidia', badge:'nv', params:49},
   {id:'nvidia/Mistral-NeMo-Minitron-8B-Instruct',   cat:'nvidia', badge:'nv', params:8},
   {id:'nvidia/Llama-3.2-NeMo-3B-Instruct',          cat:'nvidia', badge:'nv', params:3},
+  {id:'RedHatAI/Qwen3-8B-FP8-dynamic',   cat:'redhat', badge:'rh', params:8,  q:'FP8-dyn'},
+  {id:'RedHatAI/Qwen3-14B-FP8-dynamic',  cat:'redhat', badge:'rh', params:14, q:'FP8-dyn'},
+  {id:'RedHatAI/Qwen3-32B-FP8-dynamic',  cat:'redhat', badge:'rh', params:32, q:'FP8-dyn'},
+  {id:'RedHatAI/Qwen3-72B-FP8-dynamic',  cat:'redhat', badge:'rh', params:72, q:'FP8-dyn'},
+  {id:'Qwen/Qwen3-8B',  cat:'qwen', badge:'hf', params:8},
+  {id:'Qwen/Qwen3-14B', cat:'qwen', badge:'hf', params:14},
+  {id:'Qwen/Qwen3-32B', cat:'qwen', badge:'hf', params:32},
   {id:'meta-llama/Llama-3.1-8B-Instruct',   cat:'meta', badge:'hf', params:8},
   {id:'meta-llama/Llama-3.1-70B-Instruct',  cat:'meta', badge:'hf', params:70},
   {id:'meta-llama/Llama-3.1-405B-Instruct', cat:'meta', badge:'hf', params:405},
@@ -2254,12 +2266,24 @@ function onACInput(val) {
 }
 
 function searchHFLive(q) {
-  fetch('https://huggingface.co/api/quicksearch?q='+encodeURIComponent(q)+'&type=model&limit=6')
-    .then(function(r){return r.json();})
-    .then(function(d){
-      acVis=(d.models||[]).map(function(m){return{id:m.id,cat:'other',badge:'hf',params:null};});
-      renderAC(acVis);
-    }).catch(function(){});
+  // Direct HF API is CORS-blocked in browsers — use worker proxy instead.
+  // Worker must handle /?search=<query> or fall back gracefully.
+  var workerReady = HF_PROXY.indexOf('YOUR-NAME') === -1;
+  if (!workerReady) return;
+  fetch(HF_PROXY + '/?search=' + encodeURIComponent(q) + '&limit=8')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      // Worker may return array of ids, or {models:[...]} like HF, or error
+      var models = Array.isArray(d) ? d : (d.models || []);
+      var hits = models.slice(0, 8).map(function(m) {
+        var id = typeof m === 'string' ? m : (m.id || m.modelId || '');
+        return { id: id, cat: 'other', badge: 'hf', params: null };
+      }).filter(function(m) { return m.id; });
+      if (hits.length) { acVis = hits; renderAC(acVis); }
+    })
+    .catch(function() {
+      // Worker doesn't support search endpoint yet — silently skip
+    });
 }
 
 function renderAC(items) {
