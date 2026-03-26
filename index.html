@@ -810,6 +810,7 @@ button{font-family:var(--sans);cursor:pointer}
     <button class="nav-tab" onclick="nav('explorer')">GPU Explorer</button>
     <button class="nav-tab" onclick="nav('saved')">&#128204; Saved</button>
     <button class="nav-tab" onclick="nav('hybrid')">&#128200; Hybrid savings</button>
+    <button class="nav-tab" id="nav-fleet" onclick="nav('fleet')">&#9776; Fleet routing</button>
   </div>
   <div class="nav-right">
     <button class="dark-btn" onclick="toggleDark()">
@@ -1242,88 +1243,6 @@ button{font-family:var(--sans);cursor:pointer}
       </div>
 
 
-      <!-- MODE TOGGLE -->
-      <div class="mode-toggle" id="mode-toggle">
-        <button class="mode-btn active" id="mode-single" onclick="setAppMode('single')">&#9632; Single model</button>
-        <button class="mode-btn" id="mode-fleet" onclick="setAppMode('fleet')">&#9776; Fleet / semantic routing</button>
-      </div>
-
-      <!-- FLEET MODE SECTION -->
-      <div class="fleet-section" id="fleet-section">
-
-        <!-- Fleet total users -->
-        <div class="fleet-total-users">
-          <span class="fleet-total-label">Total concurrent users</span>
-          <input class="fleet-total-input" type="number" id="fleet-total-users" value="1000" min="1" oninput="SF.totalUsers=+this.value;calcFleet()">
-          <span class="fleet-total-derived" id="fleet-total-derived">1M tokens/day est.</span>
-        </div>
-
-        <!-- Traffic assignment status -->
-        <div class="fleet-traffic-total fleet-traffic-ok" id="fleet-traffic-status">✓ 100% traffic assigned</div>
-
-        <!-- Tier list -->
-        <div id="fleet-tiers-list"></div>
-        <button class="fleet-add-tier" onclick="addFleetTier()">+ Add routing tier</button>
-
-        <!-- Fleet outcome cards -->
-        <div class="fleet-hero-box" id="fleet-hero-box">
-          <div class="fhc"><div class="fhc-val" id="fhc-gpus">—</div><div class="fhc-label">Total GPUs</div></div>
-          <div class="fhc"><div class="fhc-val" id="fhc-cost">—</div><div class="fhc-label">Fleet cost/yr</div></div>
-          <div class="fhc"><div class="fhc-val" id="fhc-tiers">3</div><div class="fhc-label">Active tiers</div></div>
-          <div class="fhc"><div class="fhc-val savings" id="fhc-savings">—</div><div class="fhc-label">Saves vs naive</div></div>
-        </div>
-
-        <!-- Per-tier breakdown table -->
-        <div class="fleet-breakdown">
-          <div class="fleet-breakdown-title">Per-tier breakdown</div>
-          <table class="fleet-breakdown-table" id="fleet-breakdown-table">
-            <tr><th>Tier</th><th>Model</th><th>Traffic</th><th>Users</th><th>GPUs</th><th>Cost/yr</th><th>vs API</th></tr>
-          </table>
-        </div>
-
-        <!-- Traffic flow visual -->
-        <div class="traffic-flow">
-          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:10px">Traffic flow</div>
-          <div id="fleet-traffic-flow"></div>
-        </div>
-
-        <!-- API pricing table -->
-        <div class="api-pricing">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4)">API pricing (editable)</div>
-            <button class="add-prov" onclick="addApiProvider()">+ add provider</button>
-          </div>
-          <table class="api-pricing-table" id="api-pricing-table"></table>
-          <div style="font-size:10px;color:var(--text4);margin-top:6px">Prices per 1M tokens. Updated March 2026 — edit if changed.</div>
-        </div>
-
-        <!-- Fleet cost comparison (4 columns) -->
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:8px">5-year cost comparison</div>
-        <div class="fleet-cost-compare" id="fleet-cost-compare"></div>
-
-        <!-- Routing ROI -->
-        <div class="routing-roi" id="routing-roi">
-          <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:2px">Routing economics</div>
-          <div style="font-size:12px;color:var(--text3)">Is it worth building a semantic router?</div>
-          <div class="roi-grid" id="roi-grid"></div>
-          <div class="roi-eng-cost">
-            <span class="roi-eng-label">Engineering cost to build router:</span>
-            <span style="font-family:var(--mono);font-size:12px;margin:0 4px">$</span>
-            <input class="roi-eng-input" type="number" id="roi-eng-cost" value="50000" oninput="SF.engCost=+this.value;calcFleet()">
-            <span style="font-size:11px;color:var(--text4)">one-time</span>
-          </div>
-        </div>
-
-        <!-- Fleet save + validate -->
-        <div style="display:flex;gap:8px;margin-bottom:16px">
-          <button class="btn btn-primary btn-sm" onclick="saveFleet()">&#128204; Save fleet config</button>
-          <button class="btn btn-sm" onclick="showFleetValidateModal()">&#129302; Validate with AI</button>
-        </div>
-
-      </div><!-- /fleet-section -->
-
-      <!-- SINGLE MODE SECTION (existing content wrapped) -->
-      <div class="single-section" id="single-section">
       <!-- Hero -->
       <div class="hero-box">
         <div class="hero-num" id="hero-num">2</div>
@@ -1575,7 +1494,6 @@ button{font-family:var(--sans);cursor:pointer}
 
 
 
-      </div><!-- /single-section -->
 
       <!-- Lead capture -->
       <div class="lead-box">
@@ -1959,7 +1877,7 @@ function navTo(page,fromHash){
   var el=document.getElementById('page-'+page);
   if(el) el.classList.add('active');
   var tabs=document.querySelectorAll('.nav-tab');
-  var map={home:0,advanced:1,explorer:3,saved:4,hybrid:5};
+  var map={home:0,advanced:1,explorer:3,saved:4,hybrid:5,fleet:6};
   if(map[page]!==undefined && tabs[map[page]]) tabs[map[page]].classList.add('active');
   if(!fromHash) location.hash='#'+page;
   if(page==='advanced') calc();
@@ -1967,6 +1885,7 @@ function navTo(page,fromHash){
   if(page==='explorer') loadExplorer(); // lazy — Chart.js loads only here
   if(page==='saved') renderSaved();
   if(page==='admin'){var tok=localStorage.getItem('admin_token');if(tok) checkAdminTokenValue(tok);}
+  if(page==='fleet'){renderFleetPage();}
   T.fire('page_view',{page});
 }
 
@@ -3188,7 +3107,7 @@ var SF = {
   engCost: 50000,
   tiers: [
     {name:'Simple queries',model:'Llama 3.1 8B',params:8,layers:32,kvHeads:8,headDim:128,attn:'gqa',trafficPct:60,avgInputTok:200,avgOutputTok:100,ctx:4,gpuName:'H100',gpuVram:80,prec:'fp16',tp:1,apiModel:'Claude 3.5 Haiku',open:false},
-    {name:'Standard queries',model:'Llama 3.1 70B',params:70,layers:80,kvHeads:8,headDim:128,attn:'gqa',trafficPct:30,avgInputTok:800,avgOutputTok:400,ctx:16,gpuName:'H100',gpuVram:80,prec:'fp16',tp:4,apiModel:'GPT-4o',open:false},
+    {name:'Standard queries',model:'Llama 3.1 70B',params:70,layers:80,kvHeads:8,headDim:128,attn:'gqa',trafficPct:30,avgInputTok:800,avgOutputTok:400,ctx:16,gpuName:'H100',gpuVram:80,prec:'fp16',tp:4,apiModel:'Claude 3.7 Sonnet',open:false},
     {name:'Complex reasoning',model:'Qwen 2.5 72B',params:72,layers:80,kvHeads:8,headDim:128,attn:'gqa',trafficPct:10,avgInputTok:2000,avgOutputTok:800,ctx:32,gpuName:'H100',gpuVram:80,prec:'fp16',tp:4,apiModel:'GPT-4o',open:false}
   ]
 };
@@ -3223,11 +3142,8 @@ var appMode='single';
 
 function setAppMode(mode){
   appMode=mode;
-  document.getElementById('mode-single').classList.toggle('active',mode==='single');
-  document.getElementById('mode-fleet').classList.toggle('active',mode==='fleet');
-  document.getElementById('fleet-section').classList.toggle('active',mode==='fleet');
-  document.getElementById('single-section').classList.toggle('hidden',mode==='fleet');
-  if(mode==='fleet'){renderFleetTiers();renderApiPricingTable();calcFleet();T.fire('fleet_mode_open');}
+  // Fleet is now a separate page — this function kept for compatibility
+  if(mode==='fleet') nav('fleet');
 }
 
 function addFleetTier(){
@@ -3325,6 +3241,11 @@ function calcFleet(){
   if(el('fhc-cost'))el('fhc-cost').textContent=fmtK(totalCostYr);
   if(el('fhc-tiers'))el('fhc-tiers').textContent=SF.tiers.length;
   if(el('fhc-savings')){el('fhc-savings').textContent=savingsYr>0?fmtK(savingsYr):'$0';el('fhc-savings').className='fhc-val '+(savingsYr>0?'savings':'');}
+  // Fleet page specific cards
+  if(el('fhc-api-cost'))el('fhc-api-cost').textContent=fmtK(totalApiCostYr);
+  if(el('fhc-self-cost')){el('fhc-self-cost').textContent=fmtK(totalCostYr);el('fhc-self-cost').style.color='var(--green)';}
+  // Config summary
+  if(el('fleet-config-summary'))el('fleet-config-summary').textContent=SF.tiers.length+' tiers · '+SF.totalUsers.toLocaleString()+' users';
   var tokPerDay=SF.tiers.reduce(function(s,t){return s+Math.round(SF.totalUsers*(t.trafficPct/100)*100)*(t.avgInputTok+t.avgOutputTok);},0);
   if(el('fleet-total-derived'))el('fleet-total-derived').textContent=formatTokensPerDay(tokPerDay)+' tokens/day';
   renderFleetBreakdown(results,totalGPUs,totalCostYr);
@@ -3332,6 +3253,12 @@ function calcFleet(){
   renderFleetCostCompare(totalCostYr,naiveCostYr,totalApiCostYr,results);
   renderRoutingROI(savingsYr,totalGPUs,naiveGPUs,totalCostYr,naiveCostYr);
   updateTierSummaries(results);
+}
+
+function renderFleetPage(){
+  renderFleetTiers();
+  renderApiPricingTable();
+  calcFleet();
 }
 
 function formatTokensPerDay(n){
@@ -3621,8 +3548,7 @@ function setAppMode(mode) {
   appMode = mode;
   document.getElementById('mode-single').classList.toggle('active', mode==='single');
   document.getElementById('mode-fleet').classList.toggle('active', mode==='fleet');
-  document.getElementById('fleet-section').classList.toggle('active', mode==='fleet');
-  document.getElementById('single-section').classList.toggle('hidden', mode==='fleet');
+  // fleet is now a separate page
   if (mode==='fleet') {
     renderFleetTiers();
     renderApiPricingTable();
@@ -4078,5 +4004,102 @@ function saveFleet() {
 
 
 </script>
+
+<!-- ===== FLEET PAGE ===== -->
+<div id="page-fleet" class="page">
+  <div style="max-width:960px;margin:0 auto;padding:24px 20px">
+
+    <!-- Page header -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+      <div>
+        <h1 style="font-size:24px;font-weight:700;margin-bottom:4px">Fleet sizing &amp; routing economics</h1>
+        <p style="font-size:13px;color:var(--text3)">Model your current API spend and see when self-hosting pays off</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" onclick="showFleetValidateModal()">&#129302; Validate with AI</button>
+        <button class="btn btn-primary btn-sm" onclick="saveFleet()">&#128204; Save config</button>
+      </div>
+    </div>
+
+    <!-- OUTCOME SECTION — result first ──────────────────────────────────────-->
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:18px 20px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:12px">Your current API spend</div>
+      <div class="fleet-hero-box" id="fleet-hero-box" style="grid-template-columns:repeat(4,1fr);border:none;padding:0;margin:0;background:transparent">
+        <div class="fhc" style="border:1px solid var(--border);border-radius:var(--r);padding:12px"><div class="fhc-val" id="fhc-api-cost">—</div><div class="fhc-label">API cost/yr now</div></div>
+        <div class="fhc" style="border:1px solid var(--border);border-radius:var(--r);padding:12px"><div class="fhc-val" id="fhc-self-cost">—</div><div class="fhc-label">Self-hosted cost/yr</div></div>
+        <div class="fhc" style="border:1px solid var(--border);border-radius:var(--r);padding:12px"><div class="fhc-val" id="fhc-gpus" style="color:var(--blue)">—</div><div class="fhc-label">GPUs needed</div></div>
+        <div class="fhc" style="border:1px solid var(--border);border-radius:var(--r);padding:12px"><div class="fhc-val savings" id="fhc-savings">—</div><div class="fhc-label">Annual savings</div></div>
+      </div>
+    </div>
+
+    <!-- ROUTING ROI — verdict ───────────────────────────────────────────────-->
+    <div class="routing-roi" id="routing-roi" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--green)">Should you self-host?</div>
+          <div style="font-size:12px;color:var(--text3)">Based on your current query volume and API spend</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)">
+          Engineering cost: $<input class="roi-eng-input" type="number" id="roi-eng-cost" value="50000" oninput="SF.engCost=+this.value;calcFleet()"> one-time
+        </div>
+      </div>
+      <div class="roi-grid" id="roi-grid"></div>
+    </div>
+
+    <!-- 5-YEAR COST COMPARISON ───────────────────────────────────────────────-->
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:8px">5-year cost comparison</div>
+    <div class="fleet-cost-compare" id="fleet-cost-compare" style="margin-bottom:16px"></div>
+
+    <!-- TRAFFIC FLOW VISUAL ─────────────────────────────────────────────────-->
+    <div class="traffic-flow" style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:8px">How your traffic routes</div>
+      <div id="fleet-traffic-flow"></div>
+    </div>
+
+    <!-- PER-TIER BREAKDOWN ──────────────────────────────────────────────────-->
+    <div class="fleet-breakdown" style="margin-bottom:16px">
+      <div class="fleet-breakdown-title">Per-tier breakdown</div>
+      <table class="fleet-breakdown-table" id="fleet-breakdown-table">
+        <tr><th>Tier</th><th>Current API</th><th>Traffic</th><th>Queries/day</th><th>API cost/yr</th><th>Self-hosted</th><th>Saves</th></tr>
+      </table>
+    </div>
+
+    <!-- EDIT CONFIG — collapsed by default ──────────────────────────────────-->
+    <details style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:16px">
+      <summary style="padding:14px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text1);list-style:none;display:flex;justify-content:space-between;align-items:center">
+        <span>&#9881; Edit fleet configuration</span>
+        <span style="font-size:11px;color:var(--text4);font-weight:400" id="fleet-config-summary">3 tiers · 1,000 users</span>
+      </summary>
+      <div style="padding:0 16px 16px;border-top:1px solid var(--border)">
+
+        <!-- Total users -->
+        <div class="fleet-total-users" style="margin-top:14px">
+          <span class="fleet-total-label">Total concurrent users</span>
+          <input class="fleet-total-input" type="number" id="fleet-total-users" value="1000" min="1" oninput="SF.totalUsers=+this.value;calcFleet()">
+          <span class="fleet-total-derived" id="fleet-total-derived">—</span>
+        </div>
+
+        <!-- Traffic status -->
+        <div class="fleet-traffic-total fleet-traffic-ok" id="fleet-traffic-status" style="margin-bottom:12px">✓ 100% traffic assigned</div>
+
+        <!-- Tiers list -->
+        <div id="fleet-tiers-list"></div>
+        <button class="fleet-add-tier" onclick="addFleetTier()">+ Add routing tier</button>
+
+        <!-- API pricing table -->
+        <div style="margin-top:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4)">API pricing (editable · per 1M tokens)</div>
+            <button class="add-prov" onclick="addApiProvider()">+ add provider</button>
+          </div>
+          <table class="api-pricing-table" id="api-pricing-table"></table>
+          <div style="font-size:10px;color:var(--text4);margin-top:4px">Updated March 2026 — edit when providers change prices</div>
+        </div>
+
+      </div>
+    </details>
+
+  </div>
+</div>
 </body>
 </html>
