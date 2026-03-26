@@ -1784,7 +1784,7 @@ button{font-family:var(--sans);cursor:pointer}
 // After deploying worker.js, paste your Worker URL below
 // e.g. 'https://gpu-calc-api.vikasgrover2004.workers.dev'
 // Leave empty to use relative /api/* (works on Cloudflare Pages)
-var API_BASE = 'https://gpu-calc-api.vikasgrover2004.workers.dev';
+var API_BASE = '';
 function apiUrl(path){ return (API_BASE || '') + path; }
 
 // ===== TRACKING — must be first so T.fire() works everywhere =====
@@ -3109,7 +3109,7 @@ function submitLead(){
   var payload={email:email,model:S.modelLabel,users:S.users,ctx:S.ctx,gpus:C.totalGPUs,cost:C.cloudCost5yr};
   // Try Worker first, fall back to Formspree
   var workerPromise=fetch(apiUrl('/api/leads'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  var formspreeId='xykbzzyd'; // ← paste your Formspree form ID here e.g. 'xpwzgkqb'
+  var formspreeId=''; // ← paste your Formspree form ID here e.g. 'xpwzgkqb'
   if(formspreeId){
     fetch('https://formspree.io/f/'+formspreeId,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)}).catch(function(){});
   }
@@ -3554,6 +3554,7 @@ loadFromURL();
   </div>
 </div>
 
+<script>
 // ===== FLEET MODE =====
 
 // Fleet state
@@ -3840,7 +3841,7 @@ function renderFleetTiers() {
     // Traffic slider
     html += '<div class="traffic-bar-wrap">';
     html += '<div class="traffic-bar-label"><span>Traffic share</span><span id="ft-pct-'+i+'">'+t.trafficPct+'%</span></div>';
-    html += '<input type="range" min="0" max="100" step="5" value="'+t.trafficPct+'" style="width:100%;accent-color:'+col+'" oninput="updateFleetTierTraffic('+i+',this.value);document.getElementById('ft-pct-'+i+'').textContent=this.value+'%'">';
+    html += '<input type="range" min="0" max="100" step="5" value="'+t.trafficPct+'" style="width:100%;accent-color:'+col+'" oninput="updateFleetTierTraffic('+i+',+this.value)">';
     html += '<div class="traffic-bar-bg"><div class="traffic-bar-fg" id="ft-bar-'+i+'" style="width:'+t.trafficPct+'%;background:'+col+'"></div></div>';
     html += '</div>';
     // Grid of inputs
@@ -4075,5 +4076,7 @@ function saveFleet() {
   T.fire('fleet_save', {tiers: SF.tiers.length});
 }
 
+
+</script>
 </body>
 </html>
