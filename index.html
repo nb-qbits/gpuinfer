@@ -574,7 +574,7 @@ button{font-family:var(--sans);cursor:pointer}
 .axis-label{color:var(--text4);font-family:var(--mono)}
 .axis-btn{padding:3px 10px;border-radius:10px;font-size:11px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;transition:.15s}
 .axis-btn.on{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
-.explorer-chart-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:16px;margin-bottom:10px;position:relative}
+.explorer-chart-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:16px;margin-bottom:10px;position:relative;max-height:460px}
 .explorer-notice{font-size:11px;color:var(--text4);font-family:var(--mono);padding:10px 0;line-height:1.6}
 .explorer-notice strong{color:var(--amber)}
 
@@ -1599,7 +1599,7 @@ button{font-family:var(--sans);cursor:pointer}
       <span style="margin-left:12px;font-size:11px;color:var(--text4)" id="axis-desc">X: VRAM (GB) · Y: Throughput (tok/s) · Bubble: $/100 TPP</span>
     </div>
     <div class="explorer-chart-wrap">
-      <canvas id="explorer-chart" height="440"></canvas>
+      <canvas id="explorer-chart" style="max-height:420px"></canvas>
     </div>
     <div class="explorer-notice">
       <strong>Data notice</strong> — Purchase prices are indicative market estimates for planning purposes only. Prices vary by vendor, volume, region, and time. Validate all figures with vendors before procurement. &copy; gpu.calc
@@ -1877,7 +1877,7 @@ function navTo(page,fromHash){
   var el=document.getElementById('page-'+page);
   if(el) el.classList.add('active');
   var tabs=document.querySelectorAll('.nav-tab');
-  var map={home:0,advanced:1,explorer:3,saved:4,hybrid:5,fleet:6};
+  var map={home:0,advanced:2,explorer:3,saved:4,hybrid:5,fleet:6};
   if(map[page]!==undefined && tabs[map[page]]) tabs[map[page]].classList.add('active');
   if(!fromHash) location.hash='#'+page;
   if(page==='advanced') calc();
@@ -2950,6 +2950,8 @@ function renderExplorer(){
     plugins:[labelPlugin],
     options:{
       responsive:true,
+      maintainAspectRatio:true,
+      aspectRatio:2.2,
       plugins:{
         legend:{display:false},
         tooltip:{callbacks:{label:function(ctx){var g=data[ctx.datasetIndex];return g.name+': VRAM '+g.vram+'GB · TPP '+g.tpp.toLocaleString()+' · $'+Math.round(g.price/1000)+'K';}}}
@@ -3281,7 +3283,7 @@ function renderFleetTiers(){
     html+='<div class="fleet-tier-head" onclick="toggleFleetTier('+i+')">';
     html+='<div class="fleet-tier-num" style="background:'+col+'">'+(i+1)+'</div>';
     html+='<input type="text" value="'+t.name+'" style="background:none;border:none;font-size:13px;font-weight:500;color:var(--text1);width:130px;cursor:text;flex:1" onclick="event.stopPropagation()" onchange="SF.tiers['+i+'].name=this.value">';
-    html+='<span class="fleet-tier-summary" id="ft-sum-'+i+'">'+t.model+' · '+t.trafficPct+'%</span>';
+    html+='<span class="fleet-tier-summary" id="ft-sum-'+i+'">'+t.apiModel+' · '+t.trafficPct+'%</span>';
     html+='<span class="fleet-tier-result" id="ft-result-'+i+'">—</span>';
     html+='<button class="fleet-tier-del" onclick="event.stopPropagation();removeFleetTier('+i+')" title="Remove">×</button>';
     html+='</div>';
@@ -3292,8 +3294,8 @@ function renderFleetTiers(){
     html+='<div class="traffic-bar-bg"><div class="traffic-bar-fg" id="ft-bar-'+i+'" style="width:'+t.trafficPct+'%;background:'+col+'"></div></div>';
     html+='</div>';
     html+='<div class="fleet-tier-grid">';
-    html+='<div class="fleet-tier-field"><label>Self-hosted model</label><select class="fleet-tier-select" id="ft-model-'+i+'" onchange="updateFleetTierModel('+i+',this.value)">'+modelOpts+'</select></div>';
-    html+='<div class="fleet-tier-field"><label>Compare vs API</label><select class="fleet-tier-select" id="ft-api-'+i+'" onchange="SF.tiers['+i+'].apiModel=this.value;calcFleet()">'+apiOpts+'</select></div>';
+    html+='<div class="fleet-tier-field"><label>Current API model</label><select class="fleet-tier-select" id="ft-api-'+i+'" onchange="SF.tiers['+i+'].apiModel=this.value;calcFleet()">'+apiOpts+'</select></div>';
+    html+='<div class="fleet-tier-field"><label>Self-hosted alternative</label><select class="fleet-tier-select" id="ft-model-'+i+'" onchange="updateFleetTierModel('+i+',this.value)">'+modelOpts+'</select></div>';
     html+='<div class="fleet-tier-field"><label>Context window</label><select class="fleet-tier-select" onchange="SF.tiers['+i+'].ctx=+this.value;calcFleet()">';
     [4,8,16,32,64,128,256].forEach(function(c){html+='<option value="'+c+'"'+(c===t.ctx?' selected':'')+'>'+c+'K</option>';});
     html+='</select></div>';
@@ -3316,7 +3318,7 @@ function renderFleetTiers(){
 
 function updateTierSummaries(results){
   SF.tiers.forEach(function(t,i){
-    var s=document.getElementById('ft-sum-'+i);if(s)s.textContent=t.model+' · '+t.trafficPct+'%';
+    var s=document.getElementById('ft-sum-'+i);if(s)s.textContent=t.apiModel+' · '+t.trafficPct+'%';
     var b=document.getElementById('ft-bar-'+i);if(b)b.style.width=t.trafficPct+'%';
     var p=document.getElementById('ft-pct-'+i);if(p)p.textContent=t.trafficPct+'%';
     if(results){var r=results[i];var re=document.getElementById('ft-result-'+i);if(re&&r)re.textContent=r.totalGPUs+' GPU'+(r.totalGPUs!==1?'s':'')+' · '+fmtK(r.cloudCostYr)+'/yr';}
