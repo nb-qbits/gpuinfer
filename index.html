@@ -3465,6 +3465,13 @@ function computeTier(tier){
   return {users:users,wGB:wGB,ohGB:ohGB,usable:usable,kvPU:kvPU,upr:upr,replicas:replicas,totalGPUs:totalGPUs,cloudCostYr:cloudCostYr,apiCostYr:apiCostYr};
 }
 
+
+function renderFleetPage(){
+  renderFleetTiers();
+  renderApiPricingTable();
+  calcFleet();
+}
+
 function calcFleet(){
   var totalPct=SF.tiers.reduce(function(s,t){return s+t.trafficPct;},0);
   var statusEl=document.getElementById('fleet-traffic-status');
@@ -3597,20 +3604,40 @@ function updateTierSummaries(results){
   });
 }
 
-function renderFleetBreakdown(results,totalGPUs,totalCostYr){
+function renderFleetBreakdown(results){
   var el=document.getElementById('fleet-breakdown-table');
   if(!el)return;
   var tierColors=['#1a56db','#057a55','#b45309','#7c3aed','#0891b2'];
-  var html='<tr><th>Tier</th><th>Model</th><th>Traffic</th><th>Users</th><th>GPUs</th><th>Cost/yr</th><th>vs API</th></tr>';
+  var naiveProv=API_PROVIDERS.find(function(p){return p.model==='Claude 3.7 Sonnet';})||API_PROVIDERS[1]||{inputPer1M:3,outputPer1M:15};
+  var html='<tr><th>Tier</th><th>API model</th><th>Traffic</th><th>Queries/day</th><th>API cost/yr</th><th>Tokens (in/out)</th><th>vs all-Sonnet</th></tr>';
+  var totalApiYr=0;
   SF.tiers.forEach(function(t,i){
-    var r=results[i];var col=tierColors[i%tierColors.length];
-    var apiSaving=r.apiCostYr-r.cloudCostYr;
-    var apiTag=apiSaving>0?'<span style="color:var(--green);font-size:10px">✓ saves '+fmtK(apiSaving)+'</span>':'<span style="color:var(--red);font-size:10px">API costs '+fmtK(Math.abs(apiSaving))+' more</span>';
-    html+='<tr><td style="color:'+col+';font-weight:600">'+t.name+'</td><td style="font-family:var(--sans);font-size:11px">'+t.model+'</td>'
-      +'<td><div class="tier-bar"><div class="tier-bar-bg"><div class="tier-bar-fg" style="width:'+t.trafficPct+'%;background:'+col+'"></div></div><span>'+t.trafficPct+'%</span></div></td>'
-      +'<td>'+r.users+'</td><td style="color:var(--blue);font-weight:600">'+r.totalGPUs+'</td><td>'+fmtK(r.cloudCostYr)+'</td><td>'+apiTag+'</td></tr>';
+    var r=results[i];
+    var col=tierColors[i%tierColors.length];
+    var qpd=Math.round(SF.totalUsers*(t.trafficPct/100)*100);
+    var naiveYr=qpd*365*(t.avgInputTok*naiveProv.inputPer1M+t.avgOutputTok*naiveProv.outputPer1M)/1e6;
+    var saving=naiveYr-r.apiCostYr;
+    var saveTag=saving>0?'<span style="color:var(--green);font-weight:600">saves '+fmtK(saving)+'</span>':'<span style="color:var(--red)">+'+fmtK(Math.abs(saving))+'</span>';
+    totalApiYr+=r.apiCostYr;
+    html+='<tr>'
+      +'<td style="color:'+col+';font-weight:600">'+t.name+'</td>'
+      +'<td style="font-size:11px">'+t.apiModel+'</td>'
+      +'<td><div style="display:flex;align-items:center;gap:5px"><div style="height:4px;width:'+Math.round(t.trafficPct*1.2)+'px;background:'+col+';border-radius:2px"></div><span>'+t.trafficPct+'%</span></div></td>'
+      +'<td style="font-family:var(--mono);font-size:11px">'+qpd.toLocaleString()+'</td>'
+      +'<td style="font-weight:600">'+fmtK(r.apiCostYr)+'</td>'
+      +'<td style="font-size:11px;color:var(--text3)">'+t.avgInputTok+' / '+t.avgOutputTok+'</td>'
+      +'<td>'+saveTag+'</td>'
+      +'</tr>';
   });
-  html+='<tr style="background:var(--bg3)"><td colspan="2">FLEET TOTAL</td><td>100%</td><td>'+SF.totalUsers+'</td><td style="color:var(--blue)">'+totalGPUs+'</td><td>'+fmtK(totalCostYr)+'</td><td></td></tr>';
+  var naiveTotalYr=SF.tiers.reduce(function(s,t){
+    var qpd=Math.round(SF.totalUsers*(t.trafficPct/100)*100);
+    return s+qpd*365*(t.avgInputTok*naiveProv.inputPer1M+t.avgOutputTok*naiveProv.outputPer1M)/1e6;
+  },0);
+  html+='<tr style="background:var(--bg3);font-weight:600">'
+    +'<td colspan="4">TOTAL API SPEND</td>'
+    +'<td style="color:var(--red)">'+fmtK(totalApiYr)+'</td>'
+    +'<td colspan="2" style="font-size:11px;color:var(--text3)">vs naive all-Sonnet: '+fmtK(naiveTotalYr)+'</td>'
+    +'</tr>';
   el.innerHTML=html;
 }
 
@@ -3727,17 +3754,22 @@ function renderFrontierCompare(){
 
 
 
-function renderFleetCostCompare(totalCostYr,naiveCostYr,totalApiCostYr,results){
+function renderFleetCostCompare(totalApiCostYr,onpremYr,totalGPUs,activeProvider){
   var el=document.getElementById('fleet-cost-compare');
   if(!el)return;
-  var totalGPUs=results.reduce(function(s,r){return s+r.totalGPUs;},0);
+  var cloudYr=totalGPUs*(activeProvider?activeProvider.rate:3)*8760;
   var dedNodes=Math.ceil(totalGPUs/8);
   var ded5=dedNodes*18000*12*5;
+  // Naive = 100% traffic to Claude Sonnet
+  var naiveProv=API_PROVIDERS.find(function(p){return p.model==='Claude 3.7 Sonnet';})||{inputPer1M:3,outputPer1M:15};
+  var avgIn=SF.tiers.reduce(function(s,t){return s+t.avgInputTok;},0)/SF.tiers.length;
+  var avgOut=SF.tiers.reduce(function(s,t){return s+t.avgOutputTok;},0)/SF.tiers.length;
+  var naiveYr=SF.totalUsers*100*365*(avgIn*naiveProv.inputPer1M+avgOut*naiveProv.outputPer1M)/1e6;
   var scenarios=[
-    {label:'Self-hosted',sub:'on-demand cloud',val:totalCostYr*5,color:'var(--blue)'},
+    {label:'Your API mix',sub:'tiered routing',val:totalApiCostYr*5,color:'var(--green)'},
+    {label:'Self-hosted on-prem',sub:totalGPUs+' GPUs · 5yr amort',val:onpremYr*5,color:'var(--blue)'},
     {label:'Dedicated node',sub:dedNodes+' node'+(dedNodes!==1?'s':'')+' flat',val:ded5,color:'var(--purple)'},
-    {label:'API (cheapest)',sub:'per-tier best API',val:totalApiCostYr*5,color:'var(--amber)'},
-    {label:'Naive (no routing)',sub:'biggest model only',val:naiveCostYr*5,color:'var(--red)'},
+    {label:'Naive (all Sonnet)',sub:'no routing savings',val:naiveYr*5,color:'var(--red)'},
   ];
   var minVal=Math.min.apply(null,scenarios.map(function(s){return s.val;}));
   el.innerHTML=scenarios.map(function(s){
