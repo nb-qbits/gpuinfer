@@ -1259,7 +1259,7 @@ button{font-family:var(--sans);cursor:pointer}
         <div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
             <span class="realtime-badge"><span class="realtime-dot"></span>REAL-TIME INFERENCE ONLY</span>
-            <button class="btn btn-sm" id="vllm-cfg-btn" onclick="openPanel('ps-inf')" title="Opens Inference mode panel on the left">&#128196; vLLM config &#8592;</button>
+            <button class="btn btn-sm" id="vllm-cfg-btn" onclick="toggleVLLMPopover()">&#128196; vLLM config</button>
           </div>
           <div class="outcome-title" id="outcome-subtitle">Llama 3.1 8B · 30 users · 8K ctx · TP=1</div>
         </div>
@@ -1270,6 +1270,48 @@ button{font-family:var(--sans);cursor:pointer}
         </div>
       </div>
 
+
+
+      <!-- vLLM config popover -->
+      <div id="vllm-popover" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:16px;margin-bottom:14px;box-shadow:var(--shadow2)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div style="font-size:12px;font-weight:600;color:var(--text1)">&#128196; Inference configuration</div>
+          <button onclick="toggleVLLMPopover()" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:16px">&#215;</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div>
+            <div class="panel-label" style="margin-bottom:6px">Framework</div>
+            <div class="chips-wrap">
+              <button class="chip on" id="vp-fw-vllm" onclick="setFW('vllm',this);document.getElementById('vp-fw-naive').classList.remove('on');this.classList.add('on')">vLLM</button>
+              <button class="chip" id="vp-fw-naive" onclick="setFW('naive',this);document.getElementById('vp-fw-vllm').classList.remove('on');this.classList.add('on')">Naive</button>
+            </div>
+          </div>
+          <div>
+            <div class="panel-label" style="margin-bottom:6px">Mode</div>
+            <div class="chips-wrap">
+              <button class="chip on" id="vp-std" onclick="setMode('std',this);document.getElementById('vp-llmd').classList.remove('on');this.classList.add('on')">Standard</button>
+              <button class="chip" id="vp-llmd" onclick="setMode('llmd',this);document.getElementById('vp-std').classList.remove('on');this.classList.add('on')">llm-d</button>
+            </div>
+          </div>
+          <div>
+            <div class="panel-label" style="margin-bottom:6px">Tensor parallel</div>
+            <div class="chips-wrap">
+              <button class="chip on" id="vp-tp1" onclick="setTP(1,this);['vp-tp2','vp-tp4','vp-tp8'].forEach(function(x){document.getElementById(x).classList.remove('on')});this.classList.add('on')">TP=1</button>
+              <button class="chip" id="vp-tp2" onclick="setTP(2,this);['vp-tp1','vp-tp4','vp-tp8'].forEach(function(x){document.getElementById(x).classList.remove('on')});this.classList.add('on')">TP=2</button>
+              <button class="chip" id="vp-tp4" onclick="setTP(4,this);['vp-tp1','vp-tp2','vp-tp8'].forEach(function(x){document.getElementById(x).classList.remove('on')});this.classList.add('on')">TP=4</button>
+              <button class="chip" id="vp-tp8" onclick="setTP(8,this);['vp-tp1','vp-tp2','vp-tp4'].forEach(function(x){document.getElementById(x).classList.remove('on')});this.classList.add('on')">TP=8</button>
+            </div>
+          </div>
+          <div>
+            <div class="panel-label" style="margin-bottom:6px">KV precision</div>
+            <div class="chips-wrap">
+              <button class="chip on" id="vp-kv16" onclick="setKVPrec('fp16',this);['vp-kv8','vp-kv8i'].forEach(function(x){document.getElementById(x).classList.remove('on')});this.classList.add('on')">FP16</button>
+              <button class="chip" id="vp-kv8" onclick="setKVPrec('fp8',this);['vp-kv16','vp-kv8i'].forEach(function(x){document.getElementById(x).classList.remove('on')});this.classList.add('on')">FP8 (&#247;2)</button>
+              <button class="chip" id="vp-kv8i" onclick="setKVPrec('int8',this);['vp-kv16','vp-kv8'].forEach(function(x){document.getElementById(x).classList.remove('on')});this.classList.add('on')">INT8</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- Hero -->
       <div class="hero-box">
@@ -1685,7 +1727,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.2.1</span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.2.3</span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -1841,20 +1883,20 @@ var MODELS = [
 ];
 
 var GPU_DATA = [
-  {name:'A100',vram:40,tpp:5000,price:10000,vendor:'nvidia',col:'#6394c8'},
-  {name:'A100 80GB',vram:80,tpp:8000,price:15000,vendor:'nvidia',col:'#6394c8'},
-  {name:'H100',vram:80,tpp:18000,price:25000,vendor:'nvidia',col:'#4a78b8'},
-  {name:'H200',vram:141,tpp:18000,price:32000,vendor:'nvidia',col:'#4a78b8'},
-  {name:'B100',vram:192,tpp:27000,price:35000,vendor:'nvidia',col:'#3460a8'},
-  {name:'B200',vram:180,tpp:37000,price:45000,vendor:'nvidia',col:'#2048a0'},
-  {name:'B300',vram:288,tpp:60000,price:60000,vendor:'nvidia',col:'#1030a0'},
-  {name:'B30A',vram:120,tpp:30000,price:20000,vendor:'nvidia',col:'#3060b0'},
-  {name:'H20',vram:96,tpp:6000,price:12000,vendor:'nvidia',col:'#5080c0'},
-  {name:'MI250X',vram:128,tpp:9000,price:15000,vendor:'amd',col:'#c86060'},
-  {name:'MI300A',vram:128,tpp:18000,price:20000,vendor:'amd',col:'#c84040'},
-  {name:'MI300X',vram:192,tpp:22000,price:25000,vendor:'amd',col:'#b83030'},
-  {name:'MI325X',vram:256,tpp:21000,price:30000,vendor:'amd',col:'#b02020'},
-  {name:'MI350X',vram:288,tpp:34000,price:40000,vendor:'amd',col:'#a01010'},
+  {name:'A100',vram:40,tpp:5000,price:10000,vendor:'nvidia',col:'#7ab3e0'},
+  {name:'A100 80GB',vram:80,tpp:8000,price:15000,vendor:'nvidia',col:'#7ab3e0'},
+  {name:'H100',vram:80,tpp:18000,price:25000,vendor:'nvidia',col:'#5b9bd5'},
+  {name:'H200',vram:141,tpp:18000,price:32000,vendor:'nvidia',col:'#5b9bd5'},
+  {name:'B100',vram:192,tpp:27000,price:35000,vendor:'nvidia',col:'#4285c8'},
+  {name:'B200',vram:180,tpp:37000,price:45000,vendor:'nvidia',col:'#3575bc'},
+  {name:'B300',vram:288,tpp:60000,price:60000,vendor:'nvidia',col:'#2866b0'},
+  {name:'B30A',vram:120,tpp:30000,price:20000,vendor:'nvidia',col:'#4d8fd4'},
+  {name:'H20',vram:96,tpp:6000,price:12000,vendor:'nvidia',col:'#6aa8dc'},
+  {name:'MI250X',vram:128,tpp:9000,price:15000,vendor:'amd',col:'#e07878'},
+  {name:'MI300A',vram:128,tpp:18000,price:20000,vendor:'amd',col:'#d96060'},
+  {name:'MI300X',vram:192,tpp:22000,price:25000,vendor:'amd',col:'#cc4444'},
+  {name:'MI325X',vram:256,tpp:21000,price:30000,vendor:'amd',col:'#c03838'},
+  {name:'MI350X',vram:288,tpp:34000,price:40000,vendor:'amd',col:'#b42020'},
 ];
 
 // ===== DEBOUNCE =====
@@ -1969,6 +2011,30 @@ function applyToggles(){
   document.getElementById('li-card').classList.toggle('hidden',!li||liDismissed);
 }
 
+
+function toggleVLLMPopover(){
+  var pop=document.getElementById('vllm-popover');
+  if(!pop)return;
+  var isOpen=pop.style.display!=='none';
+  pop.style.display=isOpen?'none':'block';
+  if(!isOpen){
+    // Sync chip states with current S values
+    var tpMap={1:'vp-tp1',2:'vp-tp2',4:'vp-tp4',8:'vp-tp8'};
+    ['vp-tp1','vp-tp2','vp-tp4','vp-tp8'].forEach(function(id){
+      var el=document.getElementById(id);if(el)el.classList.remove('on');
+    });
+    var tpEl=document.getElementById(tpMap[S.tp]);
+    if(tpEl)tpEl.classList.add('on');
+    var fwEl=document.getElementById(S.fw==='vllm'?'vp-fw-vllm':'vp-fw-naive');
+    if(fwEl){['vp-fw-vllm','vp-fw-naive'].forEach(function(id){var e=document.getElementById(id);if(e)e.classList.remove('on');});fwEl.classList.add('on');}
+    var kvMap={'fp16':'vp-kv16','fp8':'vp-kv8','int8':'vp-kv8i'};
+    ['vp-kv16','vp-kv8','vp-kv8i'].forEach(function(id){var e=document.getElementById(id);if(e)e.classList.remove('on');});
+    var kvEl=document.getElementById(kvMap[S.kvPrec]||'vp-kv16');
+    if(kvEl)kvEl.classList.add('on');
+    var modeEl=document.getElementById(S.mode==='llmd'?'vp-llmd':'vp-std');
+    if(modeEl){['vp-std','vp-llmd'].forEach(function(id){var e=document.getElementById(id);if(e)e.classList.remove('on');});modeEl.classList.add('on');}
+  }
+}
 // ===== PANEL TOGGLE =====
 function openPanel(id){
   var el=document.getElementById(id);
@@ -2355,7 +2421,7 @@ var _qsFilteredModels=[];
 function renderQSModels(org){
   _qsFilteredModels=org==='all'?MODELS:MODELS.filter(m=>m.org===org);
   document.getElementById('qs-models').innerHTML=_qsFilteredModels.map(function(m,i){
-    return '<button class="qs-model'+(qsData.model&&qsData.model.name===m.name?' on':'')+'" onclick="selectQSModel('+i+',this)">'
+    return '<button class="qs-model'+(qsData.model&&qsData.model.name===m.name?' on':'')+'" onclick="selectQSModel('+i+',this)" title="Click to select '+m.name+'">'
       +'<div class="qs-model-name">'+m.name+'</div>'
       +'<div class="qs-model-sub">'+m.params+'B \xb7 '+(m.attn==='gqa'?'GQA':'MHA')+'</div>'
       +'</button>';
@@ -2365,6 +2431,16 @@ function selectQSModel(idx,btn){
   qsData.model=_qsFilteredModels[idx];
   document.querySelectorAll('.qs-model').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
+  // Also apply to S so Advanced shows updated values if they skip
+  var m=_qsFilteredModels[idx];
+  if(m){
+    S.params=m.params;S.modelLabel=m.name;S.attn=m.attn;
+    S.numLayers=m.layers;S.numKvHeads=m.kvHeads;S.headDim=m.headDim;
+    document.getElementById('ph-model-sum').textContent=m.name+' · '+(m.attn==='gqa'?'GQA':'MHA')+' · '+S.prec.toUpperCase();
+    // Highlight Next button to guide user
+    var nextBtn=document.querySelector('#qs-s1 .btn-primary');
+    if(nextBtn){nextBtn.style.background='var(--green)';setTimeout(function(){nextBtn.style.background='';},800);}
+  }
 }
 function filterQSOrg(org,btn){
   document.querySelectorAll('#qs-org-chips .qs-chip').forEach(b=>b.classList.remove('on'));
@@ -3057,9 +3133,9 @@ function renderExplorer(){
     return{
       label:g.name,
       data:[{x:getVal(g,axX),y:getVal(g,axY),r:Math.max(12,Math.sqrt(getVal(g,axB)/maxB)*50)}],
-      backgroundColor:g.col+'bb',
-      borderColor:g.col,
-      borderWidth:1.5,
+      backgroundColor:g.col+'99',
+      borderColor:g.col+'cc',
+      borderWidth:2,
     };
   });
   var labelPlugin={
@@ -3519,30 +3595,116 @@ function renderFleetBreakdown(results,totalGPUs,totalCostYr){
   el.innerHTML=html;
 }
 
-function renderTrafficFlow(results){
+function renderTrafficFlow(){
   var el=document.getElementById('fleet-traffic-flow');
   if(!el)return;
-  var tierColors=['#1a56db','#057a55','#b45309','#7c3aed','#0891b2'];
-  var svgH=60+SF.tiers.length*48;
-  var svg='<svg width="100%" height="'+svgH+'" viewBox="0 0 500 '+svgH+'" xmlns="http://www.w3.org/2000/svg">';
-  svg+='<rect x="170" y="4" width="160" height="36" rx="8" fill="var(--bg3)" stroke="var(--border)" stroke-width="1.5"/>';
-  svg+='<text x="250" y="19" text-anchor="middle" font-size="12" font-weight="600" fill="var(--text1)" font-family="DM Sans,sans-serif">'+SF.totalUsers.toLocaleString()+' concurrent users</text>';
-  svg+='<text x="250" y="32" text-anchor="middle" font-size="10" fill="var(--text4)" font-family="DM Mono,monospace">all queries → router</text>';
+  var colors=['#1a56db','#057a55','#7e3af2','#c27803','#c81e1e'];
+  var n=SF.tiers.length;
+  var svgH=Math.max(120, n*64+20);
+  var W=640, srcW=110, routW=90, destW=210;
+  var srcX=8, routX=160, destX=310;
+  var svg='<svg viewBox="0 0 '+W+' '+svgH+'" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:'+W+'px;overflow:visible">';
+
+  // ── Source box (left) ──────────────────────────────────────────
+  var srcY=svgH/2-26;
+  svg+='<rect x="'+srcX+'" y="'+srcY+'" width="'+srcW+'" height="52" rx="8" fill="var(--bg3)" stroke="var(--border2)" stroke-width="1.5"/>';
+  svg+='<text x="'+(srcX+srcW/2)+'" y="'+(srcY+19)+'" text-anchor="middle" font-size="12" font-weight="600" fill="var(--text1)" font-family="inherit">'+SF.totalUsers.toLocaleString()+'</text>';
+  svg+='<text x="'+(srcX+srcW/2)+'" y="'+(srcY+34)+'" text-anchor="middle" font-size="10" fill="var(--text3)" font-family="inherit">users</text>';
+
+  // ── Arrow src→router ───────────────────────────────────────────
+  var midY=svgH/2;
+  svg+='<line x1="'+(srcX+srcW)+'" y1="'+midY+'" x2="'+(routX-4)+'" y2="'+midY+'" stroke="var(--border2)" stroke-width="2"/>';
+  svg+='<polygon points="'+(routX-4)+','+(midY-4)+' '+(routX+6)+','+midY+' '+(routX-4)+','+(midY+4)+'" fill="var(--border2)"/>';
+
+  // ── Router box (centre) ────────────────────────────────────────
+  var routY=svgH/2-22;
+  svg+='<rect x="'+routX+'" y="'+routY+'" width="'+routW+'" height="44" rx="8" fill="var(--blue-bg)" stroke="var(--blue-border)" stroke-width="1.5"/>';
+  svg+='<text x="'+(routX+routW/2)+'" y="'+(routY+16)+'" text-anchor="middle" font-size="10" font-weight="700" fill="var(--blue)" font-family="inherit">Semantic</text>';
+  svg+='<text x="'+(routX+routW/2)+'" y="'+(routY+30)+'" text-anchor="middle" font-size="10" fill="var(--blue)" font-family="inherit">Router</text>';
+
+  // ── Tier destination boxes (right) ─────────────────────────────
+  var boxH=48, gap=12;
+  var totalH=n*boxH+(n-1)*gap;
+  var startY=(svgH-totalH)/2;
+
   SF.tiers.forEach(function(t,i){
-    var y=60+i*48;var col=tierColors[i%tierColors.length];var r=results[i];
-    svg+='<line x1="250" y1="40" x2="250" y2="'+y+'" stroke="'+col+'" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.5"/>';
-    svg+='<rect x="80" y="'+y+'" width="340" height="38" rx="7" fill="'+col+'18" stroke="'+col+'" stroke-width="1.5"/>';
-    svg+='<text x="100" y="'+(y+15)+'" font-size="12" font-weight="700" fill="'+col+'" font-family="DM Mono,monospace">'+t.trafficPct+'%</text>';
-    svg+='<text x="142" y="'+(y+15)+'" font-size="12" font-weight="500" fill="var(--text1)" font-family="DM Sans,sans-serif">'+t.name+'</text>';
-    svg+='<text x="100" y="'+(y+29)+'" font-size="10" fill="var(--text3)" font-family="DM Mono,monospace">'+t.model+'</text>';
-    if(r){
-      svg+='<text x="408" y="'+(y+15)+'" text-anchor="end" font-size="12" font-weight="700" fill="'+col+'" font-family="DM Mono,monospace">'+r.totalGPUs+' GPU'+(r.totalGPUs!==1?'s':'')+'</text>';
-      svg+='<text x="408" y="'+(y+29)+'" text-anchor="end" font-size="10" fill="var(--text4)" font-family="DM Mono,monospace">'+fmtK(r.cloudCostYr)+'/yr</text>';
-    }
+    var col=colors[i%colors.length];
+    var ty=startY+i*(boxH+gap);
+    var tMidY=ty+boxH/2;
+    var pct=t.trafficPct;
+    var strokeW=Math.max(1.5, pct/25);
+
+    // Curved arrow from router right edge to tier box left edge
+    var x1=routX+routW, y1=midY;
+    var x2=destX, y2=tMidY;
+    var cx=(x1+x2)/2;
+    svg+='<path d="M'+x1+' '+y1+' C'+cx+' '+y1+' '+cx+' '+y2+' '+x2+' '+y2+'"'
+      +' stroke="'+col+'" stroke-width="'+strokeW+'" fill="none" opacity="0.85"/>';
+
+    // % label on the path midpoint
+    var lx=(x1+x2)/2, ly=(y1+y2)/2-6;
+    svg+='<rect x="'+(lx-13)+'" y="'+(ly-10)+'" width="26" height="14" rx="3" fill="var(--bg)"/>';
+    svg+='<text x="'+lx+'" y="'+ly+'" text-anchor="middle" font-size="9" font-weight="700" fill="'+col+'" font-family="inherit">'+pct+'%</text>';
+
+    // Tier box
+    svg+='<rect x="'+destX+'" y="'+ty+'" width="'+destW+'" height="'+boxH+'" rx="7" fill="'+col+'14" stroke="'+col+'66" stroke-width="1.5"/>';
+    svg+='<rect x="'+destX+'" y="'+ty+'" width="5" height="'+boxH+'" rx="3" fill="'+col+'"/>';
+
+    // Tier text
+    svg+='<text x="'+(destX+14)+'" y="'+(ty+17)+'" font-size="11" font-weight="600" fill="'+col+'" font-family="inherit">'+t.name+'</text>';
+    svg+='<text x="'+(destX+14)+'" y="'+(ty+30)+'" font-size="9.5" fill="var(--text3)" font-family="inherit">'+t.apiModel+'</text>';
+
+    // GPU + cost badges on right side
+    var C=computeTier(t);
+    svg+='<text x="'+(destX+destW-8)+'" y="'+(ty+17)+'" text-anchor="end" font-size="10" font-weight="600" fill="var(--blue)" font-family="inherit">'+C.totalGPUs+' GPUs</text>';
+    svg+='<text x="'+(destX+destW-8)+'" y="'+(ty+30)+'" text-anchor="end" font-size="9.5" fill="var(--text3)" font-family="inherit">'+fmtK(C.cloudCostYr)+'/yr</text>';
   });
+
   svg+='</svg>';
   el.innerHTML=svg;
+  renderFrontierCompare();
 }
+
+function renderFrontierCompare(){
+  var el=document.getElementById('fleet-frontier-compare');
+  if(!el)return;
+  var frontierModels=[
+    {name:'Claude Haiku', model:'Claude 3.5 Haiku', color:'#d97706'},
+    {name:'Claude Sonnet',model:'Claude 3.7 Sonnet',color:'#7e3af2'},
+    {name:'GPT-4o',       model:'GPT-4o',           color:'#057a55'},
+    {name:'Gemini Flash', model:'Gemini 2.0 Flash',  color:'#1a56db'},
+  ];
+  // Avg tokens across tiers
+  var avgIn=0, avgOut=0;
+  SF.tiers.forEach(function(t){avgIn+=t.avgInputTok;avgOut+=t.avgOutputTok;});
+  avgIn=avgIn/SF.tiers.length; avgOut=avgOut/SF.tiers.length;
+  var qpd=SF.totalUsers*100;
+
+  // Current mixed cost
+  var currentYr=0;
+  SF.tiers.forEach(function(t){
+    var p=API_PROVIDERS.find(function(x){return x.model===t.apiModel;})||{inPer1M:3,outPer1M:15};
+    currentYr+=SF.totalUsers*(t.trafficPct/100)*100*365*(t.avgInputTok*p.inPer1M/1e6+t.avgOutputTok*p.outPer1M/1e6);
+  });
+
+  var html='';
+  frontierModels.forEach(function(fm){
+    var p=API_PROVIDERS.find(function(x){return x.model===fm.model;})||{inPer1M:3,outPer1M:15};
+    var yr=qpd*365*(avgIn*p.inPer1M/1e6+avgOut*p.outPer1M/1e6);
+    var diff=yr-currentYr;
+    var diffStr=(diff>0?'+':'')+fmtK(diff);
+    var diffCol=diff>0?'var(--red)':'var(--green)';
+    html+='<div style="background:var(--bg3);border-radius:var(--r);padding:12px 14px;border-left:3px solid '+fm.color+'">'
+      +'<div style="font-size:10px;font-weight:600;color:'+fm.color+';margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em">'+fm.name+'</div>'
+      +'<div style="font-size:20px;font-weight:700;font-family:var(--mono)">'+fmtK(yr)+'</div>'
+      +'<div style="font-size:10px;color:'+diffCol+';margin-top:2px">'+diffStr+' vs your mix</div>'
+      +'</div>';
+  });
+  el.innerHTML=html;
+}
+
+
+
 
 function renderFleetCostCompare(totalCostYr,naiveCostYr,totalApiCostYr,results){
   var el=document.getElementById('fleet-cost-compare');
@@ -4044,37 +4206,7 @@ function renderFleetBreakdown(results, totalGPUs, totalCostYr, naiveCostYr) {
   el.innerHTML = html;
 }
 
-function renderTrafficFlow(results) {
-  var el = document.getElementById('fleet-traffic-flow');
-  if (!el) return;
-  var tierColors = ['#1a56db','#057a55','#b45309','#7c3aed','#0891b2'];
-  var svgH = 60 + SF.tiers.length * 44;
-  var svg = '<svg width="100%" height="'+svgH+'" viewBox="0 0 500 '+svgH+'" xmlns="http://www.w3.org/2000/svg">';
-  // Source box
-  svg += '<rect x="180" y="4" width="140" height="36" rx="8" fill="var(--bg3)" stroke="var(--border)" stroke-width="1"/>';
-  svg += '<text x="250" y="18" text-anchor="middle" font-size="11" fill="var(--text3)" font-family="DM Mono,monospace">'+SF.totalUsers.toLocaleString()+' users</text>';
-  svg += '<text x="250" y="31" text-anchor="middle" font-size="10" fill="var(--text4)" font-family="DM Mono,monospace">all queries</text>';
-  // Lines + tier boxes
-  SF.tiers.forEach(function(t, i) {
-    var y = 70 + i * 44;
-    var col = tierColors[i % tierColors.length];
-    var r = results[i];
-    // Line from source
-    svg += '<line x1="250" y1="40" x2="250" y2="'+(y-2)+'" stroke="var(--border)" stroke-width="1" stroke-dasharray="3,3"/>';
-    // Tier box
-    svg += '<rect x="100" y="'+y+'" width="300" height="36" rx="6" fill="'+col+'22" stroke="'+col+'" stroke-width="1.5"/>';
-    // Tier label
-    svg += '<text x="116" y="'+(y+14)+'" font-size="11" font-weight="600" fill="'+col+'" font-family="DM Sans,sans-serif">'+t.trafficPct+'%</text>';
-    svg += '<text x="156" y="'+(y+14)+'" font-size="11" fill="var(--text1)" font-family="DM Sans,sans-serif">'+t.name+'</text>';
-    svg += '<text x="116" y="'+(y+27)+'" font-size="10" fill="var(--text4)" font-family="DM Mono,monospace">'+t.model+'</text>';
-    if (r) {
-      svg += '<text x="380" y="'+(y+14)+'" text-anchor="end" font-size="11" font-weight="600" fill="'+col+'" font-family="DM Mono,monospace">'+r.totalGPUs+' GPU'+(r.totalGPUs!==1?'s':'')+'</text>';
-      svg += '<text x="380" y="'+(y+27)+'" text-anchor="end" font-size="10" fill="var(--text4)" font-family="DM Mono,monospace">'+fmtK(r.cloudCostYr)+'/yr</text>';
-    }
-  });
-  svg += '</svg>';
-  el.innerHTML = svg;
-}
+
 
 function renderFleetCostCompare(totalCostYr, naiveCostYr, totalApiCostYr, results) {
   var el = document.getElementById('fleet-cost-compare');
@@ -4186,97 +4318,124 @@ function saveFleet() {
 
 <!-- ===== FLEET PAGE ===== -->
 <div id="page-fleet" class="page">
-  <div style="max-width:960px;margin:0 auto;padding:24px 20px">
+  <div style="max-width:980px;margin:0 auto;padding:24px 20px">
 
-    <!-- Page header -->
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;flex-wrap:wrap;gap:12px">
       <div>
-        <h1 style="font-size:24px;font-weight:700;margin-bottom:4px">Fleet sizing &amp; routing economics</h1>
-        <p style="font-size:13px;color:var(--text3)">Model your current API spend and see when self-hosting pays off</p>
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--blue);margin-bottom:4px">FLEET ROUTING</div>
+        <h1 style="font-size:22px;font-weight:700;margin-bottom:4px">Semantic routing economics</h1>
+        <p style="font-size:13px;color:var(--text3)">Your current API spend · self-hosting ROI · when to route intelligently</p>
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center">
         <button class="btn btn-sm" onclick="showFleetValidateModal()">&#129302; Validate with AI</button>
-        <button class="btn btn-primary btn-sm" onclick="saveFleet()">&#128204; Save config</button>
+        <button class="btn btn-primary btn-sm" onclick="saveFleet()">&#128204; Save</button>
       </div>
     </div>
 
-    <!-- OUTCOME SECTION — result first ──────────────────────────────────────-->
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:18px 20px;margin-bottom:16px">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:12px">Your current API spend</div>
-      <div class="fleet-hero-box" id="fleet-hero-box" style="grid-template-columns:repeat(4,1fr);border:none;padding:0;margin:0;background:transparent">
-        <div class="fhc" style="border:1px solid var(--border);border-radius:var(--r);padding:12px"><div class="fhc-val" id="fhc-api-cost">—</div><div class="fhc-label">API cost/yr now</div></div>
-        <div class="fhc" style="border:1px solid var(--border);border-radius:var(--r);padding:12px"><div class="fhc-val" id="fhc-self-cost">—</div><div class="fhc-label">Self-hosted cost/yr</div></div>
-        <div class="fhc" style="border:1px solid var(--border);border-radius:var(--r);padding:12px"><div class="fhc-val" id="fhc-gpus" style="color:var(--blue)">—</div><div class="fhc-label">GPUs needed</div></div>
-        <div class="fhc" style="border:1px solid var(--border);border-radius:var(--r);padding:12px"><div class="fhc-val savings" id="fhc-savings">—</div><div class="fhc-label">Annual savings</div></div>
+    <!-- ═══ PANEL 1: TRAFFIC FLOW (left → right) ════════════════════════════ -->
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:20px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text4);margin-bottom:16px">HOW YOUR TRAFFIC ROUTES</div>
+      <div id="fleet-traffic-flow" style="min-height:80px"></div>
+
+      <!-- Frontier model cost comparison row -->
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:10px">ANNUAL COST IF ALL TRAFFIC WENT TO:</div>
+        <div id="fleet-frontier-compare" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px"></div>
       </div>
     </div>
 
-    <!-- ROUTING ROI — verdict ───────────────────────────────────────────────-->
-    <div class="routing-roi" id="routing-roi" style="margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div>
-          <div style="font-size:13px;font-weight:600;color:var(--green)">Should you self-host?</div>
-          <div style="font-size:12px;color:var(--text3)">Based on your current query volume and API spend</div>
+    <!-- ═══ PANEL 2: CURRENT API SPEND ══════════════════════════════════════ -->
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:20px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text4);margin-bottom:14px">YOUR CURRENT API SPEND</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+        <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--red)" id="fhc-api-cost">—</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">API cost / year</div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)">
-          Engineering cost: $<input class="roi-eng-input" type="number" id="roi-eng-cost" value="50000" oninput="SF.engCost=+this.value;calcFleet()"> one-time
+        <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--green)" id="fhc-self-cost">—</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">Self-hosted / year</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--blue)" id="fhc-gpus">—</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">GPUs needed</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono)" id="fhc-savings" style="color:var(--green)">—</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">Annual savings</div>
         </div>
       </div>
-      <div class="roi-grid" id="roi-grid"></div>
+
+      <!-- ROI verdict -->
+      <div id="routing-roi" style="background:var(--bg3);border-radius:var(--r);padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+          <div>
+            <div style="font-size:13px;font-weight:600" id="roi-verdict-label">Should you self-host?</div>
+            <div style="font-size:12px;color:var(--text3)">Based on volume and engineering cost</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)">
+            <span>Engineering cost:</span>
+            <span style="font-family:var(--mono)">$</span>
+            <input class="roi-eng-input" type="number" id="roi-eng-cost" value="50000" oninput="SF.engCost=+this.value;calcFleet()">
+            <span style="color:var(--text4)">one-time</span>
+          </div>
+        </div>
+        <div class="roi-grid" id="roi-grid"></div>
+      </div>
     </div>
 
-    <!-- 5-YEAR COST COMPARISON ───────────────────────────────────────────────-->
-    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:8px">5-year cost comparison</div>
-    <div class="fleet-cost-compare" id="fleet-cost-compare" style="margin-bottom:16px"></div>
-
-    <!-- TRAFFIC FLOW VISUAL ─────────────────────────────────────────────────-->
-    <div class="traffic-flow" style="margin-bottom:16px">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:8px">How your traffic routes</div>
-      <div id="fleet-traffic-flow"></div>
-    </div>
-
-    <!-- PER-TIER BREAKDOWN ──────────────────────────────────────────────────-->
-    <div class="fleet-breakdown" style="margin-bottom:16px">
-      <div class="fleet-breakdown-title">Per-tier breakdown</div>
-      <table class="fleet-breakdown-table" id="fleet-breakdown-table">
-        <tr><th>Tier</th><th>Current API</th><th>Traffic</th><th>Queries/day</th><th>API cost/yr</th><th>Self-hosted</th><th>Saves</th></tr>
-      </table>
-    </div>
-
-    <!-- EDIT CONFIG — collapsed by default ──────────────────────────────────-->
-    <details style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:16px">
-      <summary style="padding:14px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text1);list-style:none;display:flex;justify-content:space-between;align-items:center">
-        <span>&#9881; Edit fleet configuration</span>
-        <span style="font-size:11px;color:var(--text4);font-weight:400" id="fleet-config-summary">3 tiers · 1,000 users</span>
+    <!-- ═══ PANEL 3: EDIT FLEET CONFIG (collapsed) ══════════════════════════ -->
+    <details style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:16px" id="fleet-config-details">
+      <summary style="padding:14px 18px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:14px">&#9881;</span>
+          <span style="font-size:13px;font-weight:600">Edit fleet configuration</span>
+        </div>
+        <span style="font-size:11px;color:var(--text4)" id="fleet-config-summary">3 tiers · 1,000 users</span>
       </summary>
-      <div style="padding:0 16px 16px;border-top:1px solid var(--border)">
+      <div style="border-top:1px solid var(--border);padding:16px">
 
-        <!-- Total users -->
-        <div class="fleet-total-users" style="margin-top:14px">
+        <!-- Users -->
+        <div class="fleet-total-users" style="margin-bottom:12px">
           <span class="fleet-total-label">Total concurrent users</span>
           <input class="fleet-total-input" type="number" id="fleet-total-users" value="1000" min="1" oninput="SF.totalUsers=+this.value;calcFleet()">
           <span class="fleet-total-derived" id="fleet-total-derived">—</span>
         </div>
-
-        <!-- Traffic status -->
         <div class="fleet-traffic-total fleet-traffic-ok" id="fleet-traffic-status" style="margin-bottom:12px">✓ 100% traffic assigned</div>
 
-        <!-- Tiers list -->
+        <!-- Tier list -->
         <div id="fleet-tiers-list"></div>
         <button class="fleet-add-tier" onclick="addFleetTier()">+ Add routing tier</button>
 
-        <!-- API pricing table -->
-        <div style="margin-top:14px">
+        <!-- API pricing -->
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4)">API pricing (editable · per 1M tokens)</div>
-            <button class="add-prov" onclick="addApiProvider()">+ add provider</button>
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4)">API pricing (per 1M tokens · editable)</div>
+            <button class="add-prov" onclick="addApiProvider()">+ provider</button>
           </div>
           <table class="api-pricing-table" id="api-pricing-table"></table>
-          <div style="font-size:10px;color:var(--text4);margin-top:4px">Updated March 2026 — edit when providers change prices</div>
+          <div style="font-size:10px;color:var(--text4);margin-top:4px">Updated March 2026 — edit when prices change</div>
         </div>
 
       </div>
     </details>
+
+    <!-- ═══ PANEL 4: PER-TIER BREAKDOWN ═════════════════════════════════════ -->
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:16px;overflow:hidden">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text4)">PER-TIER BREAKDOWN</div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="fleet-breakdown-table" id="fleet-breakdown-table" style="width:100%">
+          <tr><th>Tier</th><th>Current API</th><th>Traffic</th><th>Queries/day</th><th>API cost/yr</th><th>Self-hosted</th><th>Saves</th></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- 5-year comparison -->
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:8px">5-YEAR COST COMPARISON</div>
+    <div class="fleet-cost-compare" id="fleet-cost-compare" style="margin-bottom:24px"></div>
 
   </div>
 </div>
