@@ -98,10 +98,7 @@ button{font-family:var(--sans);cursor:pointer}
 .home-h1{font-size:clamp(36px,5vw,56px);font-weight:600;line-height:1.1;margin-bottom:16px}
 .home-h1 span{color:var(--blue)}
 .home-sub{font-size:16px;color:var(--text2);max-width:520px;margin:0 auto 40px}
-.home-tiles{
-  display:grid;grid-template-columns:1fr 1fr;
-  gap:16px;max-width:700px;margin:0 auto 64px;
-}
+.home-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:900px;margin:0 auto 48px}
 .home-tile{
   background:var(--bg2);border:1px solid var(--border);
   border-radius:var(--r2);padding:24px;text-align:left;
@@ -785,7 +782,7 @@ button{font-family:var(--sans);cursor:pointer}
   .stat-tiles{grid-template-columns:1fr 1fr}
   .outcome-cards{grid-template-columns:1fr}
   .kv-visual{grid-template-columns:1fr}
-  .home-tiles{grid-template-columns:1fr}
+  .home-tiles{grid-template-columns:1fr!important}
   .hybrid-layout{flex-direction:column}
   .hybrid-left{width:100%}
   .cost-compare{grid-template-columns:1fr}
@@ -846,6 +843,34 @@ button{font-family:var(--sans);cursor:pointer}
         <p>All inputs, HF model lookup, optimisation tiers (FP8, prefix cache, llm-d), cost model, formulas.</p>
         <div class="home-tile-cta">Open &#8594;</div>
       </div>
+      <div class="home-tile" onclick="nav('explorer')">
+        <div class="home-tile-tag">Compare</div>
+        <div class="home-tile-icon">&#128202;</div>
+        <h3>GPU Explorer</h3>
+        <p>Compare NVIDIA and AMD GPUs by VRAM, throughput, and price. Interactive bubble chart.</p>
+        <div class="home-tile-cta">Explore &#8594;</div>
+      </div>
+      <div class="home-tile" onclick="nav('hybrid')">
+        <div class="home-tile-tag">Economics</div>
+        <div class="home-tile-icon">&#128200;</div>
+        <h3>Hybrid savings</h3>
+        <p>Cloud vs on-prem vs dedicated node costs. Drag the split slider to find your crossover point.</p>
+        <div class="home-tile-cta">Calculate &#8594;</div>
+      </div>
+      <div class="home-tile" onclick="nav('fleet')">
+        <div class="home-tile-tag">Routing</div>
+        <div class="home-tile-icon">&#9776;</div>
+        <h3>Fleet routing</h3>
+        <p>Model semantic routing economics. Compare API spend vs self-hosted. Calculate payback period.</p>
+        <div class="home-tile-cta">Analyse &#8594;</div>
+      </div>
+      <div class="home-tile" onclick="nav('saved')">
+        <div class="home-tile-tag">Compare</div>
+        <div class="home-tile-icon">&#128204;</div>
+        <h3>Saved results</h3>
+        <p>Compare workloads side by side. Export to PDF, Excel, or Google Sheets.</p>
+        <div class="home-tile-cta">View &#8594;</div>
+      </div>
     </div>
   </div>
   <div class="why">
@@ -875,6 +900,7 @@ button{font-family:var(--sans);cursor:pointer}
         <button class="qs-chip on" onclick="filterQSOrg('all',this)">All</button>
         <button class="qs-chip" onclick="filterQSOrg('meta',this)">Meta</button>
         <button class="qs-chip" onclick="filterQSOrg('qwen',this)">Qwen</button>
+        <button class="qs-chip" onclick="filterQSOrg('google',this)">Google</button>
         <button class="qs-chip" onclick="filterQSOrg('mistral',this)">Mistral</button>
         <button class="qs-chip" onclick="filterQSOrg('nvidia',this)">NVIDIA</button>
         <button class="qs-chip" onclick="filterQSOrg('redhat',this)">RedHatAI</button>
@@ -1231,7 +1257,7 @@ button{font-family:var(--sans);cursor:pointer}
         <div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
             <span class="realtime-badge"><span class="realtime-dot"></span>REAL-TIME INFERENCE ONLY</span>
-            <button class="btn btn-sm" id="vllm-cfg-btn" onclick="togglePanel('ps-inf');document.getElementById('ps-inf').scrollIntoView({behavior:'smooth'})">&#128196; vLLM config</button>
+            <button class="btn btn-sm" id="vllm-cfg-btn" onclick="openPanel('ps-inf')">&#128196; vLLM config</button>
           </div>
           <div class="outcome-title" id="outcome-subtitle">Llama 3.1 8B · 30 users · 8K ctx · TP=1</div>
         </div>
@@ -1601,7 +1627,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="explorer-chart-wrap">
       <canvas id="explorer-chart" style="max-height:420px"></canvas>
     </div>
-    <div class="explorer-notice">
+    <div class="explorer-notice"><strong>Data notice</strong> — Purchase prices are indicative market estimates for planning purposes only. Prices vary by vendor, volume, region, and time. Throughput figures are theoretical peak estimates. Sources: NVIDIA product pages, AMD product pages, published benchmarks, market reports. Validate all figures with vendors before procurement. © gpu.calc<br><br>
       <strong>Data notice</strong> — Purchase prices are indicative market estimates for planning purposes only. Prices vary by vendor, volume, region, and time. Validate all figures with vendors before procurement. &copy; gpu.calc
     </div>
   </div>
@@ -1650,7 +1676,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.1</span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.2.0</span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -1770,16 +1796,39 @@ var GPU_OPTIONS=['H100 SXM','H200 SXM','B100 SXM','B200 SXM','B300 SXM','A100 80
 var CLOUD_GPU_OPTIONS=['H100 SXM','H200 SXM','B100 SXM','B200 SXM','A100 80GB','A100 40GB','H20','L40S','MI300X','Custom'];
 
 var MODELS = [
-  {name:'Llama 3.1 8B',org:'meta',params:8,layers:32,kvHeads:8,headDim:128,attn:'gqa'},
-  {name:'Llama 3.1 70B',org:'meta',params:70,layers:80,kvHeads:8,headDim:128,attn:'gqa'},
-  {name:'Llama 3.1 405B',org:'meta',params:405,layers:126,kvHeads:8,headDim:128,attn:'gqa'},
-  {name:'Qwen 2.5 7B',org:'qwen',params:7,layers:28,kvHeads:4,headDim:128,attn:'gqa'},
-  {name:'Qwen 2.5 72B',org:'qwen',params:72,layers:80,kvHeads:8,headDim:128,attn:'gqa'},
-  {name:'Mistral 7B',org:'mistral',params:7,layers:32,kvHeads:8,headDim:128,attn:'gqa'},
-  {name:'Phi-4',org:'other',params:14,layers:40,kvHeads:8,headDim:96,attn:'gqa'},
-  {name:'RH Llama 8B W8A8',org:'redhat',params:8,layers:32,kvHeads:8,headDim:128,attn:'gqa'},
+  // Meta Llama
+  {name:'Llama 3.1 8B',  org:'meta',params:8,  layers:32, kvHeads:8, headDim:128,attn:'gqa',hfId:'meta-llama/Llama-3.1-8B-Instruct'},
+  {name:'Llama 3.1 70B', org:'meta',params:70, layers:80, kvHeads:8, headDim:128,attn:'gqa',hfId:'meta-llama/Llama-3.1-70B-Instruct'},
+  {name:'Llama 3.1 405B',org:'meta',params:405,layers:126,kvHeads:8, headDim:128,attn:'gqa',hfId:'meta-llama/Llama-3.1-405B-Instruct'},
+  {name:'Llama 3.2 3B',  org:'meta',params:3,  layers:28, kvHeads:8, headDim:64, attn:'gqa',hfId:'meta-llama/Llama-3.2-3B-Instruct'},
+  {name:'Llama 3.2 11B', org:'meta',params:11, layers:32, kvHeads:8, headDim:128,attn:'gqa',hfId:'meta-llama/Llama-3.2-11B-Vision-Instruct'},
+  {name:'Llama 3.3 70B', org:'meta',params:70, layers:80, kvHeads:8, headDim:128,attn:'gqa',hfId:'meta-llama/Llama-3.3-70B-Instruct'},
+  // Qwen
+  {name:'Qwen 2.5 7B',   org:'qwen',params:7,  layers:28, kvHeads:4, headDim:128,attn:'gqa',hfId:'Qwen/Qwen2.5-7B-Instruct'},
+  {name:'Qwen 2.5 14B',  org:'qwen',params:14, layers:40, kvHeads:8, headDim:128,attn:'gqa',hfId:'Qwen/Qwen2.5-14B-Instruct'},
+  {name:'Qwen 2.5 32B',  org:'qwen',params:32, layers:64, kvHeads:8, headDim:128,attn:'gqa',hfId:'Qwen/Qwen2.5-32B-Instruct'},
+  {name:'Qwen 2.5 72B',  org:'qwen',params:72, layers:80, kvHeads:8, headDim:128,attn:'gqa',hfId:'Qwen/Qwen2.5-72B-Instruct'},
+  {name:'QwQ 32B',       org:'qwen',params:32, layers:64, kvHeads:8, headDim:128,attn:'gqa',hfId:'Qwen/QwQ-32B'},
+  // Mistral
+  {name:'Mistral 7B',    org:'mistral',params:7, layers:32,kvHeads:8, headDim:128,attn:'gqa',hfId:'mistralai/Mistral-7B-Instruct-v0.3'},
+  {name:'Mistral Nemo',  org:'mistral',params:12,layers:40,kvHeads:8, headDim:128,attn:'gqa',hfId:'mistralai/Mistral-Nemo-Instruct-2407'},
+  {name:'Mixtral 8x7B',  org:'mistral',params:47,layers:32,kvHeads:8, headDim:128,attn:'gqa',hfId:'mistralai/Mixtral-8x7B-Instruct-v0.1'},
+  // Google
+  {name:'Gemma 2 2B',    org:'google',params:2, layers:26, kvHeads:4, headDim:256,attn:'gqa',hfId:'google/gemma-2-2b-it'},
+  {name:'Gemma 2 9B',    org:'google',params:9, layers:42, kvHeads:8, headDim:256,attn:'gqa',hfId:'google/gemma-2-9b-it'},
+  {name:'Gemma 2 27B',   org:'google',params:27,layers:46, kvHeads:16,headDim:256,attn:'gqa',hfId:'google/gemma-2-27b-it'},
+  // Microsoft
+  {name:'Phi-4 14B',     org:'other',params:14, layers:40, kvHeads:8, headDim:96, attn:'gqa',hfId:'microsoft/phi-4'},
+  {name:'Phi-3.5 3.8B',  org:'other',params:4,  layers:32, kvHeads:8, headDim:96, attn:'gqa',hfId:'microsoft/Phi-3.5-mini-instruct'},
+  // DeepSeek
+  {name:'DeepSeek R1 7B', org:'other',params:7, layers:28, kvHeads:4, headDim:128,attn:'gqa',hfId:'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'},
+  {name:'DeepSeek R1 70B',org:'other',params:70,layers:80, kvHeads:8, headDim:128,attn:'gqa',hfId:'deepseek-ai/DeepSeek-R1-Distill-Llama-70B'},
+  // NVIDIA
+  {name:'Nemotron 70B',  org:'nvidia',params:70,layers:80, kvHeads:8, headDim:128,attn:'gqa',hfId:'nvidia/Llama-3.1-Nemotron-70B-Instruct-HF'},
+  {name:'Nemotron 4B',   org:'nvidia',params:4, layers:32, kvHeads:8, headDim:128,attn:'gqa',hfId:'nvidia/Nemotron-Mini-4B-Instruct'},
+  // Red Hat
+  {name:'RH Llama 8B W8A8', org:'redhat',params:8, layers:32,kvHeads:8,headDim:128,attn:'gqa'},
   {name:'RH Llama 70B W8A8',org:'redhat',params:70,layers:80,kvHeads:8,headDim:128,attn:'gqa'},
-  {name:'Nemotron 70B',org:'nvidia',params:70,layers:80,kvHeads:8,headDim:128,attn:'gqa'},
 ];
 
 var GPU_DATA = [
@@ -1852,11 +1901,15 @@ calc();
 
 // Hash routing — supports #admin and legacy #vg-ops-9x7k
 function handleHash(){
-  var h=location.hash.replace('#','')||'home';
+  var raw=location.hash.replace('#','')||'home';
+  // Strip ?c=... query from hash for page routing
+  var h=raw.split('?')[0];
   if(h==='vg-ops-9x7k'||h==='admin') h='admin';
-  var valid=['home','advanced','saved','hybrid','explorer','admin'];
+  var valid=['home','advanced','saved','hybrid','explorer','admin','fleet'];
   if(!valid.includes(h)) h='home';
   navTo(h,true);
+  // Load config after nav if ?c= present
+  if(raw.indexOf('?c=')>=0) loadFromURL();
 }
 window.addEventListener('hashchange',handleHash);
 handleHash();
@@ -1908,6 +1961,15 @@ function applyToggles(){
 }
 
 // ===== PANEL TOGGLE =====
+function openPanel(id){
+  var body=document.getElementById(id);
+  if(!body)return;
+  // Find parent panel and ensure it's open
+  var panel=body.closest('.panel')||body.parentElement;
+  if(panel){panel.classList.add('open');}
+  body.style.display='block';
+  setTimeout(function(){body.scrollIntoView({behavior:'smooth',block:'nearest'});},100);
+}
 function togglePanel(id){
   var el=document.getElementById(id);
   el.classList.toggle('open');
@@ -2352,8 +2414,15 @@ function fetchHFModel(id,statusId,cb){
     st.className='hf-status ok';
     cb(m);
   }).catch(function(e){
-    st.innerHTML='✗ Not found on HuggingFace — check the exact model ID<br>'
-      +'<span style="font-size:10px;color:var(--text4)">Format: owner/model-name (e.g. meta-llama/Llama-3.1-8B)</span>';
+    // Check if it's a proxy/network issue vs model not found
+    var msg = e.message||'';
+    if(msg.includes('fetch')||msg.includes('network')||msg.includes('Failed')) {
+      st.innerHTML='⚠ HuggingFace proxy not reachable — pick a model from the grid above, or deploy the Worker to enable live lookup<br>'
+        +'<span style="font-size:10px;color:var(--text4)">Format when deployed: owner/model-name (e.g. meta-llama/Llama-3.1-8B)</span>';
+    } else {
+      st.innerHTML='✗ Model not found — check the exact ID on huggingface.co<br>'
+        +'<span style="font-size:10px;color:var(--text4)">Format: owner/model-name (e.g. meta-llama/Llama-3.1-8B)</span>';
+    }
     st.className='hf-status err';
   });
 }
@@ -2552,16 +2621,34 @@ function buildShareURL(){
   return btoa(JSON.stringify({p:S.params,u:S.users,c:S.ctx,g:S.gpuName,v:S.gpuVram,a:S.attn,pr:S.prec,fw:S.fw,tp:S.tp}));
 }
 function loadFromURL(){
-  var params=new URLSearchParams(location.search);
-  var c=params.get('c');
+  // URL format: #advanced?c=BASE64
+  var hash=location.hash||'';
+  var qIdx=hash.indexOf('?c=');
+  if(qIdx<0){
+    // Also try query string for backwards compat
+    var qp=new URLSearchParams(location.search);
+    var qc=qp.get('c');
+    if(qc) hash='#advanced?c='+qc;
+    else return;
+    qIdx=hash.indexOf('?c=');
+  }
+  var c=hash.slice(qIdx+3);
   if(!c)return;
   try{
     var d=JSON.parse(atob(c));
-    S.params=d.p;S.users=d.u;S.ctx=d.c;
-    S.gpuName=d.g;S.gpuVram=d.v;S.attn=d.a;
-    S.prec=d.pr;S.fw=d.fw;S.tp=d.tp;
+    if(d.p) S.params=d.p;
+    if(d.u) S.users=d.u;
+    if(d.c) S.ctx=d.c;
+    if(d.g) S.gpuName=d.g;
+    if(d.v) S.gpuVram=+d.v;
+    if(d.a) S.attn=d.a;
+    if(d.pr) S.prec=d.pr;
+    if(d.fw) S.fw=d.fw;
+    if(d.tp) S.tp=+d.tp;
+    // Navigate to advanced and calc
+    navTo('advanced',true);
     calc();
-  }catch(e){}
+  }catch(e){ console.warn('loadFromURL failed:',e); }
 }
 
 // ===== ASK CLAUDE =====
@@ -2578,16 +2665,15 @@ function buildTechPrompt(){
     +' · '+S.gpuName+' '+S.gpuVram+'GB · '+S.users+' concurrent users · '+S.ctx+'K context\n\n'
     +'OUR CALCULATION:\n'
     +'- Weights: '+S.params+'B × '+(S.prec==='fp16'?2:S.prec==='fp8'?1:0.5)+' bytes = '+fmtGB(weightsGB())+'\n'
-    +'- Overhead (~12% planning assumption): '+fmtGB(overhead())+' → usable: '+fmtGB(S.gpuVram-weightsGB()-overhead())+'/GPU\n'
+    +'- Framework overhead (12% of weights = '+fmtGB(overhead())+'): usable VRAM = '+fmtGB(S.gpuVram)+' - '+fmtGB(weightsGB())+' - '+fmtGB(overhead())+' = '+fmtGB(S.gpuVram-weightsGB()-overhead())+'GB\n'
     +'- KV formula: 2 × ~'+S.numLayers+' layers × '+S.numKvHeads+' kv_heads × '+S.headDim+' head_dim × 2_bytes × '+S.ctx+'K_tokens ÷ 1e9 = '+fmtGB(kvGBPerUser())+'/user\n'
     +'- vLLM PA efficiency 95%: KV pool = ('+(S.gpuVram-weightsGB()-overhead()).toFixed(1)+'×'+S.tp+' - '+weightsGB().toFixed(1)+') × 0.95 = '+fmtGB(compute().avail)+' → '+compute().upr+' users/replica\n'
     +'- Replicas: ceil('+S.users+'/'+compute().upr+') = '+compute().replicas+' → Total: '+compute().totalGPUs+' × '+S.tp+' = '+compute().totalGPUs+' GPUs\n\n'
-    +'QUESTIONS:\n'
-    +'1. Is our KV cache formula correct for '+S.attn.toUpperCase()+' attention with these params?\n'
-    +'2. Is 12% overhead a reasonable planning assumption for vLLM on '+S.gpuName+'?\n'
-    +'3. Any significant factors we are missing for this model/GPU combination?\n'
-    +'4. Is the replica count reasonable for '+S.users+' concurrent users at '+S.ctx+'K context?\n\n'
-    +'Please give a brief verdict: valid estimate / likely underestimate / likely overestimate, with one key reason.';
+    +'VALIDATE:\n'
+    +'1. KV formula correct for '+S.attn.toUpperCase()+'?\n'
+    +'2. GPU count order-of-magnitude reasonable?\n'
+    +'3. One key risk or missing factor?\n\n'
+    +'Respond in 3 bullet points max. End with: VERDICT: valid / underestimate / overestimate + one sentence reason.';
 }
 
 function buildCFOPrompt(){
@@ -2733,7 +2819,7 @@ function renderDedNodeTable(){
       +'<td><input type="text" value="'+d.name+'" style="width:72px;padding:2px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:'+(d.active?'var(--blue)':'var(--text1)')+';font-size:11px;font-weight:'+(d.active?'600':'400')+'" onchange="DED_NODES['+i+'].name=this.value"></td>'
       +'<td><select id="ded-gpu-'+i+'" style="padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:10px;font-family:var(--mono)" onchange="DED_NODES['+i+'].gpu=this.value;if(DED_NODES['+i+'].active){S.hDedGpus=DED_NODES['+i+'].gpus;}calcHybrid()">'+gpuOpts+'</select></td>'
       +'<td><input type="number" value="'+d.gpus+'" min="1" max="64" style="width:42px;padding:2px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)" onchange="DED_NODES['+i+'].gpus=+this.value;if(DED_NODES['+i+'].active){S.hDedGpus=+this.value;}calcHybrid()"></td>'
-      +'<td><input type="number" value="'+d.rateMo+'" style="width:62px;padding:2px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)" onchange="DED_NODES['+i+'].rateMo=+this.value;if(DED_NODES['+i+'].active){S.hDedRate=+this.value;}calcHybrid()"></td>'
+      +'<td><input type="number" value="'+d.rateMo+'" style="width:58px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:10px;font-family:var(--mono)" onchange="DED_NODES['+i+'].rateMo=+this.value;if(DED_NODES['+i+'].active){S.hDedRate=+this.value;}calcHybrid()"></td>'
       +'<td><button class="prov-del" onclick="delDedNode('+i+')">&#215;</button></td>'
       +'</tr>';
   });
@@ -2840,7 +2926,7 @@ function calcHybrid(){
     +'</div>'
     +'</div>'
     +'<div class="audit-bar-wrap">'
-    +'<div class="audit-bar-label"><span>Current (over-provisioned)</span><span>'+fmtK(current)+'/yr</span></div>'
+    +'<div class="audit-bar-label"><span>Current ('+(running>gpus?'over-provisioned':'under-provisioned')+')</span><span>'+fmtK(current)+'/yr</span></div>'
     +'<div class="audit-bar"><div class="audit-bar-fill" style="width:100%;background:#c81e1e">'+fmtK(current)+'</div></div>'
     +'<div class="audit-bar-label"><span>Right-sized</span><span>'+fmtK(rightsized)+'/yr</span></div>'
     +'<div class="audit-bar"><div class="audit-bar-fill" style="width:'+Math.round(rightsized/current*100)+'%;background:#057a55">'+fmtK(rightsized)+'</div></div>'
