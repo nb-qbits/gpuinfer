@@ -1259,7 +1259,7 @@ button{font-family:var(--sans);cursor:pointer}
         <div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
             <span class="realtime-badge"><span class="realtime-dot"></span>REAL-TIME INFERENCE ONLY</span>
-            <button class="btn btn-sm" id="vllm-cfg-btn" onclick="openPanel('ps-inf')">&#128196; vLLM config</button>
+            <button class="btn btn-sm" id="vllm-cfg-btn" onclick="openPanel('ps-inf')" title="Opens Inference mode panel on the left">&#128196; vLLM config &#8592;</button>
           </div>
           <div class="outcome-title" id="outcome-subtitle">Llama 3.1 8B · 30 users · 8K ctx · TP=1</div>
         </div>
@@ -1974,11 +1974,16 @@ function openPanel(id){
   var el=document.getElementById(id);
   if(!el)return;
   el.classList.add('open');
-  el.style.outline='2px solid var(--blue)';
-  setTimeout(function(){el.style.outline='';},1200);
-  var leftCol=el.closest('.adv-left')||el.parentElement;
-  if(leftCol) leftCol.scrollTop=el.offsetTop-60;
-  el.scrollIntoView({behavior:'smooth',block:'nearest'});
+  // Scroll the sticky left column to show the opened panel
+  var leftCol=document.querySelector('.adv-left');
+  if(leftCol){
+    var elTop=el.getBoundingClientRect().top;
+    var colTop=leftCol.getBoundingClientRect().top;
+    leftCol.scrollTo({top:leftCol.scrollTop+(elTop-colTop)-20,behavior:'smooth'});
+  }
+  // Flash panel header blue to draw attention
+  var head=el.querySelector('.panel-head');
+  if(head){head.style.background='var(--blue-bg)';setTimeout(function(){head.style.background='';},1500);}
 }
 function togglePanel(id){
   var el=document.getElementById(id);
