@@ -1685,7 +1685,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.2.0</span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.2.1</span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -1973,17 +1973,23 @@ function applyToggles(){
 function openPanel(id){
   var el=document.getElementById(id);
   if(!el)return;
+  // Open panel FIRST — everything else is just visual enhancement
   el.classList.add('open');
-  // Scroll the sticky left column to show the opened panel
-  var leftCol=document.querySelector('.adv-left');
-  if(leftCol){
-    var elTop=el.getBoundingClientRect().top;
-    var colTop=leftCol.getBoundingClientRect().top;
-    leftCol.scrollTo({top:leftCol.scrollTop+(elTop-colTop)-20,behavior:'smooth'});
-  }
-  // Flash panel header blue to draw attention
+  // Flash header to draw attention
   var head=el.querySelector('.panel-head');
   if(head){head.style.background='var(--blue-bg)';setTimeout(function(){head.style.background='';},1500);}
+  // Scroll left column — wrapped in try/catch so it never blocks opening
+  try{
+    var leftCol=document.querySelector('.adv-left');
+    if(leftCol && leftCol.scrollTo){
+      var elTop=el.getBoundingClientRect().top;
+      var colTop=leftCol.getBoundingClientRect().top;
+      leftCol.scrollTo({top:leftCol.scrollTop+(elTop-colTop)-20,behavior:'smooth'});
+    } else if(leftCol){
+      // Fallback for older browsers
+      leftCol.scrollTop=el.offsetTop-60;
+    }
+  }catch(e){}
 }
 function togglePanel(id){
   var el=document.getElementById(id);
