@@ -3469,58 +3469,77 @@ function calcFleet(){
   var totalPct=SF.tiers.reduce(function(s,t){return s+t.trafficPct;},0);
   var statusEl=document.getElementById('fleet-traffic-status');
   if(statusEl){
-    if(totalPct===100){statusEl.textContent='✓ 100% traffic assigned';statusEl.className='fleet-traffic-total fleet-traffic-ok';}
-    else if(totalPct<100){statusEl.textContent='⚠ '+totalPct+'% assigned — '+(100-totalPct)+'% unassigned';statusEl.className='fleet-traffic-total fleet-traffic-warn';}
-    else{statusEl.textContent='✗ '+totalPct+'% — reduce by '+(totalPct-100)+'%';statusEl.className='fleet-traffic-total fleet-traffic-over';}
+    statusEl.textContent=totalPct===100?'✓ 100% traffic assigned':'⚠ '+totalPct+'% assigned — must sum to 100%';
+    statusEl.className='fleet-traffic-total '+(totalPct===100?'fleet-traffic-ok':'fleet-traffic-warn');
   }
+
   var results=SF.tiers.map(computeTier);
-  var totalGPUs=results.reduce(function(s,r){return s+r.totalGPUs;},0);
-  var totalCostYr=results.reduce(function(s,r){return s+r.cloudCostYr;},0);
+
+  // ── API cost (what you pay TODAY) ──────────────────────────────────────────
   var totalApiCostYr=results.reduce(function(s,r){return s+r.apiCostYr;},0);
-  var biggestTier=SF.tiers.reduce(function(a,b){return b.params>a.params?b:a;});
-  var naiveBPP=biggestTier.prec==='fp16'?2:1;
-  var naiveW=biggestTier.params*naiveBPP;
-  var naiveOH=biggestTier.gpuVram*0.08;
-  var naiveUsable=(biggestTier.gpuVram-naiveOH)*biggestTier.tp;
-  var naiveBPT=2*biggestTier.layers*biggestTier.kvHeads*biggestTier.headDim*2;
-  var naiveKvPU=naiveBPT*biggestTier.ctx*1000/1e9;
-  var naivePool=(naiveUsable-naiveW)*0.95;
-  var naiveUpr=Math.max(1,Math.floor(naivePool/Math.max(naiveKvPU,0.001)));
-  var naiveReplicas=Math.ceil(SF.totalUsers/naiveUpr);
-  var naiveGPUs=naiveReplicas*biggestTier.tp;
+
+  // ── Self-hosted cost (what you'd pay if you owned the GPUs) ───────────────
+  var totalGPUs=results.reduce(function(s,r){return s+r.totalGPUs;},0);
   var activeProvider=PROVIDERS.find(function(p){return p.active;})||PROVIDERS[0];
-  var naiveCostYr=naiveGPUs*activeProvider.rate*8760;
-  var savingsYr=naiveCostYr-totalCostYr;
-  var el=function(id){return document.getElementById(id);};
-  if(el('fhc-gpus'))el('fhc-gpus').textContent=totalGPUs;
-  if(el('fhc-cost'))el('fhc-cost').textContent=fmtK(totalCostYr);
-  if(el('fhc-tiers'))el('fhc-tiers').textContent=SF.tiers.length;
-  if(el('fhc-savings')){el('fhc-savings').textContent=savingsYr>0?fmtK(savingsYr):'$0';el('fhc-savings').className='fhc-val '+(savingsYr>0?'savings':'');}
-  // Fleet page specific cards
-  if(el('fhc-api-cost'))el('fhc-api-cost').textContent=fmtK(totalApiCostYr);
-  if(el('fhc-self-cost')){el('fhc-self-cost').textContent=fmtK(totalCostYr);el('fhc-self-cost').style.color='var(--green)';}
-  // Config summary
-  if(el('fleet-config-summary'))el('fleet-config-summary').textContent=SF.tiers.length+' tiers · '+SF.totalUsers.toLocaleString()+' users';
-  var tokPerDay=SF.tiers.reduce(function(s,t){return s+Math.round(SF.totalUsers*(t.trafficPct/100)*100)*(t.avgInputTok+t.avgOutputTok);},0);
-  if(el('fleet-total-derived'))el('fleet-total-derived').textContent=formatTokensPerDay(tokPerDay)+' tokens/day';
-  renderFleetBreakdown(results,totalGPUs,totalCostYr);
-  renderTrafficFlow(results);
-  renderFleetCostCompare(totalCostYr,naiveCostYr,totalApiCostYr,results);
-  renderRoutingROI(savingsYr,totalGPUs,naiveGPUs,totalCostYr,naiveCostYr);
+  var selfHostedYr=totalGPUs*activeProvider.rate*8760;
+  var selfHostedOnprem=totalGPUs*25000; // ~$25K/GPU on-prem amortised 5yr → ÷5
+
+  // Use on-prem cost for ROI (that's the actual investment)
+  var onpremYr=selfHostedOnprem/5 + selfHostedOnprem*0.15; // amort + opex
+
+  var savingsYr=totalApiCostYr-onpremYr;
+  var payback=savingsYr>0?(SF.engCost/savingsYr*12):Infinity;
+
+  // ── Update outcome cards ───────────────────────────────────────────────────
+  if(el('fhc-api-cost')){
+    el('fhc-api-cost').textContent=totalApiCostYr>0?fmtK(totalApiCostYr):'—';
+    el('fhc-api-cost').style.color=totalApiCostYr>0?'var(--red)':'var(--text3)';
+  }
+  if(el('fhc-self-cost')){
+    el('fhc-self-cost').textContent=fmtK(onpremYr);
+    el('fhc-self-cost').style.color='var(--green)';
+  }
+  if(el('fhc-gpus')) el('fhc-gpus').textContent=totalGPUs;
+  if(el('fhc-savings')){
+    el('fhc-savings').textContent=savingsYr>0?fmtK(savingsYr):'API is cheaper';
+    el('fhc-savings').style.color=savingsYr>0?'var(--green)':'var(--red)';
+  }
+
+  // ── ROI verdict ────────────────────────────────────────────────────────────
+  var roiEl=document.getElementById('roi-grid');
+  if(roiEl){
+    var verdictEl=document.getElementById('roi-verdict-label');
+    var roiHtml='';
+    if(savingsYr>0){
+      if(verdictEl){verdictEl.textContent='✓ Self-hosting makes financial sense';verdictEl.style.color='var(--green)';}
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtK(savingsYr)+'</div><div class="roi-stat-lbl">Annual savings</div></div>';
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+(payback<12?payback.toFixed(1)+' mo':(payback/12).toFixed(1)+' yr')+'</div><div class="roi-stat-lbl">Payback period</div></div>';
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtK(totalApiCostYr)+'</div><div class="roi-stat-lbl">Current API spend</div></div>';
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtK(onpremYr)+'</div><div class="roi-stat-lbl">Self-hosted/yr</div></div>';
+    } else {
+      if(verdictEl){verdictEl.textContent='Stay on API — volume too low to justify infrastructure';verdictEl.style.color='var(--amber)';}
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtK(Math.abs(savingsYr))+'</div><div class="roi-stat-lbl">API saves vs self-host</div></div>';
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtK(totalApiCostYr)+'</div><div class="roi-stat-lbl">Current API spend</div></div>';
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtK(onpremYr)+'</div><div class="roi-stat-lbl">Self-hosted cost</div></div>';
+      var threshold=onpremYr;
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtK(threshold)+'/yr</div><div class="roi-stat-lbl">API spend needed to justify</div></div>';
+    }
+    roiEl.innerHTML=roiHtml;
+  }
+
+  // ── Per-tier breakdown table ───────────────────────────────────────────────
+  renderFleetBreakdown(results);
+  renderTrafficFlow();
   updateTierSummaries(results);
-}
 
-function renderFleetPage(){
-  renderFleetTiers();
-  renderApiPricingTable();
-  calcFleet();
-}
+  // ── Config summary ─────────────────────────────────────────────────────────
+  if(el('fleet-config-summary')) el('fleet-config-summary').textContent=SF.tiers.length+' tiers · '+SF.totalUsers.toLocaleString()+' users · '+fmtK(totalApiCostYr)+'/yr API';
+  if(el('fleet-total-derived')) el('fleet-total-derived').textContent='~'+Math.round(SF.totalUsers*100).toLocaleString()+' queries/day';
 
-function formatTokensPerDay(n){
-  if(n>=1e9)return (n/1e9).toFixed(1)+'B';
-  if(n>=1e6)return (n/1e6).toFixed(1)+'M';
-  if(n>=1e3)return (n/1e3).toFixed(0)+'K';
-  return String(n);
+  // ── 5-year comparison ─────────────────────────────────────────────────────
+  renderFleetCostCompare(totalApiCostYr,onpremYr,totalGPUs,activeProvider);
+
+  T.fire('fleet_calc',{tiers:SF.tiers.length,apiCost:Math.round(totalApiCostYr),gpus:totalGPUs});
 }
 
 function renderFleetTiers(){
@@ -3654,10 +3673,12 @@ function renderTrafficFlow(){
     svg+='<text x="'+(destX+14)+'" y="'+(ty+17)+'" font-size="11" font-weight="600" fill="'+col+'" font-family="inherit">'+t.name+'</text>';
     svg+='<text x="'+(destX+14)+'" y="'+(ty+30)+'" font-size="9.5" fill="var(--text3)" font-family="inherit">'+t.apiModel+'</text>';
 
-    // GPU + cost badges on right side
-    var C=computeTier(t);
-    svg+='<text x="'+(destX+destW-8)+'" y="'+(ty+17)+'" text-anchor="end" font-size="10" font-weight="600" fill="var(--blue)" font-family="inherit">'+C.totalGPUs+' GPUs</text>';
-    svg+='<text x="'+(destX+destW-8)+'" y="'+(ty+30)+'" text-anchor="end" font-size="9.5" fill="var(--text3)" font-family="inherit">'+fmtK(C.cloudCostYr)+'/yr</text>';
+    // API cost badge on right (not GPUs — these are API calls)
+    var apiP=API_PROVIDERS.find(function(x){return x.model===t.apiModel;})||{inputPer1M:3,outputPer1M:15};
+    var qpd=SF.totalUsers*(t.trafficPct/100)*100;
+    var apiYr=qpd*365*(t.avgInputTok*apiP.inputPer1M+t.avgOutputTok*apiP.outputPer1M)/1e6;
+    svg+='<text x="'+(destX+destW-8)+'" y="'+(ty+17)+'" text-anchor="end" font-size="10" font-weight="600" fill="var(--text1)" font-family="inherit">'+fmtK(apiYr)+'/yr</text>';
+    svg+='<text x="'+(destX+destW-8)+'" y="'+(ty+30)+'" text-anchor="end" font-size="9.5" fill="var(--text3)" font-family="inherit">API</text>';
   });
 
   svg+='</svg>';
@@ -3683,14 +3704,14 @@ function renderFrontierCompare(){
   // Current mixed cost
   var currentYr=0;
   SF.tiers.forEach(function(t){
-    var p=API_PROVIDERS.find(function(x){return x.model===t.apiModel;})||{inPer1M:3,outPer1M:15};
-    currentYr+=SF.totalUsers*(t.trafficPct/100)*100*365*(t.avgInputTok*p.inPer1M/1e6+t.avgOutputTok*p.outPer1M/1e6);
+    var p=API_PROVIDERS.find(function(x){return x.model===t.apiModel;})||{inputPer1M:3,outputPer1M:15};
+    currentYr+=SF.totalUsers*(t.trafficPct/100)*100*365*(t.avgInputTok*p.inputPer1M+t.avgOutputTok*p.outputPer1M)/1e6;
   });
 
   var html='';
   frontierModels.forEach(function(fm){
-    var p=API_PROVIDERS.find(function(x){return x.model===fm.model;})||{inPer1M:3,outPer1M:15};
-    var yr=qpd*365*(avgIn*p.inPer1M/1e6+avgOut*p.outPer1M/1e6);
+    var p=API_PROVIDERS.find(function(x){return x.model===fm.model;})||{inputPer1M:3,outputPer1M:15};
+    var yr=qpd*365*(avgIn*p.inputPer1M+avgOut*p.outputPer1M)/1e6;
     var diff=yr-currentYr;
     var diffStr=(diff>0?'+':'')+fmtK(diff);
     var diffCol=diff>0?'var(--red)':'var(--green)';
