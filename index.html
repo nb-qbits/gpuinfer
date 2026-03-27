@@ -1962,13 +1962,15 @@ function applyToggles(){
 
 // ===== PANEL TOGGLE =====
 function openPanel(id){
-  var body=document.getElementById(id);
-  if(!body)return;
-  // Find parent panel and ensure it's open
-  var panel=body.closest('.panel')||body.parentElement;
-  if(panel){panel.classList.add('open');}
-  body.style.display='block';
-  setTimeout(function(){body.scrollIntoView({behavior:'smooth',block:'nearest'});},100);
+  var el=document.getElementById(id);
+  if(!el)return;
+  // id IS the panel-section — just add open class
+  el.classList.add('open');
+  setTimeout(function(){
+    var body=el.querySelector('.panel-body');
+    if(body)body.scrollIntoView({behavior:'smooth',block:'nearest'});
+    else el.scrollIntoView({behavior:'smooth',block:'nearest'});
+  },50);
 }
 function togglePanel(id){
   var el=document.getElementById(id);
@@ -2414,13 +2416,13 @@ function fetchHFModel(id,statusId,cb){
     st.className='hf-status ok';
     cb(m);
   }).catch(function(e){
-    // Check if it's a proxy/network issue vs model not found
     var msg = e.message||'';
-    if(msg.includes('fetch')||msg.includes('network')||msg.includes('Failed')) {
-      st.innerHTML='⚠ HuggingFace proxy not reachable — pick a model from the grid above, or deploy the Worker to enable live lookup<br>'
-        +'<span style="font-size:10px;color:var(--text4)">Format when deployed: owner/model-name (e.g. meta-llama/Llama-3.1-8B)</span>';
+    var isNetwork = msg.includes('fetch')||msg.includes('network')||msg.includes('Failed')||msg.includes('Load')||msg.includes('NetworkError');
+    if(isNetwork || !HF_PROXY) {
+      st.innerHTML='⚠ Live lookup requires the Worker proxy — pick from the model grid above<br>'
+        +'<span style="font-size:10px;color:var(--text4)">Once Worker is deployed at '+HF_PROXY+', live lookup will work</span>';
     } else {
-      st.innerHTML='✗ Model not found — check the exact ID on huggingface.co<br>'
+      st.innerHTML='✗ Model not found on HuggingFace — check exact ID<br>'
         +'<span style="font-size:10px;color:var(--text4)">Format: owner/model-name (e.g. meta-llama/Llama-3.1-8B)</span>';
     }
     st.className='hf-status err';
@@ -2665,7 +2667,7 @@ function buildTechPrompt(){
     +' · '+S.gpuName+' '+S.gpuVram+'GB · '+S.users+' concurrent users · '+S.ctx+'K context\n\n'
     +'OUR CALCULATION:\n'
     +'- Weights: '+S.params+'B × '+(S.prec==='fp16'?2:S.prec==='fp8'?1:0.5)+' bytes = '+fmtGB(weightsGB())+'\n'
-    +'- Framework overhead (12% of weights = '+fmtGB(overhead())+'): usable VRAM = '+fmtGB(S.gpuVram)+' - '+fmtGB(weightsGB())+' - '+fmtGB(overhead())+' = '+fmtGB(S.gpuVram-weightsGB()-overhead())+'GB\n'
+    +'- Framework overhead: '+fmtGB(overhead())+' (12% of weights) → usable = '+S.gpuVram+'GB - '+weightsGB().toFixed(1)+'GB - '+overhead().toFixed(1)+'GB = '+(S.gpuVram-weightsGB()-overhead()).toFixed(1)+'GB/GPU\n'
     +'- KV formula: 2 × ~'+S.numLayers+' layers × '+S.numKvHeads+' kv_heads × '+S.headDim+' head_dim × 2_bytes × '+S.ctx+'K_tokens ÷ 1e9 = '+fmtGB(kvGBPerUser())+'/user\n'
     +'- vLLM PA efficiency 95%: KV pool = ('+(S.gpuVram-weightsGB()-overhead()).toFixed(1)+'×'+S.tp+' - '+weightsGB().toFixed(1)+') × 0.95 = '+fmtGB(compute().avail)+' → '+compute().upr+' users/replica\n'
     +'- Replicas: ceil('+S.users+'/'+compute().upr+') = '+compute().replicas+' → Total: '+compute().totalGPUs+' × '+S.tp+' = '+compute().totalGPUs+' GPUs\n\n'
@@ -2810,15 +2812,15 @@ function renderHProviderTable(){
 function renderDedNodeTable(){
   var t=document.getElementById('h-ded-table');
   if(!t)return;
-  var h='<tr><th></th><th>Provider</th><th>GPU type</th><th>GPUs/node</th><th>$/mo</th><th></th></tr>';
+  var h='<tr><th></th><th style="font-size:9px">Provider</th><th style="font-size:9px">GPU</th><th style="font-size:9px">N</th><th style="font-size:9px">$/mo</th><th></th></tr>';
   DED_NODES.forEach(function(d,i){
     // Build options without selected attr — we set .value after render
     var gpuOpts=GPU_OPTIONS.map(function(g){return '<option value="'+g+'">'+g+'</option>';}).join('');
     h+='<tr>'
       +'<td><input type="radio" class="prov-radio" name="hded" '+(d.active?'checked':'')+' onchange="selectDedNode('+i+')"></td>'
-      +'<td><input type="text" value="'+d.name+'" style="width:72px;padding:2px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:'+(d.active?'var(--blue)':'var(--text1)')+';font-size:11px;font-weight:'+(d.active?'600':'400')+'" onchange="DED_NODES['+i+'].name=this.value"></td>'
+      +'<td><input type="text" value="'+d.name+'" style="width:62px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:'+(d.active?'var(--blue)':'var(--text1)')+';font-size:10px;font-weight:'+(d.active?'600':'400')+'" onchange="DED_NODES['+i+'].name=this.value"></td>'
       +'<td><select id="ded-gpu-'+i+'" style="padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:10px;font-family:var(--mono)" onchange="DED_NODES['+i+'].gpu=this.value;if(DED_NODES['+i+'].active){S.hDedGpus=DED_NODES['+i+'].gpus;}calcHybrid()">'+gpuOpts+'</select></td>'
-      +'<td><input type="number" value="'+d.gpus+'" min="1" max="64" style="width:42px;padding:2px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)" onchange="DED_NODES['+i+'].gpus=+this.value;if(DED_NODES['+i+'].active){S.hDedGpus=+this.value;}calcHybrid()"></td>'
+      +'<td><input type="number" value="'+d.gpus+'" min="1" max="64" style="width:36px;padding:2px 3px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)" onchange="DED_NODES['+i+'].gpus=+this.value;if(DED_NODES['+i+'].active){S.hDedGpus=+this.value;}calcHybrid()"></td>'
       +'<td><input type="number" value="'+d.rateMo+'" style="width:58px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:10px;font-family:var(--mono)" onchange="DED_NODES['+i+'].rateMo=+this.value;if(DED_NODES['+i+'].active){S.hDedRate=+this.value;}calcHybrid()"></td>'
       +'<td><button class="prov-del" onclick="delDedNode('+i+')">&#215;</button></td>'
       +'</tr>';
@@ -2926,7 +2928,7 @@ function calcHybrid(){
     +'</div>'
     +'</div>'
     +'<div class="audit-bar-wrap">'
-    +'<div class="audit-bar-label"><span>Current ('+(running>gpus?'over-provisioned':'under-provisioned')+')</span><span>'+fmtK(current)+'/yr</span></div>'
+    +'<div class="audit-bar-label"><span>Current ('+(running>gpus?'over-provisioned':running<gpus?'under-provisioned':'right-sized')+')</span><span>'+fmtK(current)+'/yr</span></div>'
     +'<div class="audit-bar"><div class="audit-bar-fill" style="width:100%;background:#c81e1e">'+fmtK(current)+'</div></div>'
     +'<div class="audit-bar-label"><span>Right-sized</span><span>'+fmtK(rightsized)+'/yr</span></div>'
     +'<div class="audit-bar"><div class="audit-bar-fill" style="width:'+Math.round(rightsized/current*100)+'%;background:#057a55">'+fmtK(rightsized)+'</div></div>'
