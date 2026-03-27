@@ -1025,14 +1025,16 @@ button{font-family:var(--sans);cursor:pointer}
             <button class="hf-btn" onclick="hfLookup()">Lookup</button>
           </div>
           <div class="hf-status" id="hf-status"></div>
-          <div class="chips-wrap" id="org-chips">
-            <button class="chip on" onclick="filterOrg('all',this)">All</button>
-            <button class="chip" onclick="filterOrg('redhat',this)">RedHatAI</button>
-            <button class="chip" onclick="filterOrg('nvidia',this)">NVIDIA</button>
-            <button class="chip" onclick="filterOrg('meta',this)">Meta</button>
-            <button class="chip" onclick="filterOrg('qwen',this)">Qwen</button>
-            <button class="chip" onclick="filterOrg('other',this)">Other</button>
-          </div>
+          <div class="chips-wrap" id="org-chips" style="flex-wrap:wrap">
+          <button class="chip on" onclick="filterOrg('all',this)">All</button>
+          <button class="chip" onclick="filterOrg('meta',this)">Meta</button>
+          <button class="chip" onclick="filterOrg('qwen',this)">Qwen</button>
+          <button class="chip" onclick="filterOrg('google',this)">Google</button>
+          <button class="chip" onclick="filterOrg('mistral',this)">Mistral</button>
+          <button class="chip" onclick="filterOrg('nvidia',this)">NVIDIA</button>
+          <button class="chip" onclick="filterOrg('redhat',this)">RedHatAI</button>
+          <button class="chip" onclick="filterOrg('other',this)">Other</button>
+        </div>
           <div id="model-chips" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px"></div>
           <div class="panel-label">Manual override</div>
           <div class="slider-row">
@@ -1344,6 +1346,13 @@ button{font-family:var(--sans);cursor:pointer}
           <button class="kv-unlock" onclick="openLayer('l3')">&#128274; See KV visual</button>
         </div>
         <div id="kv-rows"></div>
+      </div>
+
+
+      <!-- Node topology -->
+      <div class="topology-box" id="topology-box" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:14px">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:10px">NODE TOPOLOGY</div>
+        <div id="topology-content"></div>
       </div>
 
       <!-- Optimize layers -->
@@ -1964,13 +1973,12 @@ function applyToggles(){
 function openPanel(id){
   var el=document.getElementById(id);
   if(!el)return;
-  // id IS the panel-section — just add open class
   el.classList.add('open');
-  setTimeout(function(){
-    var body=el.querySelector('.panel-body');
-    if(body)body.scrollIntoView({behavior:'smooth',block:'nearest'});
-    else el.scrollIntoView({behavior:'smooth',block:'nearest'});
-  },50);
+  el.style.outline='2px solid var(--blue)';
+  setTimeout(function(){el.style.outline='';},1200);
+  var leftCol=el.closest('.adv-left')||el.parentElement;
+  if(leftCol) leftCol.scrollTop=el.offsetTop-60;
+  el.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function togglePanel(id){
   var el=document.getElementById(id);
@@ -2699,6 +2707,12 @@ function buildCFOPrompt(){
     +'Give a 3-sentence executive summary at the top.';
 }
 
+function showValidateForSaved(i){
+  var r=savedResults[i];if(!r)return;
+  S.params=r.params;S.modelLabel=r.model;S.users=r.users;S.ctx=r.ctx;
+  S.gpuName=r.gpu;S.gpuVram=r.vram||80;
+  showValidateModal();
+}
 function showValidateModal(){
   var ta=document.getElementById('validate-prompt');
   document.getElementById('validate-modal').style.display='flex';
@@ -2741,23 +2755,50 @@ function renderSaved(){
     container.innerHTML='<div class="saved-empty"><div style="font-size:32px;margin-bottom:12px">&#128204;</div><div>No saved results yet. Save from the Advanced calculator.</div></div>';
     return;
   }
-  var html='<div class="saved-grid">';
+  var maxGPU=Math.max.apply(null,savedResults.map(function(r){return r.totalGPUs;}));
+  var maxCost=Math.max.apply(null,savedResults.map(function(r){return r.cost5yr;}));
+  var maxKV=Math.max.apply(null,savedResults.map(function(r){return r.kvPU||0;}));
+  var maxKVP=Math.max.apply(null,savedResults.map(function(r){return r.kvPool||0;}));
+  var minGPU=Math.min.apply(null,savedResults.map(function(r){return r.totalGPUs;}));
+  var minOP=Math.min.apply(null,savedResults.map(function(r){return r.onpremCost5yr||0;}));
+  function pb(v,m,c){var p=m>0?Math.round(v/m*100):0;return '<div style="height:3px;background:var(--bg3);border-radius:2px;margin-top:3px"><div style="height:100%;width:'+p+'%;background:'+c+';border-radius:2px"></div></div>';}
+  function lb(t,c){return ' <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:'+c+'22;color:'+c+';font-weight:600">'+t+'</span>';}
+  var html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+  html+='<tr style="border-bottom:2px solid var(--border)"><td style="padding:8px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);min-width:110px">METRIC</td>';
   savedResults.forEach(function(r,i){
-    html+='<div class="saved-card">'
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start"><div class="saved-card-model">'+r.model+'</div><button class="prov-del" onclick="deleteSaved('+i+')">&#215;</button></div>'
-      +'<div class="saved-card-meta">'+r.users+' users · '+r.ctx+'K ctx · '+r.gpu+' · '+r.ts+'</div>'
-      +'<div class="saved-card-stats">'
-      +'<div class="saved-stat"><div class="saved-stat-val">'+r.totalGPUs+'</div><div class="saved-stat-lbl">GPUs</div></div>'
-      +'<div class="saved-stat"><div class="saved-stat-val">'+fmtK(r.cost5yr)+'</div><div class="saved-stat-lbl">5yr cost</div></div>'
-      +'<div class="saved-stat"><div class="saved-stat-val">'+Math.round(r.vramPct)+'%</div><div class="saved-stat-lbl">VRAM</div></div>'
-      +'</div>'
-      +'<div class="saved-card-actions">'
-      +'<button class="btn btn-sm" onclick="loadSaved('+i+')">Load config</button>'
-      +'<button class="btn btn-sm" onclick="copyLink(\''+r.url+'\')">Copy link</button>'
-      +'</div>'
-      +'</div>';
+    html+='<td style="padding:8px 10px;min-width:180px;vertical-align:top">';
+    html+='<div style="font-weight:600">'+r.model.replace(' W8A8','')+'</div>';
+    html+='<div style="font-size:10px;color:var(--text4);font-family:var(--mono)">'+(r.prec||'BF16')+' · '+r.users+'U · '+r.ctx+'K</div>';
+    html+='<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">';
+    html+='<button class="btn btn-sm" style="font-size:10px;padding:2px 8px" onclick="loadSaved('+i+')">Load</button>';
+    html+='<button class="btn btn-sm" style="font-size:10px;padding:2px 8px" onclick="showValidateForSaved('+i+')">Verify</button>';
+    html+='<button class="btn btn-sm" style="font-size:10px;padding:2px 8px" onclick="copyLink(savedResults['+i+'].url)">Link</button>';
+    html+='<button class="prov-del" onclick="deleteSaved('+i+')">×</button></div></td>';
   });
-  html+='</div>';
+  html+='</tr>';
+  function sec(l){html+='<tr style="background:var(--bg3)"><td colspan="'+(savedResults.length+1)+'" style="padding:5px 10px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--blue)">'+l+'</td></tr>';}
+  function row(l,fn){html+='<tr style="border-bottom:1px solid var(--border)"><td style="padding:7px 10px;color:var(--text3)">'+l+'</td>';savedResults.forEach(function(r,i){html+='<td style="padding:7px 10px">'+fn(r,i)+'</td>';});html+='</tr>';}
+  sec('INPUTS');
+  row('Model',function(r){return r.model;});
+  row('GPU',function(r){return r.gpu+' '+r.vram+'GB';});
+  row('Users',function(r){return r.users.toLocaleString();});
+  row('Context',function(r){return r.ctx+'K';});
+  row('Precision',function(r){return (r.prec||'BF16').toUpperCase();});
+  sec('KV CACHE');
+  row('KV / user',function(r){return fmtGB(r.kvPU||0)+(r.kvPU===maxKV&&savedResults.length>1?lb('highest','#c81e1e'):'')+pb(r.kvPU||0,maxKV,'#1a56db');});
+  row('KV pool',function(r){return fmtGB(r.kvPool||0)+(r.kvPool===maxKVP&&savedResults.length>1?lb('largest','#057a55'):'')+pb(r.kvPool||0,maxKVP,'#057a55');});
+  row('MB / token',function(r){return ((r.kvPU||0)/Math.max(r.ctx,1)*1000).toFixed(3)+' MB/tok';});
+  sec('GPU SIZING');
+  row('GPUs needed',function(r){return '<strong>'+r.totalGPUs+'</strong>'+(r.totalGPUs===minGPU&&savedResults.length>1?lb('best','#057a55'):r.totalGPUs===maxGPU&&savedResults.length>1?lb('most','#c81e1e'):'')+'<div style="font-size:10px;color:var(--text4)">TP='+r.tp+' · '+r.replicas+' × '+r.tp+' GPUs</div>'+pb(r.totalGPUs,maxGPU,'#1a56db');});
+  row('Prod. range',function(r){return r.totalGPUs+' – '+Math.ceil(r.totalGPUs*1.3)+' GPUs';});
+  sec('COST · 5-YEAR TOTAL');
+  row('On-prem vs cloud',function(r){
+    var isBest=r.onpremCost5yr===minOP&&savedResults.length>1;
+    var mult=r.onpremCost5yr>0?(r.cost5yr/r.onpremCost5yr).toFixed(1)+'×':'';
+    return '<div style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#057a55;flex-shrink:0"></span>On-prem: <strong>'+fmtK(r.onpremCost5yr||0)+'</strong>'+(isBest?lb('best','#057a55'):'')+pb(r.onpremCost5yr||0,maxCost,'#057a55')+'</div>'
+      +'<div style="display:flex;align-items:center;gap:4px;margin-top:4px"><span style="width:8px;height:8px;border-radius:50%;background:#c81e1e;flex-shrink:0"></span>Cloud: <strong>'+fmtK(r.cost5yr||0)+'</strong>'+(mult?' <span style="color:var(--red);font-size:10px">'+mult+'</span>':'')+pb(r.cost5yr||0,maxCost,'#c81e1e')+'</div>';
+  });
+  html+='</table></div>';
   container.innerHTML=html;
 }
 function deleteSaved(i){savedResults.splice(i,1);localStorage.setItem('gpu-saved',JSON.stringify(savedResults));renderSaved();}
@@ -3052,6 +3093,43 @@ function renderExplorer(){
     }
   });
   // Labels drawn via afterDraw plugin (defined above)
+}
+
+
+// ===== NODE TOPOLOGY =====
+function renderTopology(C){
+  var el=document.getElementById('topology-content');
+  if(!el)return;
+  var tp=S.tp,replicas=C.replicas;
+  var isLLMd=S.mode==='llmd';
+  var nodesToShow=Math.min(replicas,2);
+  var html='';
+  for(var n=0;n<nodesToShow;n++){
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+    html+='<div style="font-size:11px;color:var(--text3);min-width:60px">Node '+(n+1)+' · '+S.gpuName+'×'+tp+'</div>';
+    html+='<div style="display:flex;gap:3px;flex-wrap:wrap">';
+    for(var g=0;g<tp;g++){
+      var col=isLLMd?(g<Math.ceil(tp/2)?'#1a56db':'#057a55'):'#1a56db';
+      var lbl=isLLMd?(g<Math.ceil(tp/2)?'PRE':'DEC'):S.gpuName.substring(0,3).toUpperCase();
+      html+='<div style="background:'+col+'22;border:1px solid '+col+'55;border-radius:4px;padding:3px 6px;font-size:10px;font-weight:600;color:'+col+';font-family:var(--mono)">'+lbl+'</div>';
+    }
+    html+='</div>';
+    if(tp>1) html+='<div style="font-size:10px;color:var(--text4)">NVLink TP='+tp+'</div>';
+    html+='</div>';
+  }
+  if(replicas>2) html+='<div style="font-size:11px;color:var(--text4);margin-top:4px">+ '+(replicas-2)+' more replica'+(replicas-2>1?'s':'')+' ('+C.totalGPUs+' GPUs total)</div>';
+  if(isLLMd){
+    var prefill=Math.ceil(tp/2),decode=tp-prefill;
+    html+='<div style="margin-top:8px;padding:8px 10px;background:var(--bg3);border-radius:var(--r);font-size:11px">With llm-d ('+tp+' GPUs = '+prefill+' prefill + '+decode+' decode)</div>';
+  }
+  html+='<div style="display:flex;gap:10px;margin-top:6px;font-size:10px;color:var(--text4)">';
+  if(isLLMd){
+    html+='<span>🟦 Prefill (llm-d)</span><span>🟩 Decode (llm-d)</span>';
+  } else {
+    html+='<span style="color:var(--text4)">Standard GPU · '+replicas+' replica'+(replicas>1?'s':'')+' × TP='+tp+'</span>';
+  }
+  html+='</div>';
+  el.innerHTML=html;
 }
 
 // ===== ADMIN =====
