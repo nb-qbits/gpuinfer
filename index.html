@@ -1727,7 +1727,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.2.4</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.2.5</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -1964,7 +1964,12 @@ function handleHash(){
   if(raw.indexOf('?c=')>=0) loadFromURL();
 }
 window.addEventListener('hashchange',handleHash);
-handleHash();
+// Defer initial render until DOM is fully parsed
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',function(){handleHash();});
+} else {
+  handleHash(); // DOM already ready
+}
 
 // Intent modal — show after 60s on advanced
 setTimeout(function(){
