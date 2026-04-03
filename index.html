@@ -3427,10 +3427,36 @@ function toggleFleetTier(i){
 
 function updateFleetTierTraffic(i,val){
   var newVal=Math.max(0,Math.min(100,+val));
-  var delta=newVal-SF.tiers[i].trafficPct;
   SF.tiers[i].trafficPct=newVal;
-  var lastIdx=SF.tiers.length-1;
-  if(i!==lastIdx) SF.tiers[lastIdx].trafficPct=Math.max(0,SF.tiers[lastIdx].trafficPct-delta);
+
+  // Recalculate remaining percentage and distribute to OTHER tiers
+  var remaining=100-newVal;
+  var others=SF.tiers.filter(function(_,idx){return idx!==i;});
+
+  if(others.length===0) return;
+
+  // Sum of other tiers' current values
+  var otherSum=others.reduce(function(s,t){return s+t.trafficPct;},0);
+
+  if(otherSum===0){
+    // Distribute evenly
+    var share=Math.floor(remaining/others.length);
+    others.forEach(function(t,j){
+      t.trafficPct = j===others.length-1 ? remaining-share*(others.length-1) : share;
+    });
+  } else {
+    // Scale proportionally
+    others.forEach(function(t){
+      t.trafficPct=Math.round(t.trafficPct/otherSum*remaining);
+    });
+    // Fix rounding so total is exactly 100
+    var total=SF.tiers.reduce(function(s,t){return s+t.trafficPct;},0);
+    var diff=100-total;
+    // Add/subtract diff from the largest other tier
+    var largestOther=others.reduce(function(a,b){return a.trafficPct>b.trafficPct?a:b;});
+    largestOther.trafficPct=Math.max(0,largestOther.trafficPct+diff);
+  }
+
   renderFleetLeftPanel();calcFleet();
 }
 
