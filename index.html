@@ -1780,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
 // e.g. 'https://gpu-calc-api.vikasgrover2004.workers.dev'
 // Leave empty to use relative /api/* (works on Cloudflare Pages)
 var API_BASE = '';
-var PRICING_WORKER = ''; // Set to your pricing Worker URL e.g. https://gpu-pricing-worker.YOUR.workers.dev
+var PRICING_WORKER = 'https://gpu-pricing-worker.vikasgrover2004.workers.dev';
 function apiUrl(path){ return (API_BASE || '') + path; }
 
 // ===== TRACKING — must be first so T.fire() works everywhere =====
