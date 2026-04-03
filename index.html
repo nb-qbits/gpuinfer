@@ -1727,7 +1727,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.2.5</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.3.0</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -3376,15 +3376,26 @@ var SF = {
 };
 
 var API_PROVIDERS = [
-  {provider:'Anthropic',model:'Claude 3.5 Haiku',inputPer1M:0.80,outputPer1M:4.00},
-  {provider:'Anthropic',model:'Claude 3.7 Sonnet',inputPer1M:3.00,outputPer1M:15.00},
-  {provider:'Anthropic',model:'Claude 3 Opus',inputPer1M:15.00,outputPer1M:75.00},
-  {provider:'OpenAI',model:'GPT-4o mini',inputPer1M:0.15,outputPer1M:0.60},
-  {provider:'OpenAI',model:'GPT-4o',inputPer1M:2.50,outputPer1M:10.00},
-  {provider:'OpenAI',model:'o3 mini',inputPer1M:1.10,outputPer1M:4.40},
-  {provider:'Google',model:'Gemini 2.0 Flash',inputPer1M:0.10,outputPer1M:0.40},
-  {provider:'Google',model:'Gemini 1.5 Pro',inputPer1M:1.25,outputPer1M:5.00},
-  {provider:'AWS Bedrock',model:'Llama 3 70B',inputPer1M:0.72,outputPer1M:0.72},
+  // Anthropic — April 2026
+  {provider:'Anthropic',model:'Claude Haiku 4.5',  inputPer1M:1.00, outputPer1M:5.00},
+  {provider:'Anthropic',model:'Claude Sonnet 4.6', inputPer1M:3.00, outputPer1M:15.00},
+  {provider:'Anthropic',model:'Claude Opus 4.6',   inputPer1M:5.00, outputPer1M:25.00},
+  // Legacy Anthropic
+  {provider:'Anthropic',model:'Claude 3.5 Haiku',  inputPer1M:0.80, outputPer1M:4.00},
+  {provider:'Anthropic',model:'Claude 3.7 Sonnet', inputPer1M:3.00, outputPer1M:15.00},
+  // OpenAI — April 2026
+  {provider:'OpenAI',   model:'GPT-4.1',           inputPer1M:2.00, outputPer1M:8.00},
+  {provider:'OpenAI',   model:'GPT-4.1 mini',      inputPer1M:0.40, outputPer1M:1.60},
+  {provider:'OpenAI',   model:'GPT-4o',            inputPer1M:2.50, outputPer1M:10.00},
+  {provider:'OpenAI',   model:'GPT-4o mini',       inputPer1M:0.15, outputPer1M:0.60},
+  {provider:'OpenAI',   model:'o3 mini',           inputPer1M:1.10, outputPer1M:4.40},
+  {provider:'OpenAI',   model:'o3',                inputPer1M:10.00,outputPer1M:40.00},
+  // Google — April 2026
+  {provider:'Google',   model:'Gemini 2.5 Pro',    inputPer1M:1.25, outputPer1M:10.00},
+  {provider:'Google',   model:'Gemini 2.5 Flash',  inputPer1M:0.30, outputPer1M:2.50},
+  {provider:'Google',   model:'Gemini 2.0 Flash',  inputPer1M:0.10, outputPer1M:0.40},
+  // AWS Bedrock
+  {provider:'AWS Bedrock',model:'Llama 3.3 70B',   inputPer1M:0.72, outputPer1M:0.72},
 ];
 
 var FLEET_MODELS = [
@@ -3478,9 +3489,22 @@ function updateFleetTierModel(i,modelLabel){
 
 function computeTier(tier){
   var totalTierUsers=Math.round(SF.totalUsers*tier.trafficPct/100);
-  // Concurrency factor: only this % of users are simultaneously active
   var concurrentUsers=Math.max(1,Math.round(totalTierUsers*(SF.concurrencyFactor||0.10)));
-  var vram=tier.gpuVram;
+
+  // API cost (always calculated regardless of self-hosted or API mode)
+  var apiProv=API_PROVIDERS.find(function(p){return p.model===tier.apiModel;});
+  var queriesPerDay=Math.round(SF.totalUsers*(tier.trafficPct/100)*(SF.queriesPerUserPerDay||100));
+  var apiCostYr=0;
+  if(apiProv){
+    apiCostYr=queriesPerDay*365*(tier.avgInputTok*apiProv.inputPer1M+tier.avgOutputTok*apiProv.outputPer1M)/1e6;
+  }
+
+  // ── GPU sizing (self-hosted) ────────────────────────────────────────────────
+  // BUG-012: Check if this tier has a self-hosted model configured
+  // If apiModel is set but no self-hosted model chosen, GPU count = 0
+  var isApiOnly = !tier.model || tier.model === '' || tier.model === 'API only';
+
+  var vram=tier.gpuVram||80;
   var bytesPerParam=tier.prec==='fp16'?2:tier.prec==='fp8'?1:0.5;
   var wGB=tier.params*bytesPerParam;
   var ohGB=vram*0.08;
@@ -3488,19 +3512,48 @@ function computeTier(tier){
   var bytesPerTok=2*tier.layers*tier.kvHeads*tier.headDim*2;
   var kvPU=bytesPerTok*tier.ctx*1000/1e9;
   var kvPool=(usable-wGB)*0.95;
-  var upr=Math.max(1,Math.floor(kvPool/Math.max(kvPU,0.001)));
-  var replicas=Math.ceil(concurrentUsers/Math.max(upr,1));
-  var totalGPUs=replicas*tier.tp;
+
+  // BUG-021: KV cache theoretical max — apply production realism factor
+  // Real capacity is 20-40 users/GPU for most models due to decode bottleneck
+  // Theory gives e.g. 237 users but production reality is 20-40
+  var uprTheory=Math.max(1,Math.floor(kvPool/Math.max(kvPU,0.001)));
+
+  // BUG-016: Throughput ceiling — decode is often the bottleneck
+  // Approximate tokens/sec per GPU: ~200 tok/s for 8B, ~60 tok/s for 70B
+  var tokensPerSecPerGPU = tier.params <= 10 ? 200 :
+                           tier.params <= 30 ? 120 :
+                           tier.params <= 80 ? 60  : 30;
+  var avgOutputTokens = tier.avgOutputTok || 200;
+  var throughputUpr = Math.floor(tokensPerSecPerGPU / Math.max(avgOutputTokens / 10, 1));
+
+  // Take minimum of KV theory and throughput ceiling, then apply 65% efficiency
+  var uprRealistic = Math.max(1, Math.floor(Math.min(uprTheory, throughputUpr) * 0.65));
+
+  // BUG-022: Safety buffer — add 20% headroom for production
+  var concurrentWithBuffer = Math.ceil(concurrentUsers * 1.20);
+
+  var replicas=isApiOnly ? 0 : Math.ceil(concurrentWithBuffer/Math.max(uprRealistic,1));
+  var totalGPUs=isApiOnly ? 0 : replicas*tier.tp;
+
   var activeProvider=(typeof PROVIDERS!=='undefined'?PROVIDERS:null)||[];
   var prov=activeProvider.find?activeProvider.find(function(p){return p.active;}):null;
   var cloudCostYr=totalGPUs*(prov?prov.rate:3)*8760;
-  var apiProv=API_PROVIDERS.find(function(p){return p.model===tier.apiModel;});
-  var apiCostYr=0;
-  var queriesPerDay=Math.round(SF.totalUsers*(tier.trafficPct/100)*(SF.queriesPerUserPerDay||100));
-  if(apiProv){
-    apiCostYr=queriesPerDay*365*(tier.avgInputTok*apiProv.inputPer1M+tier.avgOutputTok*apiProv.outputPer1M)/1e6;
-  }
-  return {users:totalTierUsers,concurrentUsers:concurrentUsers,wGB:wGB,ohGB:ohGB,usable:usable,kvPU:kvPU,upr:upr,replicas:replicas,totalGPUs:totalGPUs,cloudCostYr:cloudCostYr,apiCostYr:apiCostYr,queriesPerDay:queriesPerDay};
+
+  return {
+    users:totalTierUsers,
+    concurrentUsers:concurrentUsers,
+    concurrentWithBuffer:concurrentWithBuffer,
+    wGB:wGB,ohGB:ohGB,usable:usable,
+    kvPU:kvPU,
+    uprTheory:uprTheory,
+    uprRealistic:uprRealistic,
+    replicas:replicas,
+    totalGPUs:totalGPUs,
+    cloudCostYr:cloudCostYr,
+    apiCostYr:apiCostYr,
+    queriesPerDay:queriesPerDay,
+    isApiOnly:isApiOnly,
+  };
 }
 
 
@@ -3545,7 +3598,7 @@ function renderFleetLeftPanel(){
   html+='<span style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--blue)" id="fleet-conc-val">'+concPct+'%</span>';
   html+='<span style="font-size:10px;color:var(--text4)">100% realtime</span></div>';
   html+='<div style="margin-top:8px;padding:8px;background:var(--blue-bg);border-radius:var(--r);font-size:11px;color:var(--blue)">';
-  html+='<strong>'+Math.round(SF.totalUsers*(SF.concurrencyFactor||0.10))+' simultaneous</strong> users at '+concPct+'% concurrency → GPU sizing baseline';
+  html+='<strong>'+Math.round(SF.totalUsers*(SF.concurrencyFactor||0.10))+' simultaneous</strong> users at '+concPct+'% · GPU sizing uses +20% safety buffer';
   html+='</div>';
   html+='</div></div>';// /panel-body /panel-section
 
@@ -3586,7 +3639,7 @@ function renderFleetLeftPanel(){
     html+='</div>';
 
     // Self-hosted alternative
-    html+='<div class="panel-label">Self-hosted alternative</div>';
+    html+='<div class="panel-label">Self-hosted alternative <span style="font-size:9px;color:var(--text4)">(for GPU sizing)</span></div>';
     var modelOpts=FLEET_MODELS.map(function(m){return '<option value="'+m.label+'"'+(m.label===t.model?' selected':'')+'>'+m.label+'</option>';}).join('');
     html+='<select class="fleet-tier-select" id="ft-model-'+i+'" style="width:100%;margin-bottom:10px" onchange="updateFleetTierModel('+i+',this.value)">'+modelOpts+'</select>';
 
@@ -3615,6 +3668,7 @@ function renderFleetLeftPanel(){
   // Add tier button
   html+='<div style="padding:12px 16px;border-top:1px solid var(--border)">';
   html+='<button class="fleet-add-tier" onclick="addFleetTier()" style="width:100%">+ Add routing tier</button>';
+  html+='<div id="fleet-dup-warning" style="display:none;margin-top:6px;padding:6px 10px;background:var(--amber-bg);border-radius:var(--r);font-size:10px;color:var(--amber)"></div>';
   html+='<div class="fleet-traffic-total '+(SF.tiers.reduce(function(s,t){return s+t.trafficPct;},0)===100?'fleet-traffic-ok':'fleet-traffic-warn')+'" id="fleet-traffic-status" style="margin-top:8px;text-align:center">';
   var totalPct=SF.tiers.reduce(function(s,t){return s+t.trafficPct;},0);
   html+=(totalPct===100?'✓ 100% traffic assigned':'⚠ '+totalPct+'% assigned — must sum to 100%');
@@ -3647,6 +3701,29 @@ function exportFleetSheets(){
 
 function calcFleet(){
   var totalPct=SF.tiers.reduce(function(s,t){return s+t.trafficPct;},0);
+
+  // BUG-018: Detect duplicate model tiers
+  var modelCounts={};
+  SF.tiers.forEach(function(t){
+    var k=t.model||'api';
+    modelCounts[k]=(modelCounts[k]||0)+t.trafficPct;
+  });
+  var dupWarnings=[];
+  Object.keys(modelCounts).forEach(function(m){
+    if(modelCounts[m]>60 && m!=='api' && SF.tiers.filter(function(t){return t.model===m;}).length>1){
+      dupWarnings.push(m+' used in multiple tiers ('+modelCounts[m]+'% total)');
+    }
+  });
+  var dupEl=document.getElementById('fleet-dup-warning');
+  if(dupEl){
+    if(dupWarnings.length>0){
+      dupEl.textContent='⚠ '+dupWarnings.join('; ')+' — consider consolidating';
+      dupEl.style.display='block';
+    } else {
+      dupEl.style.display='none';
+    }
+  }
+
   var statusEl=document.getElementById('fleet-traffic-status');
   if(statusEl){
     statusEl.textContent=totalPct===100?'✓ 100% traffic assigned':'⚠ '+totalPct+'% assigned — must sum to 100%';
@@ -3771,11 +3848,12 @@ function updateTierSummaries(results){
     var b=document.getElementById('ft-bar-'+i);if(b)b.style.width=t.trafficPct+'%';
     var p=document.getElementById('ft-pct-'+i);if(p)p.textContent=t.trafficPct+'%';
     if(results){var r=results[i];var re=document.getElementById('ft-result-'+i);if(re&&r){
-      re.innerHTML='<div style="display:flex;justify-content:space-between">'
+      var gpuTxt=r.isApiOnly?'<span style="color:var(--text4);font-size:10px">API only · no GPUs needed</span>':r.totalGPUs+' GPU'+(r.totalGPUs!==1?'s':'')+' <span style="font-size:10px;color:var(--text4)">(self-host)</span>';
+      re.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center">'
         +'<span style="color:var(--red)">API: <strong>'+fmtK(r.apiCostYr)+'</strong>/yr</span>'
-        +'<span style="color:var(--blue)">'+r.totalGPUs+' GPU'+(r.totalGPUs!==1?'s':'')+' to self-host</span>'
+        +'<span style="color:var(--blue)">'+gpuTxt+'</span>'
         +'</div>'
-        +'<div style="font-size:10px;color:var(--text3);margin-top:3px">'+r.queriesPerDay.toLocaleString()+' queries/day · '+r.concurrentUsers+' simultaneous users</div>';
+        +'<div style="font-size:10px;color:var(--text3);margin-top:3px">'+r.queriesPerDay.toLocaleString()+' queries/day · '+r.concurrentUsers+' concurrent ('+Math.round((SF.concurrencyFactor||0.10)*100)+'%)</div>';
     }}
   });
 }
@@ -3785,7 +3863,7 @@ function renderFleetBreakdown(results){
   if(!el)return;
   var tierColors=['#1a56db','#057a55','#b45309','#7c3aed','#0891b2'];
   var naiveProv=API_PROVIDERS.find(function(p){return p.model==='Claude 3.7 Sonnet';})||API_PROVIDERS[1]||{inputPer1M:3,outputPer1M:15};
-  var html='<tr><th>Tier</th><th>API model</th><th>Traffic</th><th>Queries/day</th><th>API cost/yr</th><th>Tokens (in/out)</th><th>vs all-Sonnet</th></tr>';
+  var html='<tr><th>Tier</th><th>API model</th><th>Traffic</th><th>Queries/day</th><th>API cost/yr</th><th>Self-host GPUs</th><th>Tokens (in/out)</th><th>vs all-Sonnet</th></tr>';
   var totalApiYr=0;
   SF.tiers.forEach(function(t,i){
     var r=results[i];
@@ -3801,6 +3879,7 @@ function renderFleetBreakdown(results){
       +'<td><div style="display:flex;align-items:center;gap:5px"><div style="height:4px;width:'+Math.round(t.trafficPct*1.2)+'px;background:'+col+';border-radius:2px"></div><span>'+t.trafficPct+'%</span></div></td>'
       +'<td style="font-family:var(--mono);font-size:11px">'+qpd.toLocaleString()+'</td>'
       +'<td style="font-weight:600">'+fmtK(r.apiCostYr)+'</td>'
+      +'<td style="font-size:11px;color:var(--blue)">'+(r.isApiOnly?'<span style="color:var(--text4)">API only</span>':r.totalGPUs+' GPU'+(r.totalGPUs!==1?'s':''))+'</td>'
       +'<td style="font-size:11px;color:var(--text3)">'+t.avgInputTok+' / '+t.avgOutputTok+'</td>'
       +'<td>'+saveTag+'</td>'
       +'</tr>';
@@ -3898,10 +3977,12 @@ function renderFrontierCompare(){
     {name:'GPT-4o',       model:'GPT-4o',           color:'#057a55'},
     {name:'Gemini Flash', model:'Gemini 2.0 Flash',  color:'#1a56db'},
   ];
-  // Avg tokens across tiers
+  // BUG-001: Weighted avg tokens by traffic % (not simple average)
   var avgIn=0, avgOut=0;
-  SF.tiers.forEach(function(t){avgIn+=t.avgInputTok;avgOut+=t.avgOutputTok;});
-  avgIn=avgIn/SF.tiers.length; avgOut=avgOut/SF.tiers.length;
+  SF.tiers.forEach(function(t){
+    avgIn+=t.avgInputTok*(t.trafficPct/100);
+    avgOut+=t.avgOutputTok*(t.trafficPct/100);
+  });
   var qpd=SF.totalUsers*(SF.queriesPerUserPerDay||100);
 
   // Current mixed cost
@@ -3919,7 +4000,8 @@ function renderFrontierCompare(){
     var diffStr=(diff>0?'+':'')+fmtK(diff);
     var diffCol=diff>0?'var(--red)':'var(--green)';
     html+='<div style="background:var(--bg3);border-radius:var(--r);padding:12px 14px;border-left:3px solid '+fm.color+'">'
-      +'<div style="font-size:10px;font-weight:600;color:'+fm.color+';margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em">'+fm.name+'</div>'
+      +'<div style="font-size:10px;font-weight:600;color:'+fm.color+';margin-bottom:2px;text-transform:uppercase;letter-spacing:.04em">'+fm.name+'</div>'
+      +'<div style="font-size:9px;color:var(--text4);margin-bottom:4px">if 100% traffic routed here</div>'
       +'<div style="font-size:20px;font-weight:700;font-family:var(--mono)">'+fmtK(yr)+'</div>'
       +'<div style="font-size:10px;color:'+diffCol+';margin-top:2px">'+diffStr+' vs your mix</div>'
       +'</div>';
@@ -3936,17 +4018,20 @@ function renderFleetCostCompare(totalApiCostYr,onpremYr,totalGPUs,activeProvider
   var cloudYr=totalGPUs*(activeProvider?activeProvider.rate:3)*8760;
   var dedNodes=Math.ceil(totalGPUs/8);
   var ded5=dedNodes*18000*12*5;
-  // Naive = 100% traffic to Claude Sonnet
-  var naiveProv=API_PROVIDERS.find(function(p){return p.model==='Claude 3.7 Sonnet';})||{inputPer1M:3,outputPer1M:15};
-  var avgIn=SF.tiers.reduce(function(s,t){return s+t.avgInputTok;},0)/SF.tiers.length;
-  var avgOut=SF.tiers.reduce(function(s,t){return s+t.avgOutputTok;},0)/SF.tiers.length;
-  var naiveYr=SF.totalUsers*100*365*(avgIn*naiveProv.inputPer1M+avgOut*naiveProv.outputPer1M)/1e6;
-  var scenarios=[
+  // Naive = 100% traffic to Claude Sonnet (BUG-001: use weighted tokens + correct qpd)
+  var naiveProv=API_PROVIDERS.find(function(p){return p.model==='Claude Sonnet 4.6'||p.model==='Claude 3.7 Sonnet';})||{inputPer1M:3,outputPer1M:15};
+  var avgIn=0,avgOut=0;
+  SF.tiers.forEach(function(t){avgIn+=t.avgInputTok*(t.trafficPct/100);avgOut+=t.avgOutputTok*(t.trafficPct/100);});
+  var naiveQpd=SF.totalUsers*(SF.queriesPerUserPerDay||100);
+  var naiveYr=naiveQpd*365*(avgIn*naiveProv.inputPer1M+avgOut*naiveProv.outputPer1M)/1e6;
+  var baseScenarios=[
     {label:'Your API mix',sub:'tiered routing',val:totalApiCostYr*5,color:'var(--green)'},
     {label:'Self-hosted on-prem',sub:totalGPUs+' GPUs · 5yr amort',val:onpremYr*5,color:'var(--blue)'},
-    {label:'Dedicated node',sub:dedNodes+' node'+(dedNodes!==1?'s':'')+' flat',val:ded5,color:'var(--purple)'},
-    {label:'Naive (all Sonnet)',sub:'no routing savings',val:naiveYr*5,color:'var(--red)'},
+    // BUG-011: Only show dedicated node if >=4 GPUs needed
+    totalGPUs>=4?{label:'Dedicated node',sub:dedNodes+' node'+(dedNodes!==1?'s':'')+' flat',val:ded5,color:'var(--purple)'}:null,
+    {label:'Naive (all Sonnet)',sub:'5yr · no routing savings',val:naiveYr*5,color:'var(--red)'},
   ];
+  var scenarios=baseScenarios.filter(Boolean);
   var minVal=Math.min.apply(null,scenarios.map(function(s){return s.val;}));
   el.innerHTML=scenarios.map(function(s){
     var best=s.val===minVal;
@@ -4224,7 +4309,7 @@ loadFromURL();
           </div>
           <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
             <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--blue)" id="fhc-gpus">—</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:3px">GPUs (at <span id="fleet-concurrency-label">10%</span> concurrency)</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:3px">GPUs needed <span style="font-size:10px">(at <span id="fleet-concurrency-label">10%</span> concurrency + 20% buffer)</span></div>
           </div>
           <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
             <div style="font-size:22px;font-weight:700;font-family:var(--mono)" id="fhc-savings">—</div>
