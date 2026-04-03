@@ -1780,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
 // e.g. 'https://gpu-calc-api.vikasgrover2004.workers.dev'
 // Leave empty to use relative /api/* (works on Cloudflare Pages)
 var API_BASE = '';
-var PRICING_WORKER = 'https://gpu-pricing-worker.vikasgrover2004.workers.dev';
+var PRICING_WORKER = ''; // Set to your pricing Worker URL e.g. https://gpu-pricing-worker.YOUR.workers.dev
 function apiUrl(path){ return (API_BASE || '') + path; }
 
 // ===== TRACKING — must be first so T.fire() works everywhere =====
@@ -4278,83 +4278,8 @@ function computeTier(tier) {
 }
 
 // ── FLEET CALC ────────────────────────────────────────────────────────────────
-function calcFleet() {
-  var totalPct = SF.tiers.reduce(function(s,t){return s+t.trafficPct;},0);
-  // Traffic status
-  var statusEl = document.getElementById('fleet-traffic-status');
-  if (statusEl) {
-    if (totalPct === 100) {
-      statusEl.textContent = '✓ 100% traffic assigned';
-      statusEl.className = 'fleet-traffic-total fleet-traffic-ok';
-    } else if (totalPct < 100) {
-      statusEl.textContent = '⚠ ' + totalPct + '% assigned — ' + (100-totalPct) + '% unassigned';
-      statusEl.className = 'fleet-traffic-total fleet-traffic-warn';
-    } else {
-      statusEl.textContent = '✗ ' + totalPct + '% assigned — reduce by ' + (totalPct-100) + '%';
-      statusEl.className = 'fleet-traffic-total fleet-traffic-over';
-    }
-  }
+// calcFleet defined in block 0 — removed duplicate
 
-  // Compute each tier
-  var results = SF.tiers.map(computeTier);
-  var totalGPUs = results.reduce(function(s,r){return s+r.totalGPUs;},0);
-  var totalCostYr = results.reduce(function(s,r){return s+r.cloudCostYr;},0);
-  var totalApiCostYr = results.reduce(function(s,r){return s+r.apiCostYr;},0);
-
-  // Naive cost: biggest model for ALL traffic
-  var biggestTier = SF.tiers.reduce(function(a,b){return b.params>a.params?b:a;});
-  var naiveTier = Object.assign({}, biggestTier, {trafficPct:100});
-  var naiveSF = SF.totalUsers;
-  var naiveUsers = SF.totalUsers;
-  var naiveVram = naiveTier.gpuVram;
-  var bytesPerParam = naiveTier.prec==='fp16'?2:1;
-  var naiveWGB = naiveTier.params * bytesPerParam;
-  var naiveOH = naiveVram * 0.08;
-  var naiveUsable = (naiveVram - naiveOH) * naiveTier.tp;
-  var naiveBytesPerTok = 2 * naiveTier.layers * naiveTier.kvHeads * naiveTier.headDim * 2;
-  var naiveKvPU = naiveBytesPerTok * naiveTier.ctx * 1000 / 1e9;
-  var naivePool = (naiveUsable - naiveWGB) * 0.95;
-  var naiveUpr = Math.max(1, Math.floor(naivePool / Math.max(naiveKvPU, 0.001)));
-  var naiveReplicas = Math.ceil(naiveUsers / naiveUpr);
-  var naiveGPUs = naiveReplicas * naiveTier.tp;
-  var activeProvider = PROVIDERS.find(function(p){return p.active;}) || PROVIDERS[0];
-  var naiveCostYr = naiveGPUs * activeProvider.rate * 8760;
-  var savingsYr = naiveCostYr - totalCostYr;
-
-  // Update hero cards
-  var el = function(id){return document.getElementById(id);};
-  if(el('fhc-gpus')) el('fhc-gpus').textContent = totalGPUs;
-  if(el('fhc-cost')) el('fhc-cost').textContent = fmtK(totalCostYr);
-  if(el('fhc-tiers')) el('fhc-tiers').textContent = SF.tiers.length;
-  if(el('fhc-savings')) {
-    el('fhc-savings').textContent = savingsYr > 0 ? fmtK(savingsYr) : '$0';
-    el('fhc-savings').className = 'fhc-val ' + (savingsYr > 0 ? 'savings' : '');
-  }
-
-  // Total tokens/day estimate
-  var tokensPerDay = SF.tiers.reduce(function(s,t){
-    var q = Math.round(SF.totalUsers * (t.trafficPct/100) * 100);
-    return s + q * (t.avgInputTok + t.avgOutputTok);
-  }, 0);
-  if(el('fleet-total-derived')) {
-    el('fleet-total-derived').textContent = formatTokensPerDay(tokensPerDay) + ' tokens/day';
-  }
-
-  // Render breakdown table
-  renderFleetBreakdown(results, totalGPUs, totalCostYr, naiveCostYr);
-
-  // Render traffic flow
-  renderTrafficFlow(results);
-
-  // Render cost comparison
-  renderFleetCostCompare(totalCostYr, naiveCostYr, totalApiCostYr, results);
-
-  // Render ROI card
-  renderRoutingROI(savingsYr, totalGPUs, naiveGPUs, totalCostYr, naiveCostYr);
-
-  // Update tier summaries
-  updateTierSummaries(results);
-}
 
 function formatTokensPerDay(n) {
   if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
@@ -4364,199 +4289,22 @@ function formatTokensPerDay(n) {
 }
 
 // ── RENDER FUNCTIONS ──────────────────────────────────────────────────────────
-function renderFleetTiers() {
-  var container = document.getElementById('fleet-tiers-list');
-  if (!container) return;
-  var tierColors = ['#1a56db','#057a55','#b45309','#7c3aed','#0891b2'];
-  var modelOpts = FLEET_MODELS.map(function(m){
-    return '<option value="'+m.label+'">'+m.label+'</option>';
-  }).join('');
-  var apiOpts = API_PROVIDERS.map(function(p){
-    return '<option value="'+p.model+'">'+p.model+'</option>';
-  }).join('');
+// renderFleetTiers defined in block 0
 
-  var html = '';
-  SF.tiers.forEach(function(t, i) {
-    var col = tierColors[i % tierColors.length];
-    html += '<div class="fleet-tier'+(t.open?' open':'')+'" id="fleet-tier-'+i+'">';
-    // Head
-    html += '<div class="fleet-tier-head" onclick="toggleFleetTier('+i+')">';
-    html += '<div class="fleet-tier-num" style="background:'+col+'">'+( i+1)+'</div>';
-    html += '<div class="fleet-tier-name" id="ft-name-'+i+'">';
-    html += '<input type="text" value="'+t.name+'" style="background:none;border:none;font-size:13px;font-weight:500;color:var(--text1);width:120px;cursor:text" onclick="event.stopPropagation()" onchange="SF.tiers['+i+'].name=this.value;updateTierSummaries(null)">';
-    html += '</div>';
-    html += '<span class="fleet-tier-summary" id="ft-sum-'+i+'">'+t.model+' · '+t.trafficPct+'%</span>';
-    html += '<span class="fleet-tier-result" id="ft-result-'+i+'">—</span>';
-    html += '<button class="fleet-tier-del" onclick="event.stopPropagation();removeFleetTier('+i+')" title="Remove tier">×</button>';
-    html += '</div>';
-    // Body
-    html += '<div class="fleet-tier-body">';
-    // Traffic slider
-    html += '<div class="traffic-bar-wrap">';
-    html += '<div class="traffic-bar-label"><span>Traffic share</span><span id="ft-pct-'+i+'">'+t.trafficPct+'%</span></div>';
-    html += '<input type="range" min="0" max="100" step="5" value="'+t.trafficPct+'" style="width:100%;accent-color:'+col+'" oninput="updateFleetTierTraffic('+i+',+this.value)">';
-    html += '<div class="traffic-bar-bg"><div class="traffic-bar-fg" id="ft-bar-'+i+'" style="width:'+t.trafficPct+'%;background:'+col+'"></div></div>';
-    html += '</div>';
-    // Grid of inputs
-    html += '<div class="fleet-tier-grid">';
-    // Model
-    html += '<div class="fleet-tier-field"><label>Self-hosted model</label>';
-    html += '<select class="fleet-tier-select" id="ft-model-'+i+'" onchange="updateFleetTierModel('+i+',this.value)">'+modelOpts+'</select></div>';
-    // API comparison model
-    html += '<div class="fleet-tier-field"><label>Compare vs API</label>';
-    html += '<select class="fleet-tier-select" id="ft-api-'+i+'" onchange="SF.tiers['+i+'].apiModel=this.value;calcFleet()">'+apiOpts+'</select></div>';
-    // Context
-    html += '<div class="fleet-tier-field"><label>Context window</label>';
-    html += '<select class="fleet-tier-select" onchange="SF.tiers['+i+'].ctx=+this.value;calcFleet()">';
-    [4,8,16,32,64,128,256].forEach(function(c){
-      html += '<option value="'+c+'"'+(c===t.ctx?' selected':'')+'>'+c+'K</option>';
-    });
-    html += '</select></div>';
-    // GPU
-    html += '<div class="fleet-tier-field"><label>GPU</label>';
-    html += '<select class="fleet-tier-select" onchange="SF.tiers['+i+'].gpuVram=+this.value.split('|')[1];SF.tiers['+i+'].gpuName=this.value.split('|')[0];calcFleet()">';
-    [['H100',80],['H200',141],['B100',192],['B200',180],['B300',288],['A100',80],['L40S',48],['MI300X',192]].forEach(function(g){
-      var sel=(g[0]===t.gpuName&&g[1]===t.gpuVram)?' selected':'';
-      html += '<option value="'+g[0]+'|'+g[1]+'"'+sel+'>'+g[0]+' '+g[1]+'GB</option>';
-    });
-    html += '</select></div>';
-    // Avg input tokens
-    html += '<div class="fleet-tier-field"><label>Avg input tokens</label>';
-    html += '<input class="fleet-tier-input" type="number" value="'+t.avgInputTok+'" min="10" oninput="SF.tiers['+i+'].avgInputTok=+this.value;calcFleet()"></div>';
-    // Avg output tokens
-    html += '<div class="fleet-tier-field"><label>Avg output tokens</label>';
-    html += '<input class="fleet-tier-input" type="number" value="'+t.avgOutputTok+'" min="10" oninput="SF.tiers['+i+'].avgOutputTok=+this.value;calcFleet()"></div>';
-    html += '</div>'; // /grid
-    html += '</div>'; // /body
-    html += '</div>'; // /tier
-  });
 
-  container.innerHTML = html;
+// updateTierSummaries defined in block 0
 
-  // Post-render: set correct selected values on dropdowns
-  SF.tiers.forEach(function(t, i) {
-    var modelSel = document.getElementById('ft-model-'+i);
-    if (modelSel) modelSel.value = t.model;
-    var apiSel = document.getElementById('ft-api-'+i);
-    if (apiSel) apiSel.value = t.apiModel;
-  });
-}
 
-function updateTierSummaries(results) {
-  SF.tiers.forEach(function(t, i) {
-    var sumEl = document.getElementById('ft-sum-'+i);
-    if (sumEl) sumEl.textContent = t.model + ' · ' + t.trafficPct + '%';
-    var barEl = document.getElementById('ft-bar-'+i);
-    if (barEl) barEl.style.width = t.trafficPct + '%';
-    var pctEl = document.getElementById('ft-pct-'+i);
-    if (pctEl) pctEl.textContent = t.trafficPct + '%';
-    if (results) {
-      var r = results[i];
-      var resEl = document.getElementById('ft-result-'+i);
-      if (resEl && r) resEl.textContent = SF.tiers[i].apiModel + ' · ' + SF.tiers[i].trafficPct + '% · ' + fmtK(r.apiCostYr) + '/yr';
-    }
-  });
-}
-
-function renderFleetBreakdown(results, totalGPUs, totalCostYr, naiveCostYr) {
-  var el = document.getElementById('fleet-breakdown-table');
-  if (!el) return;
-  var tierColors = ['#1a56db','#057a55','#b45309','#7c3aed','#0891b2'];
-  var html = '<tr><th>Tier</th><th>Model</th><th>Traffic</th><th>Users</th><th>GPUs</th><th>Cost/yr</th><th>vs API</th></tr>';
-  SF.tiers.forEach(function(t, i) {
-    var r = results[i];
-    var col = tierColors[i % tierColors.length];
-    var apiSaving = r.apiCostYr - r.cloudCostYr;
-    var apiTag = apiSaving > 0
-      ? '<span style="color:var(--green);font-size:10px">✓ saves '+fmtK(apiSaving)+'</span>'
-      : '<span style="color:var(--red);font-size:10px">↑ costs '+fmtK(Math.abs(apiSaving))+' more</span>';
-    html += '<tr>'
-      + '<td style="color:'+col+';font-weight:600">' + t.name + '</td>'
-      + '<td style="font-family:var(--sans);font-size:11px">' + t.model + '</td>'
-      + '<td><div class="tier-bar"><div class="tier-bar-bg"><div class="tier-bar-fg" style="width:'+t.trafficPct+'%;background:'+col+'"></div></div><span>'+t.trafficPct+'%</span></div></td>'
-      + '<td>' + r.users + '</td>'
-      + '<td style="color:var(--blue);font-weight:600">' + r.totalGPUs + '</td>'
-      + '<td>' + fmtK(r.cloudCostYr) + '</td>'
-      + '<td>' + apiTag + '</td>'
-      + '</tr>';
-  });
-  // Totals row
-  html += '<tr style="background:var(--bg3)">'
-    + '<td colspan="2">FLEET TOTAL</td>'
-    + '<td>100%</td>'
-    + '<td>' + SF.totalUsers + '</td>'
-    + '<td style="color:var(--blue)">' + totalGPUs + '</td>'
-    + '<td>' + fmtK(totalCostYr) + '</td>'
-    + '<td></td>'
-    + '</tr>';
-  el.innerHTML = html;
-}
+// renderFleetBreakdown defined in block 0
 
 
 
-function renderFleetCostCompare(totalCostYr, naiveCostYr, totalApiCostYr, results) {
-  var el = document.getElementById('fleet-cost-compare');
-  if (!el) return;
-  var cost5 = totalCostYr * 5;
-  var naive5 = naiveCostYr * 5;
-  var api5 = totalApiCostYr * 5;
-  // Dedicated node estimate: cheapest node × ceil(totalGPUs/8) × 12 × 5
-  var totalGPUs = results.reduce(function(s,r){return s+r.totalGPUs;},0);
-  var dedNodes = Math.ceil(totalGPUs/8);
-  var ded5 = SF.tiers.length > 0 ? dedNodes * 18000 * 12 * 5 : 0;
 
-  var scenarios = [
-    {label:'Self-hosted', sub:'on-demand cloud', val:cost5, color:'var(--blue)'},
-    {label:'Dedicated node', sub:dedNodes+' node'+(dedNodes!==1?'s':'')+' flat', val:ded5, color:'var(--purple)'},
-    {label:'API (cheapest)', sub:'per-tier best API', val:api5, color:'var(--amber)'},
-    {label:'Naive (no routing)', sub:'biggest model only', val:naive5, color:'var(--red)'},
-  ];
-  var minVal = Math.min.apply(null, scenarios.map(function(s){return s.val;}));
-  var html = '';
-  scenarios.forEach(function(s) {
-    var best = s.val === minVal;
-    html += '<div class="cc-card'+(best?' recommended':'')+'">';
-    if (best) html += '<div class="cc-badge">★ cheapest</div>';
-    html += '<div class="cc-label">'+s.label+'</div>';
-    html += '<div class="cc-price" style="color:'+s.color+'">'+fmtK(s.val)+'</div>';
-    html += '<div class="cc-sub">5yr · '+s.sub+'</div>';
-    html += '</div>';
-  });
-  el.innerHTML = html;
-}
+// renderFleetCostCompare defined in block 0
 
-function renderRoutingROI(savingsYr, totalGPUs, naiveGPUs, totalCostYr, naiveCostYr) {
-  var el = document.getElementById('roi-grid');
-  if (!el) return;
-  var engCost = SF.engCost || 50000;
-  var paybackMonths = savingsYr > 0 ? (engCost / savingsYr * 12) : Infinity;
-  var gpusSaved = naiveGPUs - totalGPUs;
-  // Traffic threshold: min % to small model for routing to break even
-  // Simplified: break-even when savings = engCost → at X% traffic to small models
-  var totalPct = SF.tiers.reduce(function(s,t){return s+t.trafficPct;},0);
-  var smallModelPct = SF.tiers.length > 1 ? SF.tiers[0].trafficPct : 0;
 
-  var payStr = paybackMonths === Infinity ? '∞' :
-    paybackMonths < 1 ? '<1 mo' :
-    paybackMonths < 12 ? paybackMonths.toFixed(1)+' mo' :
-    (paybackMonths/12).toFixed(1)+' yrs';
+// renderRoutingROI defined in block 0
 
-  var verdict = savingsYr <= 0 ? '✗ Not worth it at this scale'
-    : paybackMonths <= 3 ? '✓ Strong ROI — build the router'
-    : paybackMonths <= 12 ? '✓ Good ROI — worth building'
-    : paybackMonths <= 24 ? '~ Marginal — evaluate carefully'
-    : '✗ Long payback — reconsider';
-
-  var verdictColor = savingsYr <= 0 ? 'var(--red)'
-    : paybackMonths <= 12 ? 'var(--green)' : 'var(--amber)';
-
-  el.innerHTML =
-    '<div class="roi-cell"><div class="roi-cell-label">Annual savings</div><div class="roi-cell-val" style="color:var(--green)">'+fmtK(Math.max(0,savingsYr))+'</div></div>'
-    +'<div class="roi-cell"><div class="roi-cell-label">GPUs saved</div><div class="roi-cell-val" style="color:var(--blue)">'+Math.max(0,gpusSaved)+'</div></div>'
-    +'<div class="roi-cell"><div class="roi-cell-label">Payback period</div><div class="roi-cell-val">'+payStr+'</div></div>'
-    +'<div class="roi-cell"><div class="roi-cell-label">Routing to small model</div><div class="roi-cell-val">'+smallModelPct+'%</div></div>'
-    +'<div style="grid-column:1/-1;padding:10px 12px;background:'+verdictColor+'22;border:1px solid '+verdictColor+'55;border-radius:var(--r);font-size:12px;font-weight:600;color:'+verdictColor+'">'+verdict+'</div>';
-}
 
 // ── API PRICING TABLE ─────────────────────────────────────────────────────────
 function renderApiPricingTable() {
