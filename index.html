@@ -3409,7 +3409,7 @@ function addFleetTier(){
   var newPct=Math.min(10,Math.floor(largest.trafficPct/2));
   largest.trafficPct-=newPct;
   SF.tiers.push({name:'Tier '+(SF.tiers.length+1),model:'Llama 3.1 8B',params:8,layers:32,kvHeads:8,headDim:128,attn:'gqa',trafficPct:newPct,avgInputTok:200,avgOutputTok:100,ctx:8,gpuName:'H100',gpuVram:80,prec:'fp16',tp:1,apiModel:'Claude 3.5 Haiku',open:true});
-  renderFleetTiers();calcFleet();
+  renderFleetLeftPanel();calcFleet();
 }
 
 function removeFleetTier(i){
@@ -3417,12 +3417,12 @@ function removeFleetTier(i){
   var pct=SF.tiers[i].trafficPct;
   SF.tiers.splice(i,1);
   SF.tiers[0].trafficPct=Math.min(100,SF.tiers[0].trafficPct+pct);
-  renderFleetTiers();calcFleet();
+  renderFleetLeftPanel();calcFleet();
 }
 
 function toggleFleetTier(i){
   SF.tiers[i].open=!SF.tiers[i].open;
-  renderFleetTiers();
+  renderFleetLeftPanel();
 }
 
 function updateFleetTierTraffic(i,val){
@@ -3431,7 +3431,7 @@ function updateFleetTierTraffic(i,val){
   SF.tiers[i].trafficPct=newVal;
   var lastIdx=SF.tiers.length-1;
   if(i!==lastIdx) SF.tiers[lastIdx].trafficPct=Math.max(0,SF.tiers[lastIdx].trafficPct-delta);
-  renderFleetTiers();calcFleet();
+  renderFleetLeftPanel();calcFleet();
 }
 
 function updateFleetTierModel(i,modelLabel){
@@ -3441,6 +3441,7 @@ function updateFleetTierModel(i,modelLabel){
   SF.tiers[i].params=m.params;SF.tiers[i].layers=m.layers;
   SF.tiers[i].kvHeads=m.kvHeads;SF.tiers[i].headDim=m.headDim;SF.tiers[i].attn=m.attn;
   SF.tiers[i].tp=m.params>=70?4:m.params>=30?2:1;
+  renderFleetLeftPanel();
   calcFleet();
 }
 
@@ -4177,7 +4178,7 @@ function setAppMode(mode) {
   document.getElementById('mode-fleet').classList.toggle('active', mode==='fleet');
   // fleet is now a separate page
   if (mode==='fleet') {
-    renderFleetTiers();
+    renderFleetLeftPanel();
     renderApiPricingTable();
     calcFleet();
     T.fire('fleet_mode_open');
@@ -4185,64 +4186,20 @@ function setAppMode(mode) {
 }
 
 // ── TIER MANAGEMENT ───────────────────────────────────────────────────────────
-function addFleetTier() {
-  // Steal traffic from largest tier
-  var largest = SF.tiers.reduce(function(a,b){return b.trafficPct>a.trafficPct?b:a;});
-  var newPct = Math.min(10, Math.floor(largest.trafficPct / 2));
-  largest.trafficPct -= newPct;
-  SF.tiers.push({
-    name: 'Tier ' + (SF.tiers.length+1),
-    model:'Llama 3.1 8B', params:8, layers:32, kvHeads:8, headDim:128, attn:'gqa',
-    trafficPct: newPct, avgInputTok:200, avgOutputTok:100, ctx:8,
-    gpuName:'H100', gpuVram:80, prec:'fp16', tp:1,
-    apiModel:'Claude 3.5 Haiku', open:true
-  });
-  renderFleetTiers();
-  calcFleet();
-}
+// addFleetTier: defined in block 0
 
-function removeFleetTier(i) {
-  if (SF.tiers.length <= 1) return;
-  // Return traffic to first tier
-  var pct = SF.tiers[i].trafficPct;
-  SF.tiers.splice(i, 1);
-  SF.tiers[0].trafficPct = Math.min(100, SF.tiers[0].trafficPct + pct);
-  renderFleetTiers();
-  calcFleet();
-}
 
-function toggleFleetTier(i) {
-  SF.tiers[i].open = !SF.tiers[i].open;
-  renderFleetTiers();
-}
+// removeFleetTier: defined in block 0
 
-function updateFleetTierTraffic(i, val) {
-  var newVal = Math.max(0, Math.min(100, +val));
-  var old = SF.tiers[i].trafficPct;
-  var delta = newVal - old;
-  SF.tiers[i].trafficPct = newVal;
-  // Auto-adjust last tier (if not editing last)
-  var lastIdx = SF.tiers.length - 1;
-  if (i !== lastIdx) {
-    SF.tiers[lastIdx].trafficPct = Math.max(0, SF.tiers[lastIdx].trafficPct - delta);
-  }
-  renderFleetTiers();
-  calcFleet();
-}
 
-function updateFleetTierModel(i, modelLabel) {
-  var m = FLEET_MODELS.find(function(x){return x.label===modelLabel;});
-  if (!m) return;
-  SF.tiers[i].model = modelLabel;
-  SF.tiers[i].params = m.params;
-  SF.tiers[i].layers = m.layers;
-  SF.tiers[i].kvHeads = m.kvHeads;
-  SF.tiers[i].headDim = m.headDim;
-  SF.tiers[i].attn = m.attn;
-  // Auto-set TP based on model size
-  SF.tiers[i].tp = m.params >= 70 ? 4 : m.params >= 30 ? 2 : 1;
-  calcFleet();
-}
+// toggleFleetTier: defined in block 0
+
+
+// updateFleetTierTraffic: defined in block 0
+
+
+// updateFleetTierModel: defined in block 0
+
 
 // ── TIER COMPUTE ──────────────────────────────────────────────────────────────
 function computeTier(tier) {
@@ -4330,22 +4287,8 @@ function addApiProvider() {
 }
 
 // ── SAVE + VALIDATE FOR FLEET ─────────────────────────────────────────────────
-function saveFleet() {
-  var config = {
-    mode: 'fleet',
-    totalUsers: SF.totalUsers,
-    tiers: SF.tiers.map(function(t){
-      return {name:t.name, model:t.model, trafficPct:t.trafficPct,
-              ctx:t.ctx, avgInputTok:t.avgInputTok, avgOutputTok:t.avgOutputTok,
-              gpuName:t.gpuName, gpuVram:t.gpuVram};
-    })
-  };
-  var encoded = btoa(JSON.stringify(config));
-  var url = window.location.origin + window.location.pathname + '#fleet?' + encoded;
-  navigator.clipboard.writeText(url).catch(function(){});
-  alert('Fleet config link copied to clipboard!');
-  T.fire('fleet_save', {tiers: SF.tiers.length});
-}
+// saveFleet: defined in block 0
+
 
 
 </script>
