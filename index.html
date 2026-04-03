@@ -1780,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
 // e.g. 'https://gpu-calc-api.vikasgrover2004.workers.dev'
 // Leave empty to use relative /api/* (works on Cloudflare Pages)
 var API_BASE = '';
-var PRICING_WORKER = 'https://gpu-pricing-worker.vikasgrover2004.workers.dev';
+var PRICING_WORKER = ''; // Set to your pricing Worker URL e.g. https://gpu-pricing-worker.YOUR.workers.dev
 function apiUrl(path){ return (API_BASE || '') + path; }
 
 // ===== TRACKING — must be first so T.fire() works everywhere =====
@@ -4096,6 +4096,13 @@ function loadLivePrices(){
     });
 }
 
+function formatTokensPerDay(n) {
+  if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(0) + 'K';
+  return String(n);
+}
+
 // ===== URL SHARE LOAD =====
 loadFromURL();
 </script>
@@ -4133,98 +4140,7 @@ loadFromURL();
   </div>
 </div>
 
-<script>
-// ===== FLEET MODE =====
 
-// SF state defined in block 0 — removed duplicate
-
-
-// API pricing table — editable, updated March 2026
-// var API_PROVIDERS defined in block 0
-
-
-// Fleet model options for tier selector
-// var FLEET_MODELS defined in block 0
-
-
-var appMode = 'single'; // 'single' | 'fleet'
-
-// Current app mode (single vs fleet)
-function setAppMode(mode) {
-  appMode = mode;
-  document.getElementById('mode-single').classList.toggle('active', mode==='single');
-  document.getElementById('mode-fleet').classList.toggle('active', mode==='fleet');
-  // fleet is now a separate page
-  if (mode==='fleet') {
-    renderFleetLeftPanel();
-    renderApiPricingTable();
-    calcFleet();
-    T.fire('fleet_mode_open');
-  }
-}
-
-// ── TIER MANAGEMENT ───────────────────────────────────────────────────────────
-// addFleetTier: defined in block 0
-
-
-// removeFleetTier: defined in block 0
-
-
-// toggleFleetTier: defined in block 0
-
-
-// updateFleetTierTraffic: defined in block 0
-
-
-// updateFleetTierModel: defined in block 0
-
-
-// ── TIER COMPUTE ──────────────────────────────────────────────────────────────
-// computeTier defined in block 0
-
-
-// ── FLEET CALC ────────────────────────────────────────────────────────────────
-// calcFleet defined in block 0 — removed duplicate
-
-
-function formatTokensPerDay(n) {
-  if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
-  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
-  if (n >= 1e3) return (n/1e3).toFixed(0) + 'K';
-  return String(n);
-}
-
-// ── RENDER FUNCTIONS ──────────────────────────────────────────────────────────
-// renderFleetTiers defined in block 0
-
-
-// updateTierSummaries defined in block 0
-
-
-// renderFleetBreakdown defined in block 0
-
-
-
-
-// renderFleetCostCompare defined in block 0
-
-
-// renderRoutingROI defined in block 0
-
-
-// ── API PRICING TABLE ─────────────────────────────────────────────────────────
-// renderApiPricingTable: defined in block 0
-
-
-// addApiProvider: defined in block 0
-
-
-// ── SAVE + VALIDATE FOR FLEET ─────────────────────────────────────────────────
-// saveFleet: defined in block 0
-
-
-
-</script>
 
 <!-- ===== FLEET PAGE ===== -->
 <div id="page-fleet" class="page">
