@@ -1727,7 +1727,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.2.3</span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.2.4</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -1780,6 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
 // e.g. 'https://gpu-calc-api.vikasgrover2004.workers.dev'
 // Leave empty to use relative /api/* (works on Cloudflare Pages)
 var API_BASE = '';
+var PRICING_WORKER = ''; // Set to your pricing Worker URL e.g. https://gpu-pricing-worker.YOUR.workers.dev
 function apiUrl(path){ return (API_BASE || '') + path; }
 
 // ===== TRACKING — must be first so T.fire() works everywhere =====
@@ -1947,7 +1948,7 @@ buildQSProgress(1);
 calc();
 // Defer non-critical work after first paint
 (window.requestIdleCallback||function(f){setTimeout(f,400)})(function(){
-  loadCounter(); loadGeo();
+  loadCounter(); loadGeo(); loadLivePrices();
 });
 
 // Hash routing — supports #admin and legacy #vg-ops-9x7k
@@ -3359,6 +3360,8 @@ function loadGeo(){
 
 var SF = {
   totalUsers: 1000,
+  queriesPerUserPerDay: 100,
+  concurrencyFactor: 0.10,
   engCost: 50000,
   tiers: [
     {name:'Simple queries',model:'Llama 3.1 8B',params:8,layers:32,kvHeads:8,headDim:128,attn:'gqa',trafficPct:60,avgInputTok:200,avgOutputTok:100,ctx:4,gpuName:'H100',gpuVram:80,prec:'fp16',tp:1,apiModel:'Claude 3.5 Haiku',open:false},
@@ -3442,7 +3445,9 @@ function updateFleetTierModel(i,modelLabel){
 }
 
 function computeTier(tier){
-  var users=Math.round(SF.totalUsers*tier.trafficPct/100);
+  var totalTierUsers=Math.round(SF.totalUsers*tier.trafficPct/100);
+  // Concurrency factor: only this % of users are simultaneously active
+  var concurrentUsers=Math.max(1,Math.round(totalTierUsers*(SF.concurrencyFactor||0.10)));
   var vram=tier.gpuVram;
   var bytesPerParam=tier.prec==='fp16'?2:tier.prec==='fp8'?1:0.5;
   var wGB=tier.params*bytesPerParam;
@@ -3452,25 +3457,161 @@ function computeTier(tier){
   var kvPU=bytesPerTok*tier.ctx*1000/1e9;
   var kvPool=(usable-wGB)*0.95;
   var upr=Math.max(1,Math.floor(kvPool/Math.max(kvPU,0.001)));
-  var replicas=Math.ceil(users/Math.max(upr,1));
+  var replicas=Math.ceil(concurrentUsers/Math.max(upr,1));
   var totalGPUs=replicas*tier.tp;
-  var activeProvider=PROVIDERS.find(function(p){return p.active;})||PROVIDERS[0];
-  var cloudCostYr=totalGPUs*activeProvider.rate*8760;
+  var activeProvider=(typeof PROVIDERS!=='undefined'?PROVIDERS:null)||[];
+  var prov=activeProvider.find?activeProvider.find(function(p){return p.active;}):null;
+  var cloudCostYr=totalGPUs*(prov?prov.rate:3)*8760;
   var apiProv=API_PROVIDERS.find(function(p){return p.model===tier.apiModel;});
   var apiCostYr=0;
+  var queriesPerDay=Math.round(SF.totalUsers*(tier.trafficPct/100)*(SF.queriesPerUserPerDay||100));
   if(apiProv){
-    var queriesPerDay=Math.round(SF.totalUsers*(tier.trafficPct/100)*100);
     apiCostYr=queriesPerDay*365*(tier.avgInputTok*apiProv.inputPer1M+tier.avgOutputTok*apiProv.outputPer1M)/1e6;
   }
-  return {users:users,wGB:wGB,ohGB:ohGB,usable:usable,kvPU:kvPU,upr:upr,replicas:replicas,totalGPUs:totalGPUs,cloudCostYr:cloudCostYr,apiCostYr:apiCostYr};
+  return {users:totalTierUsers,concurrentUsers:concurrentUsers,wGB:wGB,ohGB:ohGB,usable:usable,kvPU:kvPU,upr:upr,replicas:replicas,totalGPUs:totalGPUs,cloudCostYr:cloudCostYr,apiCostYr:apiCostYr,queriesPerDay:queriesPerDay};
 }
 
 
 function renderFleetPage(){
-  renderFleetTiers();
+  renderFleetLeftPanel();
   renderApiPricingTable();
   calcFleet();
 }
+function renderFleetLeftPanel(){
+  var container=document.getElementById('fleet-left-content');
+  if(!container)return;
+  var tierColors=['#1a56db','#057a55','#b45309','#7c3aed','#0891b2'];
+  var apiOpts=API_PROVIDERS.map(function(p){return '<option value="'+p.model+'">'+p.model+'</option>';}).join('');
+  var concPct=Math.round((SF.concurrencyFactor||0.10)*100);
+
+  var html='';
+
+  // ── Users & concurrency section ──────────────────────────────────────────
+  html+='<div class="panel-section open" id="fleet-users-section">';
+  html+='<div class="panel-head" onclick="this.parentElement.classList.toggle(\'open\')">'; 
+  html+='<div class="panel-head-left"><div class="panel-head-icon">👥</div>';
+  html+='<div class="panel-head-text"><div class="panel-head-title">Users &amp; volume</div>';
+  html+='<div class="panel-head-summary" id="fleet-users-sum">'+SF.totalUsers.toLocaleString()+' users · '+concPct+'% concurrent</div>';
+  html+='</div></div><span class="panel-arrow">&#9658;</span></div>'; // end panel-head
+  html+='<div class="panel-body">';
+
+  html+='<div class="panel-label">Total users</div>';
+  html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">';
+  html+='<input type="number" value="'+SF.totalUsers+'" min="1" style="width:100px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text1);font-family:var(--mono);font-size:13px" oninput="SF.totalUsers=+this.value||1;calcFleet()">';
+  html+='<span style="font-size:11px;color:var(--text3)">concurrent total</span></div>';
+
+  html+='<div class="panel-label">Queries per user per day</div>';
+  html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">';
+  html+='<input type="number" value="'+(SF.queriesPerUserPerDay||100)+'" min="1" style="width:80px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text1);font-family:var(--mono);font-size:13px" oninput="SF.queriesPerUserPerDay=+this.value||100;calcFleet()">';
+  html+='<span style="font-size:11px;color:var(--text3)">queries/day</span></div>';
+
+  html+='<div class="panel-label">Peak concurrency factor</div>';
+  html+='<div style="font-size:11px;color:var(--text3);margin-bottom:6px">What % of users are simultaneously active?</div>';
+  html+='<input type="range" min="1" max="100" step="1" value="'+concPct+'" style="width:100%;accent-color:var(--blue)" oninput="SF.concurrencyFactor=+this.value/100;document.getElementById(\'fleet-conc-val\').textContent=this.value+\'%\';calcFleet()">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">';
+  html+='<span style="font-size:10px;color:var(--text4)">1% async batch</span>';
+  html+='<span style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--blue)" id="fleet-conc-val">'+concPct+'%</span>';
+  html+='<span style="font-size:10px;color:var(--text4)">100% realtime</span></div>';
+  html+='<div style="margin-top:8px;padding:8px;background:var(--blue-bg);border-radius:var(--r);font-size:11px;color:var(--blue)">';
+  html+='<strong>'+Math.round(SF.totalUsers*(SF.concurrencyFactor||0.10))+' simultaneous</strong> users at '+concPct+'% concurrency → GPU sizing baseline';
+  html+='</div>';
+  html+='</div></div>';// /panel-body /panel-section
+
+  // ── Tier sections ─────────────────────────────────────────────────────────
+  SF.tiers.forEach(function(t,i){
+    var col=tierColors[i%tierColors.length];
+    var pct=t.trafficPct;
+    html+='<div class="panel-section '+(t.open?'open':'')+'" id="fleet-tier-panel-'+i+'">';
+    html+='<div class="panel-head" onclick="toggleFleetTier('+i+')">';
+    html+='<div class="panel-head-left">';
+    html+='<div class="panel-head-icon" style="background:'+col+'22;color:'+col+';font-size:11px;font-weight:700;font-family:var(--mono)">'+(i+1)+'</div>';
+    html+='<div class="panel-head-text">';
+    html+='<input type="text" value="'+t.name+'" style="background:none;border:none;font-size:12px;font-weight:600;color:var(--text1);width:120px;cursor:text" onclick="event.stopPropagation()" onchange="SF.tiers['+i+'].name=this.value;calcFleet()">';
+    html+='<div class="panel-head-summary">'+t.apiModel+' · '+pct+'%</div>';
+    html+='</div></div>';
+    html+='<div style="display:flex;align-items:center;gap:6px">';
+    html+='<button class="prov-del" onclick="event.stopPropagation();removeFleetTier('+i+')" title="Remove">×</button>';
+    html+='<span class="panel-arrow">&#9658;</span></div>';
+    html+='</div>';// /panel-head
+
+    html+='<div class="panel-body">';
+
+    // Traffic share
+    html+='<div class="panel-label">Traffic share</div>';
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">';
+    html+='<input type="range" min="0" max="100" step="5" value="'+pct+'" style="flex:1;accent-color:'+col+'" oninput="updateFleetTierTraffic('+i+',+this.value)">';
+    html+='<span style="font-size:13px;font-weight:600;font-family:var(--mono);color:'+col+';min-width:36px" id="ft-pct-'+i+'">'+pct+'%</span>';
+    html+='</div>';
+
+    // API model
+    html+='<div class="panel-label">API model (current)</div>';
+    html+='<select class="fleet-tier-select" id="ft-api-'+i+'" style="width:100%;margin-bottom:12px" onchange="SF.tiers['+i+'].apiModel=this.value;calcFleet()">'+apiOpts+'</select>';
+
+    // Token inputs
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">';
+    html+='<div><div class="panel-label">Avg input tokens</div><input class="fleet-tier-input" type="number" value="'+t.avgInputTok+'" min="1" style="width:100%" oninput="SF.tiers['+i+'].avgInputTok=+this.value;calcFleet()"></div>';
+    html+='<div><div class="panel-label">Avg output tokens</div><input class="fleet-tier-input" type="number" value="'+t.avgOutputTok+'" min="1" style="width:100%" oninput="SF.tiers['+i+'].avgOutputTok=+this.value;calcFleet()"></div>';
+    html+='</div>';
+
+    // Self-hosted alternative
+    html+='<div class="panel-label">Self-hosted alternative</div>';
+    var modelOpts=FLEET_MODELS.map(function(m){return '<option value="'+m.label+'"'+(m.label===t.model?' selected':'')+'>'+m.label+'</option>';}).join('');
+    html+='<select class="fleet-tier-select" id="ft-model-'+i+'" style="width:100%;margin-bottom:10px" onchange="updateFleetTierModel('+i+',this.value)">'+modelOpts+'</select>';
+
+    // Context + GPU for self-hosted sizing
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">';
+    html+='<div><div class="panel-label">Context (K tokens)</div>';
+    html+='<select class="fleet-tier-select" style="width:100%" onchange="SF.tiers['+i+'].ctx=+this.value;calcFleet()">';
+    [4,8,16,32,64,128,256].forEach(function(c){html+='<option value="'+c+'"'+(c===t.ctx?' selected':'')+'>'+c+'K</option>';});
+    html+='</select></div>';
+    html+='<div><div class="panel-label">GPU type</div>';
+    html+='<select class="fleet-tier-select" style="width:100%" onchange="var v=this.value.split('|');SF.tiers['+i+'].gpuName=v[0];SF.tiers['+i+'].gpuVram=+v[1];calcFleet()">';
+    [['H100',80],['H200',141],['B100',192],['B200',180],['A100',80],['L40S',48],['MI300X',192]].forEach(function(g){
+      var sel=(g[0]===t.gpuName&&+g[1]===t.gpuVram)?' selected':'';
+      html+='<option value="'+g[0]+'|'+g[1]+'"'+sel+'>'+g[0]+' '+g[1]+'GB</option>';
+    });
+    html+='</select></div></div>';
+
+    // Result summary
+    html+='<div style="background:var(--bg3);border-radius:var(--r);padding:8px 10px;font-size:11px" id="ft-result-'+i+'">';
+    html+='<span style="color:var(--text4)">Computing...</span>';
+    html+='</div>';
+
+    html+='</div></div>';// /panel-body /panel-section
+  });
+
+  // Add tier button
+  html+='<div style="padding:12px 16px;border-top:1px solid var(--border)">';
+  html+='<button class="fleet-add-tier" onclick="addFleetTier()" style="width:100%">+ Add routing tier</button>';
+  html+='<div class="fleet-traffic-total '+(SF.tiers.reduce(function(s,t){return s+t.trafficPct;},0)===100?'fleet-traffic-ok':'fleet-traffic-warn')+'" id="fleet-traffic-status" style="margin-top:8px;text-align:center">';
+  var totalPct=SF.tiers.reduce(function(s,t){return s+t.trafficPct;},0);
+  html+=(totalPct===100?'✓ 100% traffic assigned':'⚠ '+totalPct+'% assigned — must sum to 100%');
+  html+='</div></div>';
+
+  container.innerHTML=html;
+
+  // Set select values after render
+  SF.tiers.forEach(function(t,i){
+    var as=document.getElementById('ft-api-'+i);if(as)as.value=t.apiModel;
+    var ms=document.getElementById('ft-model-'+i);if(ms)ms.value=t.model;
+  });
+}
+
+function exportFleetPDF(){window.print();}
+function exportFleetSheets(){
+  var rows=[['Fleet Routing Analysis — gpu.calc'],[''],['TIER','API MODEL','TRAFFIC %','QUERIES/DAY','API COST/YR','AVG INPUT TOKENS','AVG OUTPUT TOKENS']];
+  SF.tiers.forEach(function(t){
+    var r=computeTier(t);
+    rows.push([t.name,t.apiModel,t.trafficPct+'%',r.queriesPerDay,Math.round(r.apiCostYr),t.avgInputTok,t.avgOutputTok]);
+  });
+  var totalApiYr=SF.tiers.reduce(function(s,t){return s+computeTier(t).apiCostYr;},0);
+  rows.push(['','','TOTAL','',Math.round(totalApiYr),'','']);
+  var tsv=rows.map(function(r){return r.join('\t');}).join('\n');
+  navigator.clipboard&&navigator.clipboard.writeText(tsv).then(function(){alert('Copied! Paste into Google Sheets.');});
+  window.open('https://sheets.new','_blank');
+}
+
+
 
 function calcFleet(){
   var totalPct=SF.tiers.reduce(function(s,t){return s+t.trafficPct;},0);
@@ -3498,24 +3639,15 @@ function calcFleet(){
   var payback=savingsYr>0?(SF.engCost/savingsYr*12):Infinity;
 
   // ── Update outcome cards ───────────────────────────────────────────────────
-  if(el('fhc-api-cost')){
-    el('fhc-api-cost').textContent=totalApiCostYr>0?fmtK(totalApiCostYr):'—';
-    el('fhc-api-cost').style.color=totalApiCostYr>0?'var(--red)':'var(--text3)';
-  }
-  if(el('fhc-self-cost')){
-    el('fhc-self-cost').textContent=fmtK(onpremYr);
-    el('fhc-self-cost').style.color='var(--green)';
-  }
-  if(el('fhc-gpus')) el('fhc-gpus').textContent=totalGPUs;
-  if(el('fhc-savings')){
-    el('fhc-savings').textContent=savingsYr>0?fmtK(savingsYr):'API is cheaper';
-    el('fhc-savings').style.color=savingsYr>0?'var(--green)':'var(--red)';
-  }
+  var _g=function(id){return document.getElementById(id);};
+  if(_g('fhc-api-cost')){_g('fhc-api-cost').textContent=totalApiCostYr>0?fmtK(totalApiCostYr):'$0';_g('fhc-api-cost').style.color=totalApiCostYr>0?'var(--red)':'var(--text3)';}
+  if(_g('fhc-self-cost')){_g('fhc-self-cost').textContent=onpremYr>0?fmtK(onpremYr):'$0';_g('fhc-self-cost').style.color='var(--green)';}
+  if(_g('fhc-gpus')) _g('fhc-gpus').textContent=totalGPUs||'0';
+  if(_g('fhc-savings')){_g('fhc-savings').textContent=savingsYr>0?fmtK(savingsYr):'API is cheaper';_g('fhc-savings').style.color=savingsYr>0?'var(--green)':'var(--red)';}
 
   // ── ROI verdict ────────────────────────────────────────────────────────────
   var roiEl=document.getElementById('roi-grid');
-  if(roiEl){
-    var verdictEl=document.getElementById('roi-verdict-label');
+  if(roiEl){var verdictEl=document.getElementById('roi-verdict-label');
     var roiHtml='';
     if(savingsYr>0){
       if(verdictEl){verdictEl.textContent='✓ Self-hosting makes financial sense';verdictEl.style.color='var(--green)';}
@@ -3540,8 +3672,14 @@ function calcFleet(){
   updateTierSummaries(results);
 
   // ── Config summary ─────────────────────────────────────────────────────────
-  if(el('fleet-config-summary')) el('fleet-config-summary').textContent=SF.tiers.length+' tiers · '+SF.totalUsers.toLocaleString()+' users · '+fmtK(totalApiCostYr)+'/yr API';
-  if(el('fleet-total-derived')) el('fleet-total-derived').textContent='~'+Math.round(SF.totalUsers*100).toLocaleString()+' queries/day';
+  if(_g('fleet-config-summary')) _g('fleet-config-summary').textContent=SF.tiers.length+' tiers · '+SF.totalUsers.toLocaleString()+' users · '+fmtK(totalApiCostYr)+'/yr API';
+  var concPctVal=Math.round((SF.concurrencyFactor||0.10)*100);
+  if(_g('fleet-concurrency-label')) _g('fleet-concurrency-label').textContent=concPctVal+'%';
+  if(_g('fleet-conc-pct-label')) _g('fleet-conc-pct-label').textContent=concPctVal+'%';
+  if(_g('fleet-conc-footnote')) _g('fleet-conc-footnote').textContent=concPctVal+'%';
+  var simUsers=Math.round(SF.totalUsers*(SF.concurrencyFactor||0.10));
+  if(_g('fleet-effective-users-label')) _g('fleet-effective-users-label').textContent=simUsers.toLocaleString();
+  if(_g('fleet-total-derived')) _g('fleet-total-derived').textContent='~'+Math.round(SF.totalUsers*100).toLocaleString()+' queries/day';
 
   // ── 5-year comparison ─────────────────────────────────────────────────────
   renderFleetCostCompare(totalApiCostYr,onpremYr,totalGPUs,activeProvider);
@@ -3600,7 +3738,13 @@ function updateTierSummaries(results){
     var s=document.getElementById('ft-sum-'+i);if(s)s.textContent=t.apiModel+' · '+t.trafficPct+'%';
     var b=document.getElementById('ft-bar-'+i);if(b)b.style.width=t.trafficPct+'%';
     var p=document.getElementById('ft-pct-'+i);if(p)p.textContent=t.trafficPct+'%';
-    if(results){var r=results[i];var re=document.getElementById('ft-result-'+i);if(re&&r)re.textContent=r.totalGPUs+' GPU'+(r.totalGPUs!==1?'s':'')+' · '+fmtK(r.cloudCostYr)+'/yr';}
+    if(results){var r=results[i];var re=document.getElementById('ft-result-'+i);if(re&&r){
+      re.innerHTML='<div style="display:flex;justify-content:space-between">'
+        +'<span style="color:var(--red)">API: <strong>'+fmtK(r.apiCostYr)+'</strong>/yr</span>'
+        +'<span style="color:var(--blue)">'+r.totalGPUs+' GPU'+(r.totalGPUs!==1?'s':'')+' to self-host</span>'
+        +'</div>'
+        +'<div style="font-size:10px;color:var(--text3);margin-top:3px">'+r.queriesPerDay.toLocaleString()+' queries/day · '+r.concurrentUsers+' simultaneous users</div>';
+    }}
   });
 }
 
@@ -3838,6 +3982,93 @@ function showFleetValidateModal(){
   T.fire('fleet_validate_open');
 }
 
+
+// ===== LIVE PRICING FROM PRICING WORKER =====
+function loadLivePrices(){
+  if(!PRICING_WORKER) return; // Not configured yet — use hardcoded defaults
+  fetch(PRICING_WORKER+'/prices')
+    .then(function(r){if(!r.ok)throw new Error('pricing unavailable');return r.json();})
+    .then(function(data){
+      var prices=data.prices||[];
+      var updated=false;
+
+      // ── Update cloud GPU providers (PROVIDERS array) ──────────────────────
+      var cloudPrices=prices.filter(function(p){
+        return p.category==='gpu_cloud'&&p.pricing_type==='on_demand'&&p.confidence==='high';
+      });
+      cloudPrices.forEach(function(p){
+        var match=PROVIDERS.find(function(x){return x.name===p.provider;});
+        if(match){
+          var perGPU=p.price_usd/(p.gpu_count||1);
+          if(Math.abs(perGPU-match.rate)/match.rate>0.01){ // Only update if >1% different
+            match.rate=perGPU;
+            match.gpu=p.gpu+' '+(p.vram_gb||80)+'GB';
+            updated=true;
+          }
+        }
+      });
+
+      // ── Update dedicated node pricing (DED_NODES array) ───────────────────
+      var dedPrices=prices.filter(function(p){
+        return p.category==='gpu_cloud'&&p.pricing_type==='dedicated';
+      });
+      dedPrices.forEach(function(p){
+        var match=DED_NODES.find(function(x){return x.name===p.provider;});
+        if(match&&p.price_usd){
+          match.rateMo=Math.round(p.price_usd*30*24*(p.gpu_count||8));
+          updated=true;
+        }
+      });
+
+      // ── Update API token prices (API_PROVIDERS array) ─────────────────────
+      var apiPrices=prices.filter(function(p){return p.category==='api_token';});
+      apiPrices.forEach(function(p){
+        var match=API_PROVIDERS.find(function(x){return x.model===p.model;});
+        if(match){
+          if(p.unit==='per_1m_input_tokens'&&p.price_usd!==match.inputPer1M){
+            match.inputPer1M=p.price_usd;updated=true;
+          }
+          if(p.unit==='per_1m_output_tokens'&&p.price_usd!==match.outputPer1M){
+            match.outputPer1M=p.price_usd;updated=true;
+          }
+        }
+      });
+
+      // ── Show freshness badge ───────────────────────────────────────────────
+      var latest=prices.map(function(p){return p.fetched_at||'';}).filter(Boolean).sort().pop();
+      var badge=document.getElementById('price-freshness-badge');
+      if(badge&&latest){
+        var d=new Date(latest);
+        var ago=Math.round((Date.now()-d.getTime())/(1000*60*60*24));
+        badge.textContent='Prices as of '+d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+(ago>0?' ('+ago+'d ago)':'');
+        badge.style.color='var(--green)';
+      }
+
+      // ── Re-render tables with fresh prices if anything changed ────────────
+      if(updated){
+        renderProviderTable();
+        renderHProviderTable();
+        renderDedNodeTable();
+        renderApiPricingTable();
+        if(document.getElementById('page-advanced').classList.contains('active')) calc();
+        if(document.getElementById('page-hybrid').classList.contains('active')) calcHybrid();
+        if(document.getElementById('page-fleet').classList.contains('active')) calcFleet();
+        console.log('gpu.calc: live prices loaded from pricing Worker');
+      }
+
+      T.fire('live_prices_loaded',{count:prices.length,updated:updated});
+    })
+    .catch(function(e){
+      // Pricing Worker down or not configured — hardcoded prices remain
+      var badge=document.getElementById('price-freshness-badge');
+      if(badge){
+        badge.textContent='Using estimated prices';
+        badge.style.color='var(--amber)';
+      }
+      console.log('gpu.calc: live prices unavailable, using defaults.',e.message);
+    });
+}
+
 // ===== URL SHARE LOAD =====
 loadFromURL();
 </script>
@@ -3881,6 +4112,8 @@ loadFromURL();
 // Fleet state
 var SF = {
   totalUsers: 1000,
+  queriesPerUserPerDay: 100,
+  concurrencyFactor: 0.10,
   engCost: 50000,
   tiers: [
     {
@@ -4220,7 +4453,7 @@ function updateTierSummaries(results) {
     if (results) {
       var r = results[i];
       var resEl = document.getElementById('ft-result-'+i);
-      if (resEl && r) resEl.textContent = r.totalGPUs + ' GPU' + (r.totalGPUs!==1?'s':'') + ' · ' + fmtK(r.cloudCostYr) + '/yr';
+      if (resEl && r) resEl.textContent = SF.tiers[i].apiModel + ' · ' + SF.tiers[i].trafficPct + '% · ' + fmtK(r.apiCostYr) + '/yr';
     }
   });
 }
@@ -4371,126 +4604,130 @@ function saveFleet() {
 
 <!-- ===== FLEET PAGE ===== -->
 <div id="page-fleet" class="page">
-  <div style="max-width:980px;margin:0 auto;padding:24px 20px">
+  <div class="adv-layout">
 
-    <!-- Header -->
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;flex-wrap:wrap;gap:12px">
-      <div>
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--blue);margin-bottom:4px">FLEET ROUTING</div>
-        <h1 style="font-size:22px;font-weight:700;margin-bottom:4px">Semantic routing economics</h1>
-        <p style="font-size:13px;color:var(--text3)">Your current API spend · self-hosting ROI · when to route intelligently</p>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn btn-sm" onclick="showFleetValidateModal()">&#129302; Validate with AI</button>
-        <button class="btn btn-primary btn-sm" onclick="saveFleet()">&#128204; Save</button>
-      </div>
-    </div>
+    <!-- ═══ LEFT PANEL ═══════════════════════════════════════════════════════ -->
+    <div class="adv-left" id="fleet-left-panel">
 
-    <!-- ═══ PANEL 1: TRAFFIC FLOW (left → right) ════════════════════════════ -->
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:20px;margin-bottom:16px">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text4);margin-bottom:16px">HOW YOUR TRAFFIC ROUTES</div>
-      <div id="fleet-traffic-flow" style="min-height:80px"></div>
+      <!-- Tier sections rendered here by renderFleetLeftPanel() -->
+      <div id="fleet-left-content"></div>
 
-      <!-- Frontier model cost comparison row -->
-      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:10px">ANNUAL COST IF ALL TRAFFIC WENT TO:</div>
-        <div id="fleet-frontier-compare" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px"></div>
-      </div>
-    </div>
-
-    <!-- ═══ PANEL 2: CURRENT API SPEND ══════════════════════════════════════ -->
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:20px;margin-bottom:16px">
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text4);margin-bottom:14px">YOUR CURRENT API SPEND</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
-        <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
-          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--red)" id="fhc-api-cost">—</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:3px">API cost / year</div>
-        </div>
-        <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
-          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--green)" id="fhc-self-cost">—</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:3px">Self-hosted / year</div>
-        </div>
-        <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
-          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--blue)" id="fhc-gpus">—</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:3px">GPUs needed</div>
-        </div>
-        <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
-          <div style="font-size:22px;font-weight:700;font-family:var(--mono)" id="fhc-savings" style="color:var(--green)">—</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:3px">Annual savings</div>
-        </div>
-      </div>
-
-      <!-- ROI verdict -->
-      <div id="routing-roi" style="background:var(--bg3);border-radius:var(--r);padding:14px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:10px">
-          <div>
-            <div style="font-size:13px;font-weight:600" id="roi-verdict-label">Should you self-host?</div>
-            <div style="font-size:12px;color:var(--text3)">Based on volume and engineering cost</div>
+      <!-- API Pricing -->
+      <div class="panel-section" id="fleet-api-pricing-section">
+        <div class="panel-head" onclick="this.parentElement.classList.toggle('open')">
+          <div class="panel-head-left">
+            <div class="panel-head-icon">💲</div>
+            <div class="panel-head-text">
+              <div class="panel-head-title">API pricing</div>
+              <div class="panel-head-summary" id="fleet-pricing-sum">editable · per 1M tokens</div>
+            </div>
           </div>
-          <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)">
-            <span>Engineering cost:</span>
-            <span style="font-family:var(--mono)">$</span>
-            <input class="roi-eng-input" type="number" id="roi-eng-cost" value="50000" oninput="SF.engCost=+this.value;calcFleet()">
-            <span style="color:var(--text4)">one-time</span>
+          <span class="panel-arrow">&#9658;</span>
+        </div>
+        <div class="panel-body">
+          <table class="api-pricing-table" id="api-pricing-table" style="width:100%"></table>
+          <button class="add-prov" onclick="addApiProvider()" style="margin-top:8px">+ add provider</button>
+          <div style="font-size:10px;color:var(--text4);margin-top:6px">Updated March 2026 — edit when prices change</div>
+        </div>
+      </div>
+
+      <!-- Quick size guide -->
+      <div style="padding:12px 16px;border-top:1px solid var(--border)">
+        <button class="panel-qs-btn" onclick="nav('advanced')">&#9654; Advanced calculator</button>
+      </div>
+
+    </div><!-- /adv-left -->
+
+    <!-- ═══ RIGHT PANEL ══════════════════════════════════════════════════════ -->
+    <div class="adv-right" style="max-width:none">
+
+      <!-- Top action bar -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--blue);margin-bottom:3px">FLEET ROUTING</div>
+          <h1 style="font-size:20px;font-weight:700;margin:0">Semantic routing economics</h1>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="showFleetValidateModal()">&#129302; Validate with AI</button>
+          <button class="btn btn-sm" onclick="exportFleetPDF()">&#8595; PDF</button>
+          <button class="btn btn-sm" onclick="exportFleetSheets()">&#128202; Sheets</button>
+          <button class="btn btn-primary btn-sm" onclick="saveFleet()">&#128204; Save</button>
+        </div>
+      </div>
+
+      <!-- PANEL 1: Traffic flow (centred SVG) -->
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:18px 20px;margin-bottom:16px">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text4);margin-bottom:14px">HOW YOUR TRAFFIC ROUTES</div>
+        <div id="fleet-traffic-flow" style="display:flex;justify-content:center;min-height:80px"></div>
+        <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:10px">ANNUAL COST IF ALL TRAFFIC WENT TO ONE MODEL:</div>
+          <div id="fleet-frontier-compare" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px"></div>
+        </div>
+      </div>
+
+      <!-- PANEL 2: API spend outcome cards -->
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:18px 20px;margin-bottom:16px">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text4);margin-bottom:14px">YOUR CURRENT API SPEND</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+          <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
+            <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--red)" id="fhc-api-cost">—</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:3px">API cost / year</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
+            <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--green)" id="fhc-self-cost">—</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:3px">Self-hosted / year</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
+            <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--blue)" id="fhc-gpus">—</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:3px">GPUs (at <span id="fleet-concurrency-label">10%</span> concurrency)</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
+            <div style="font-size:22px;font-weight:700;font-family:var(--mono)" id="fhc-savings">—</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:3px">Annual savings</div>
           </div>
         </div>
-        <div class="roi-grid" id="roi-grid"></div>
-      </div>
-    </div>
 
-    <!-- ═══ PANEL 3: EDIT FLEET CONFIG (collapsed) ══════════════════════════ -->
-    <details style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:16px" id="fleet-config-details">
-      <summary style="padding:14px 18px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:14px">&#9881;</span>
-          <span style="font-size:13px;font-weight:600">Edit fleet configuration</span>
-        </div>
-        <span style="font-size:11px;color:var(--text4)" id="fleet-config-summary">3 tiers · 1,000 users</span>
-      </summary>
-      <div style="border-top:1px solid var(--border);padding:16px">
-
-        <!-- Users -->
-        <div class="fleet-total-users" style="margin-bottom:12px">
-          <span class="fleet-total-label">Total concurrent users</span>
-          <input class="fleet-total-input" type="number" id="fleet-total-users" value="1000" min="1" oninput="SF.totalUsers=+this.value;calcFleet()">
-          <span class="fleet-total-derived" id="fleet-total-derived">—</span>
-        </div>
-        <div class="fleet-traffic-total fleet-traffic-ok" id="fleet-traffic-status" style="margin-bottom:12px">✓ 100% traffic assigned</div>
-
-        <!-- Tier list -->
-        <div id="fleet-tiers-list"></div>
-        <button class="fleet-add-tier" onclick="addFleetTier()">+ Add routing tier</button>
-
-        <!-- API pricing -->
-        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4)">API pricing (per 1M tokens · editable)</div>
-            <button class="add-prov" onclick="addApiProvider()">+ provider</button>
+        <!-- ROI verdict -->
+        <div id="routing-roi" style="background:var(--bg3);border-radius:var(--r);padding:14px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+            <div id="roi-verdict-label" style="font-size:13px;font-weight:600">Should you self-host?</div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:12px">
+              <span style="color:var(--text3)">Engineering cost:</span>
+              <span style="font-family:var(--mono);color:var(--text3)">$</span>
+              <input class="roi-eng-input" type="number" id="roi-eng-cost" value="50000" oninput="SF.engCost=+this.value;calcFleet()">
+              <span style="color:var(--text4)">one-time</span>
+            </div>
           </div>
-          <table class="api-pricing-table" id="api-pricing-table"></table>
-          <div style="font-size:10px;color:var(--text4);margin-top:4px">Updated March 2026 — edit when prices change</div>
+          <div class="roi-grid" id="roi-grid"></div>
         </div>
-
       </div>
-    </details>
 
-    <!-- ═══ PANEL 4: PER-TIER BREAKDOWN ═════════════════════════════════════ -->
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:16px;overflow:hidden">
-      <div style="padding:14px 18px;border-bottom:1px solid var(--border)">
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text4)">PER-TIER BREAKDOWN</div>
+      <!-- PANEL 3: Per-tier breakdown -->
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:16px;overflow:hidden">
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text4)">PER-TIER BREAKDOWN</div>
+          <div style="font-size:11px;color:var(--text4)">Concurrency: <strong id="fleet-conc-pct-label">10%</strong> · <span id="fleet-effective-users-label" style="color:var(--blue)">100</span> simultaneous users</div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="fleet-breakdown-table" id="fleet-breakdown-table" style="width:100%">
+            <tr><th>Tier</th><th>API model</th><th>Traffic</th><th>Queries/day</th><th>API cost/yr</th><th>Tokens (in/out)</th><th>vs all-Sonnet</th></tr>
+          </table>
+        </div>
       </div>
-      <div style="overflow-x:auto">
-        <table class="fleet-breakdown-table" id="fleet-breakdown-table" style="width:100%">
-          <tr><th>Tier</th><th>Current API</th><th>Traffic</th><th>Queries/day</th><th>API cost/yr</th><th>Self-hosted</th><th>Saves</th></tr>
-        </table>
+
+      <!-- PANEL 4: 5-year comparison -->
+      <div style="margin-bottom:16px">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:8px">5-YEAR COST COMPARISON</div>
+        <div class="fleet-cost-compare" id="fleet-cost-compare"></div>
       </div>
-    </div>
 
-    <!-- 5-year comparison -->
-    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:8px">5-YEAR COST COMPARISON</div>
-    <div class="fleet-cost-compare" id="fleet-cost-compare" style="margin-bottom:24px"></div>
+      <!-- Footnote -->
+      <div style="font-size:11px;color:var(--text4);line-height:1.6;padding:12px 0;border-top:1px solid var(--border)">
+        GPU counts assume <span id="fleet-conc-footnote">10%</span> peak concurrency factor. Adjust in the left panel. API prices from provider websites, March 2026. Validate before procurement.
+      </div>
 
-  </div>
+    </div><!-- /adv-right -->
+  </div><!-- /adv-layout -->
 </div>
 </body>
 </html>
