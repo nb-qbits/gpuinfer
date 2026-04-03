@@ -3897,13 +3897,13 @@ function renderFrontierCompare(){
   var avgIn=0, avgOut=0;
   SF.tiers.forEach(function(t){avgIn+=t.avgInputTok;avgOut+=t.avgOutputTok;});
   avgIn=avgIn/SF.tiers.length; avgOut=avgOut/SF.tiers.length;
-  var qpd=SF.totalUsers*100;
+  var qpd=SF.totalUsers*(SF.queriesPerUserPerDay||100);
 
   // Current mixed cost
   var currentYr=0;
   SF.tiers.forEach(function(t){
     var p=API_PROVIDERS.find(function(x){return x.model===t.apiModel;})||{inputPer1M:3,outputPer1M:15};
-    currentYr+=SF.totalUsers*(t.trafficPct/100)*100*365*(t.avgInputTok*p.inputPer1M+t.avgOutputTok*p.outputPer1M)/1e6;
+    currentYr+=SF.totalUsers*(t.trafficPct/100)*(SF.queriesPerUserPerDay||100)*365*(t.avgInputTok*p.inputPer1M+t.avgOutputTok*p.outputPer1M)/1e6;
   });
 
   var html='';
@@ -4136,64 +4136,16 @@ loadFromURL();
 <script>
 // ===== FLEET MODE =====
 
-// Fleet state
-var SF = {
-  totalUsers: 1000,
-  queriesPerUserPerDay: 100,
-  concurrencyFactor: 0.10,
-  engCost: 50000,
-  tiers: [
-    {
-      name: 'Simple queries',
-      model: 'Llama 3.1 8B', params: 8, layers: 32, kvHeads: 8, headDim: 128, attn: 'gqa',
-      trafficPct: 60, avgInputTok: 200, avgOutputTok: 100, ctx: 4,
-      gpuName: 'H100', gpuVram: 80, prec: 'fp16', tp: 1,
-      apiModel: 'Claude 3.5 Haiku', open: false
-    },
-    {
-      name: 'Standard queries',
-      model: 'Llama 3.1 70B', params: 70, layers: 80, kvHeads: 8, headDim: 128, attn: 'gqa',
-      trafficPct: 30, avgInputTok: 800, avgOutputTok: 400, ctx: 16,
-      gpuName: 'H100', gpuVram: 80, prec: 'fp16', tp: 4,
-      apiModel: 'GPT-4o', open: false
-    },
-    {
-      name: 'Complex reasoning',
-      model: 'Qwen 2.5 72B', params: 72, layers: 80, kvHeads: 8, headDim: 128, attn: 'gqa',
-      trafficPct: 10, avgInputTok: 2000, avgOutputTok: 800, ctx: 32,
-      gpuName: 'H100', gpuVram: 80, prec: 'fp16', tp: 4,
-      apiModel: 'GPT-4o', open: false
-    }
-  ]
-};
+// SF state defined in block 0 — removed duplicate
+
 
 // API pricing table — editable, updated March 2026
-var API_PROVIDERS = [
-  {provider:'Anthropic', model:'Claude 3.5 Haiku',  inputPer1M: 0.80,  outputPer1M: 4.00},
-  {provider:'Anthropic', model:'Claude 3.7 Sonnet', inputPer1M: 3.00,  outputPer1M: 15.00},
-  {provider:'Anthropic', model:'Claude 3 Opus',     inputPer1M: 15.00, outputPer1M: 75.00},
-  {provider:'OpenAI',    model:'GPT-4o mini',       inputPer1M: 0.15,  outputPer1M: 0.60},
-  {provider:'OpenAI',    model:'GPT-4o',            inputPer1M: 2.50,  outputPer1M: 10.00},
-  {provider:'OpenAI',    model:'o3 mini',           inputPer1M: 1.10,  outputPer1M: 4.40},
-  {provider:'Google',    model:'Gemini 2.0 Flash',  inputPer1M: 0.10,  outputPer1M: 0.40},
-  {provider:'Google',    model:'Gemini 1.5 Pro',    inputPer1M: 1.25,  outputPer1M: 5.00},
-  {provider:'AWS Bedrock',model:'Llama 3 70B',      inputPer1M: 0.72,  outputPer1M: 0.72},
-];
+// var API_PROVIDERS defined in block 0
+
 
 // Fleet model options for tier selector
-var FLEET_MODELS = [
-  {label:'Llama 3.1 8B',   params:8,  layers:32,  kvHeads:8,  headDim:128, attn:'gqa'},
-  {label:'Llama 3.1 70B',  params:70, layers:80,  kvHeads:8,  headDim:128, attn:'gqa'},
-  {label:'Llama 3.1 405B', params:405,layers:126, kvHeads:8,  headDim:128, attn:'gqa'},
-  {label:'Llama 3.2 3B',   params:3,  layers:28,  kvHeads:8,  headDim:128, attn:'gqa'},
-  {label:'Qwen 2.5 7B',    params:7,  layers:28,  kvHeads:4,  headDim:128, attn:'gqa'},
-  {label:'Qwen 2.5 72B',   params:72, layers:80,  kvHeads:8,  headDim:128, attn:'gqa'},
-  {label:'Mistral 7B',     params:7,  layers:32,  kvHeads:8,  headDim:128, attn:'gqa'},
-  {label:'Gemma 2 9B',     params:9,  layers:42,  kvHeads:8,  headDim:256, attn:'gqa'},
-  {label:'Gemma 2 27B',    params:27, layers:46,  kvHeads:16, headDim:256, attn:'gqa'},
-  {label:'Phi-4 14B',      params:14, layers:40,  kvHeads:8,  headDim:96,  attn:'gqa'},
-  {label:'Custom',         params:8,  layers:32,  kvHeads:8,  headDim:128, attn:'gqa'},
-];
+// var FLEET_MODELS defined in block 0
+
 
 var appMode = 'single'; // 'single' | 'fleet'
 
@@ -4228,37 +4180,8 @@ function setAppMode(mode) {
 
 
 // ── TIER COMPUTE ──────────────────────────────────────────────────────────────
-function computeTier(tier) {
-  var users = Math.round(SF.totalUsers * tier.trafficPct / 100);
-  var vram = tier.gpuVram;
-  var bytesPerParam = tier.prec==='fp16'?2:tier.prec==='fp8'?1:0.5;
-  var wGB = tier.params * bytesPerParam;
-  var ohGB = vram * 0.08; // 8% overhead
-  var usable = (vram - ohGB) * tier.tp;
-  // KV per user
-  var bytesPerTok = 2 * tier.layers * tier.kvHeads * tier.headDim * 2;
-  var kvPU = bytesPerTok * tier.ctx * 1000 / 1e9;
-  // vLLM: available for KV pool
-  var kvPool = (usable - wGB) * 0.95;
-  var upr = Math.max(1, Math.floor(kvPool / Math.max(kvPU, 0.001)));
-  var replicas = Math.ceil(users / Math.max(upr, 1));
-  var totalGPUs = replicas * tier.tp;
-  // Costs
-  var activeProvider = PROVIDERS.find(function(p){return p.active;}) || PROVIDERS[0];
-  var rate = activeProvider.rate;
-  var cloudCostYr = totalGPUs * rate * 8760;
-  // API cost for this tier
-  var apiProv = API_PROVIDERS.find(function(p){return p.model===tier.apiModel;});
-  var apiCostYr = 0;
-  if (apiProv) {
-    var queriesPerDay = SF.totalUsers * (tier.trafficPct/100) * 86400 / 30; // rough: users = concurrent, ~30s per session avg
-    queriesPerDay = Math.round(SF.totalUsers * (tier.trafficPct/100) * 100); // simpler: X queries/day
-    var inputCostYr = queriesPerDay * 365 * tier.avgInputTok * apiProv.inputPer1M / 1e6;
-    var outputCostYr = queriesPerDay * 365 * tier.avgOutputTok * apiProv.outputPer1M / 1e6;
-    apiCostYr = inputCostYr + outputCostYr;
-  }
-  return {users, wGB, ohGB, usable, kvPU, upr, replicas, totalGPUs, cloudCostYr, apiCostYr, rate};
-}
+// computeTier defined in block 0
+
 
 // ── FLEET CALC ────────────────────────────────────────────────────────────────
 // calcFleet defined in block 0 — removed duplicate
@@ -4376,7 +4299,7 @@ function formatTokensPerDay(n) {
           </div>
           <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
             <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--green)" id="fhc-self-cost">—</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:3px">Self-hosted / year</div>
+            <div style="font-size:11px;color:var(--text3);margin-top:3px">On-prem cost / year <span style="font-size:9px;color:var(--text4)">(amortised 5yr)</span></div>
           </div>
           <div style="background:var(--bg3);border-radius:var(--r);padding:14px">
             <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--blue)" id="fhc-gpus">—</div>
