@@ -4264,27 +4264,11 @@ function formatTokensPerDay(n) {
 
 
 // ── API PRICING TABLE ─────────────────────────────────────────────────────────
-function renderApiPricingTable() {
-  var el = document.getElementById('api-pricing-table');
-  if (!el) return;
-  var html = '<tr><th></th><th>Provider</th><th>Model</th><th>$/1M input</th><th>$/1M output</th><th></th></tr>';
-  API_PROVIDERS.forEach(function(p, i) {
-    html += '<tr>'
-      + '<td style="width:20px"><input type="radio" name="api-active" '+(i===0?'checked':'')+' onchange="calcFleet()"></td>'
-      + '<td style="font-size:11px;color:var(--text3)">'+p.provider+'</td>'
-      + '<td style="font-size:11px;font-weight:500">'+p.model+'</td>'
-      + '<td><input class="api-price-input" type="number" value="'+p.inputPer1M+'" step="0.01" min="0" onchange="API_PROVIDERS['+i+'].inputPer1M=+this.value;calcFleet()"></td>'
-      + '<td><input class="api-price-input" type="number" value="'+p.outputPer1M+'" step="0.01" min="0" onchange="API_PROVIDERS['+i+'].outputPer1M=+this.value;calcFleet()"></td>'
-      + '<td><button class="prov-del" onclick="API_PROVIDERS.splice('+i+',1);renderApiPricingTable();calcFleet()">×</button></td>'
-      + '</tr>';
-  });
-  el.innerHTML = html;
-}
+// renderApiPricingTable: defined in block 0
 
-function addApiProvider() {
-  API_PROVIDERS.push({provider:'Custom', model:'My API', inputPer1M:1.00, outputPer1M:4.00});
-  renderApiPricingTable();
-}
+
+// addApiProvider: defined in block 0
+
 
 // ── SAVE + VALIDATE FOR FLEET ─────────────────────────────────────────────────
 // saveFleet: defined in block 0
@@ -4310,7 +4294,7 @@ function addApiProvider() {
             <div class="panel-head-icon">💲</div>
             <div class="panel-head-text">
               <div class="panel-head-title">API pricing</div>
-              <div class="panel-head-summary" id="fleet-pricing-sum">editable · per 1M tokens</div>
+              <div class="panel-head-summary" id="fleet-pricing-sum">edit prices below · select model per tier above</div>
             </div>
           </div>
           <span class="panel-arrow">&#9658;</span>
