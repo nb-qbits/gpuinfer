@@ -335,6 +335,16 @@ button{font-family:var(--sans);cursor:pointer}
 .vb-kv{background:#185FA5}
 .vb-oh{background:#057a55}
 .vb-free{background:var(--bg4)}
+.tp-warn{padding:10px 14px;border-radius:var(--r);margin-bottom:8px;font-size:12px}
+.tp-warn-title{font-weight:700;font-size:10px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}
+.tp-warn.warn-red{background:#fef2f2;border-left:3px solid #ef4444;color:#991b1b}
+.tp-warn.warn-amber{background:#fffbeb;border-left:3px solid #f59e0b;color:#92400e}
+.tp-warn.warn-blue{background:#eff6ff;border-left:3px solid #3b82f6;color:#1e40af}
+.tp-warn.warn-green{background:#f0fdf4;border-left:3px solid #22c55e;color:#166534}
+.dark .tp-warn.warn-red{background:rgba(239,68,68,.1);color:#fca5a5}
+.dark .tp-warn.warn-amber{background:rgba(245,158,11,.1);color:#fcd34d}
+.dark .tp-warn.warn-blue{background:rgba(59,130,246,.1);color:#93c5fd}
+.dark .tp-warn.warn-green{background:rgba(34,197,94,.1);color:#86efac}
 .vb-over{background:#c81e1e}
 .vram-bar-legend{display:flex;gap:12px;flex-wrap:wrap}
 .vbl{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text3)}
@@ -1313,6 +1323,9 @@ button{font-family:var(--sans);cursor:pointer}
         </div>
       </div>
 
+      <!-- TP Warnings -->
+      <div id="tp-warnings" style="display:none;margin-bottom:12px"></div>
+
       <!-- Hero -->
       <div class="hero-box">
         <div class="hero-num" id="hero-num">2</div>
@@ -1727,7 +1740,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.3.1</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.3.3</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -1804,6 +1817,9 @@ var S = {
   // Model
   params:8, modelLabel:'Llama 3.1 8B', attn:'gqa', prec:'fp16',
   numKvHeads:8, headDim:128, numLayers:32, hfId:null,
+  kvLayers:null,        // shared KV layers (Gemma 4 style) — null = use numLayers
+  activeExperts:null,   // MoE active experts per token — null = not MoE
+  totalExperts:null,    // MoE total experts
   // Users
   users:30, ctx:8, hitrate:0.10,
   // Inference
@@ -1864,13 +1880,13 @@ var MODELS = [
   // Mistral
   {name:'Mistral 7B',    org:'mistral',params:7, layers:32,kvHeads:8, headDim:128,attn:'gqa',hfId:'mistralai/Mistral-7B-Instruct-v0.3'},
   {name:'Mistral Nemo',  org:'mistral',params:12,layers:40,kvHeads:8, headDim:128,attn:'gqa',hfId:'mistralai/Mistral-Nemo-Instruct-2407'},
-  {name:'Mixtral 8x7B',  org:'mistral',params:47,layers:32,kvHeads:8, headDim:128,attn:'gqa',hfId:'mistralai/Mixtral-8x7B-Instruct-v0.1'},
+  {name:'Mixtral 8x7B',activeExperts:2,totalExperts:8,  org:'mistral',params:47,layers:32,kvHeads:8, headDim:128,attn:'gqa',hfId:'mistralai/Mixtral-8x7B-Instruct-v0.1'},
   // Google
   // Gemma 4 (released April 2, 2026) — Apache 2.0
-  {name:'Gemma 4 E2B',   org:'google',params:2, layers:26, kvHeads:4, headDim:256,attn:'gqa',hfId:'google/gemma-4-E2B-it'},
-  {name:'Gemma 4 E4B',   org:'google',params:4, layers:34, kvHeads:4, headDim:256,attn:'gqa',hfId:'google/gemma-4-E4B-it'},
-  {name:'Gemma 4 26B',   org:'google',params:26,layers:46, kvHeads:16,headDim:128,attn:'gqa',hfId:'google/gemma-4-26B-A4B-it'},
-  {name:'Gemma 4 31B',   org:'google',params:31,layers:60, kvHeads:4, headDim:256,attn:'gqa',hfId:'google/gemma-4-31B-it'},
+  {name:'Gemma 4 E2B',   org:'google',params:2, layers:26, kvHeads:4, headDim:256,attn:'gqa',kvLayers:4, hfId:'google/gemma-4-E2B-it'},
+  {name:'Gemma 4 E4B',   org:'google',params:4, layers:34, kvHeads:4, headDim:256,attn:'gqa',kvLayers:5, hfId:'google/gemma-4-E4B-it'},
+  {name:'Gemma 4 26B',   org:'google',params:26,layers:46, kvHeads:16,headDim:128,attn:'gqa',kvLayers:6,  /* 46-40 shared */hfId:'google/gemma-4-26B-A4B-it'},
+  {name:'Gemma 4 31B',   org:'google',params:31,layers:60, kvHeads:4, headDim:256,attn:'gqa',kvLayers:7,  /* 60-53 shared */hfId:'google/gemma-4-31B-it'},
   // Gemma 2
   {name:'Gemma 2 2B',    org:'google',params:2, layers:26, kvHeads:4, headDim:256,attn:'gqa',hfId:'google/gemma-2-2b-it'},
   {name:'Gemma 2 9B',    org:'google',params:9, layers:42, kvHeads:8, headDim:256,attn:'gqa',hfId:'google/gemma-2-9b-it'},
@@ -2093,10 +2109,20 @@ function openLayer(id){
 function weightsGB(){ return S.params * (S.prec==='fp16'?2:S.prec==='fp8'?1:0.5); }
 
 function kvBytesPerToken(){
-  var kvFactor = S.attn==='gqa' ? (S.numKvHeads / (S.params<15?32:S.params<30?40:80)) : 1.0;
-  kvFactor = Math.max(kvFactor, 0.125);
+  // numKvHeads already IS the reduced KV head count for GQA models
+  // (e.g. Llama 70B: numKvHeads=8, not 80)
+  // No extra kvFactor needed — applying one causes 8x underestimate
   var kvPrec = S.kvPrec==='fp16'?2:S.kvPrec==='fp8'?1:1;
-  return 2 * S.numLayers * S.numKvHeads * S.headDim * kvPrec * kvFactor;
+  
+  // For Gemma 4 / shared KV cache models: use kvLayers if set
+  // kvLayers = number of layers with UNIQUE KV cache (rest share)
+  var effectiveLayers = S.kvLayers || S.numLayers;
+  
+  // For MoE models: only active experts need KV cache
+  // activeExperts = experts used per token (e.g. 2 of 8 for Mixtral)
+  var moeScale = S.activeExperts ? (S.activeExperts / (S.totalExperts||S.activeExperts)) : 1.0;
+  
+  return 2 * effectiveLayers * S.numKvHeads * S.headDim * kvPrec * moeScale;
 }
 
 function kvGBPerUser(){
@@ -2110,21 +2136,53 @@ function overhead(){ return Math.max(0.5, weightsGB()*0.12); }
 
 function compute(){
   var wGB = weightsGB();
-  var ohGB = overhead();
+  var vramPerGpu = S.gpuVram;
+
+  // ── Auto-TP: find minimum TP so model fits on GPU ─────────────────────────
+  // Overhead is per-GPU (framework, activations) = 8% of GPU VRAM
+  var ohPerGpu = Math.max(0.5, vramPerGpu * 0.08);
+  var tpOptions = [1, 2, 4, 8];
+  var minTp = 8; // default: assume needs max TP
+  for (var ti = 0; ti < tpOptions.length; ti++) {
+    var tp = tpOptions[ti];
+    var wPerGpu = wGB / tp;
+    if (wPerGpu + ohPerGpu < vramPerGpu * 0.95) {
+      minTp = tp;
+      break;
+    }
+  }
+  
+  // Use the larger of: user-selected TP or minimum required TP
+  var autoTp = Math.max(S.tp, minTp);
+  var ohGB = ohPerGpu * autoTp; // total overhead across all GPUs in replica
+  
   var kvPU = kvGBPerUser();
-  var avail = (S.gpuVram - wGB - ohGB) * (S.fw==='vllm'?0.95:0.85);
+  
+  // KV available = (total VRAM across TP GPUs - weights - overhead) * packing
+  var totalVram = vramPerGpu * autoTp;
+  var avail = (totalVram - wGB - ohGB) * (S.fw==='vllm'?0.95:0.85);
   avail = Math.max(avail, 0.1);
+  
   var upr = Math.max(1, Math.floor(avail / kvPU));
   var replicas = Math.ceil(S.users / upr);
-  var gpuPerReplica = S.tp;
+  var gpuPerReplica = autoTp;
   var totalGPUs = replicas * gpuPerReplica;
   var kvTotal = kvPU * S.users;
-  var vramPct = Math.min((wGB+ohGB+kvPU*Math.min(S.users,upr)) / S.gpuVram * 100, 100);
+  var vramPct = Math.min((wGB + ohGB + kvPU*Math.min(S.users,upr)) / totalVram * 100, 100);
+  
+  // Overflow: model doesn't fit even at TP=8
+  var overflow = (wGB / 8 + ohPerGpu) >= vramPerGpu;
+  var tpAutoScaled = autoTp > S.tp;
+  var tpMinRequired = minTp;
+  
   var costPerGPUHr = S.cloudRate * (1-S.disc);
   var cloudCost5yr = totalGPUs * costPerGPUHr * 8760 * 5;
   var hwTotal = totalGPUs * S.hwCost;
   var onpremCost5yr = hwTotal + hwTotal*S.infraPct + hwTotal*S.opexPct*5;
-  return {wGB,ohGB,kvPU,avail,upr,replicas,totalGPUs,gpuPerReplica,kvTotal,vramPct,costPerGPUHr,cloudCost5yr,onpremCost5yr};
+  
+  return {wGB,ohGB,kvPU,avail,upr,replicas,totalGPUs,gpuPerReplica,
+          kvTotal,vramPct,costPerGPUHr,cloudCost5yr,onpremCost5yr,
+          autoTp,tpAutoScaled,tpMinRequired,overflow};
 }
 
 function fmtGB(n){ return n>=1?n.toFixed(1)+' GB':Math.round(n*1000)+' MB'; }
@@ -2166,24 +2224,73 @@ function calc(){
   var C = compute();
   // Summaries
   document.getElementById('outcome-subtitle').textContent =
-    S.modelLabel+' · '+S.users+' users · '+S.ctx+'K ctx · TP='+S.tp;
+    S.modelLabel+' · '+S.users+' users · '+S.ctx+'K ctx · TP='+C.autoTp;
   document.getElementById('ph-model-sum').textContent =
     S.modelLabel+' · '+(S.attn==='gqa'?'GQA':'MHA')+' · '+S.prec.toUpperCase();
   document.getElementById('ph-users-sum').textContent =
     S.users+' users · '+S.ctx+'K ctx · '+Math.round(S.hitrate*100)+'% prefix';
   document.getElementById('ph-inf-sum').textContent =
-    (S.fw==='vllm'?'vLLM':'Naive')+' · '+(S.mode==='llmd'?'llm-d':'standard')+' · TP='+S.tp;
+    (S.fw==='vllm'?'vLLM':'Naive')+' · '+(S.mode==='llmd'?'llm-d':'standard')+' · TP='+C.autoTp;
   document.getElementById('ph-cost-sum').textContent =
     S.dep+' · GCP $'+S.cloudRate.toFixed(2)+'/hr · '+(S.disc>0?'-'+Math.round(S.disc*100)+'%':'no discount');
+  // ── BUG-027: TP warning banners ─────────────────────────────────────────
+  var warningEl = document.getElementById('tp-warnings');
+  if (warningEl) {
+    var warnings = [];
+    if (C.overflow) {
+      warnings.push({
+        cls:'warn-red',
+        title:'MODEL TOO LARGE FOR AVAILABLE GPUs',
+        body: C.wGB.toFixed(0)+'GB weights exceed 8× '+S.gpuVram+'GB ('+
+              (S.gpuVram*8)+'GB max). Consider FP8/INT4 quantization or a larger GPU.'
+      });
+    } else if (C.tpAutoScaled) {
+      warnings.push({
+        cls:'warn-amber',
+        title:'TENSOR PARALLELISM REQUIRED',
+        body: S.params+'B @ '+S.prec.toUpperCase()+' = '+C.wGB.toFixed(0)+'GB. '+
+              S.gpuName+' has '+S.gpuVram+'GB — '+S.gpuVram+'GB usable. '+
+              'Each replica needs '+C.tpMinRequired+' GPUs (power-of-2 TP).'
+      });
+    }
+    if (S.ctx >= 32 && S.params >= 30) {
+      warnings.push({
+        cls:'warn-blue',
+        title:'PREFILL COMPUTE BOTTLENECK',
+        body: S.ctx+'K context + '+S.params+'B model. Est ~0.3s TTFT on H100-class. '+
+              'Use chunked prefill (vLLM) or dedicated prefill pool (llm-d).'
+      });
+    }
+    if (C.autoTp > C.tpMinRequired && !C.overflow) {
+      warnings.push({
+        cls:'warn-green',
+        title:'TP OPTIMISED FOR KV CAPACITY',
+        body: 'TP='+C.autoTp+' selected to maximise KV pool, not just fit weights '+
+              '(weights need TP='+C.tpMinRequired+'). '+C.autoTp+'x GPUs per replica gives '+
+              (S.gpuVram*C.autoTp - C.wGB - C.ohGB).toFixed(0)+'GB KV vs '+
+              (S.gpuVram*C.tpMinRequired - C.wGB - C.ohGB).toFixed(0)+'GB at TP='+C.tpMinRequired+'. '+
+              'Trade-off: fewer replicas, higher NVLink utilisation per replica.'
+      });
+    }
+    warningEl.innerHTML = warnings.map(function(w){
+      return '<div class="tp-warn '+w.cls+'">'+
+        '<div class="tp-warn-title">'+w.title+'</div>'+
+        '<div class="tp-warn-body">'+w.body+'</div>'+
+        '</div>';
+    }).join('');
+    warningEl.style.display = warnings.length ? 'block' : 'none';
+  }
+
   // Hero
+  var effectiveTpLabel = C.autoTp > S.tp ? C.autoTp+'× tensor parallel' : S.gpuName+' GPUs to get started';
   document.getElementById('hero-num').textContent = C.totalGPUs;
-  document.getElementById('hero-label').textContent = S.gpuName+' GPUs to get started';
+  document.getElementById('hero-label').textContent = effectiveTpLabel;
   document.getElementById('hero-meta').textContent =
-    S.params+'B · '+S.users+' users · '+S.gpuName+' '+S.gpuVram+'GB · '+S.ctx+'K ctx · TP='+S.tp;
+    S.params+'B · '+S.users+' users · '+S.gpuName+' '+S.gpuVram+'GB · '+S.ctx+'K ctx · TP='+C.autoTp;
   // VRAM bar
-  var wPct=C.wGB/S.gpuVram*100;
-  var kvPct=Math.min(C.kvPU*Math.min(S.users,C.upr)/S.gpuVram*100,100-wPct-C.ohGB/S.gpuVram*100);
-  var ohPct=C.ohGB/S.gpuVram*100;
+  var totalReplicaVram=S.gpuVram*C.autoTp; var wPct=C.wGB/totalReplicaVram*100;
+  var kvPct=Math.min(C.kvPU*Math.min(S.users,C.upr)/totalReplicaVram*100,100-wPct-C.ohGB/totalReplicaVram*100);
+  var ohPct=C.ohGB/totalReplicaVram*100;
   var frPct=Math.max(0,100-wPct-kvPct-ohPct);
   var bar=document.getElementById('vram-bar');
   bar.innerHTML='';
@@ -2195,20 +2302,20 @@ function calc(){
   document.getElementById('vbl-w').textContent='Weights '+fmtGB(C.wGB);
   document.getElementById('vbl-kv').textContent='KV cache '+fmtGB(C.kvPU*Math.min(S.users,C.upr));
   document.getElementById('vbl-oh').textContent='Overhead '+fmtGB(C.ohGB);
-  document.getElementById('vbl-free').textContent='Free '+fmtGB(Math.max(0,S.gpuVram-(C.wGB+C.kvPU*Math.min(S.users,C.upr)+C.ohGB)))+' GB';
+  document.getElementById('vbl-free').textContent='Free '+fmtGB(Math.max(0,totalReplicaVram-(C.wGB+C.kvPU*Math.min(S.users,C.upr)+C.ohGB)))+' GB'+(C.autoTp>1?' across '+C.autoTp+' GPUs':'');
   // Stat tiles
   document.getElementById('st-wt').textContent=fmtGB(C.wGB);
   document.getElementById('st-wt-sub').textContent='+'+fmtGB(C.ohGB)+' overhead';
-  document.getElementById('st-kv').textContent=fmtGB(C.avail);
-  document.getElementById('st-kv-sub').textContent='per replica ('+(S.fw==='vllm'?'95%':'85%')+' PA)';
+  document.getElementById('st-kv').textContent=fmtGB(C.avail)+(C.autoTp>1?' ('+C.autoTp+'× GPU)':'');
+  document.getElementById('st-kv-sub').textContent='per replica ('+(S.fw==='vllm'?'95%':'85%')+' PA)'+(C.autoTp>1?' · '+C.autoTp+' GPUs':' · 1 GPU');
   document.getElementById('st-kpu').textContent=fmtGB(C.kvPU);
   document.getElementById('st-kpu-sub').textContent=Math.round(kvBytesPerToken()/1000)+' MB/tok · '+S.ctx+'K ctx';
   document.getElementById('st-upr').textContent=C.upr;
-  document.getElementById('st-upr-sub').textContent=C.replicas+' replicas × '+S.tp+'GPU';
+  document.getElementById('st-upr-sub').textContent=C.replicas+' replicas × '+C.autoTp+'GPU'+(C.tpAutoScaled?' (auto)':'');
   // Outcome cards
   document.getElementById('oc-gpus-val').textContent=C.totalGPUs;
   document.getElementById('oc-gpus-sub').textContent=S.gpuName+' '+S.gpuVram+'GB · '+C.replicas+' replicas';
-  var fits=C.wGB+C.ohGB+C.kvPU<=S.gpuVram;
+  var fits=!C.overflow && (C.wGB+C.ohGB+C.kvPU<=(S.gpuVram*C.autoTp));
   document.getElementById('oc-gpus-badge').textContent=fits?'fits ✓':'needs multi-GPU';
   document.getElementById('oc-gpus-badge').className='oc-badge '+(fits?'good':'bad');
   document.getElementById('oc-cost-val').textContent=fmtK(C.cloudCost5yr);
@@ -2517,6 +2624,10 @@ function fetchHFModel(id,statusId,cb){
       kvHeads:cfg.num_key_value_heads||cfg.num_attention_heads||32,
       headDim:cfg.head_dim||(Math.round((cfg.hidden_size||4096)/(cfg.num_attention_heads||32))),
       attn:(cfg.num_key_value_heads&&cfg.num_key_value_heads<(cfg.num_attention_heads||32))?'gqa':'mha',
+      // BUG-029/030: Architecture-specific KV modifiers from model type
+      kvLayers:(cfg.model_type==='gemma4'||id.includes('gemma-4'))?Math.round((cfg.num_hidden_layers||60)*0.12):null,
+      activeExperts:(cfg.model_type==='mixtral')?2:null,
+      totalExperts:(cfg.model_type==='mixtral')?(cfg.num_local_experts||8):null,
       org:'hf'
     };
     st.textContent='✓ '+m.name+' ('+m.params+'B, '+m.layers+' layers, '+(m.attn==='gqa'?'GQA':'MHA')+')';
@@ -2549,6 +2660,10 @@ function selectModel(idx,btn){
   if(!m)return;
   S.params=m.params;S.modelLabel=m.name;S.attn=m.attn;
   S.numLayers=m.layers;S.numKvHeads=m.kvHeads;S.headDim=m.headDim;
+  // BUG-029/030: Architecture-specific KV modifiers
+  S.kvLayers=m.kvLayers||null;          // shared KV cache (Gemma 4)
+  S.activeExperts=m.activeExperts||null; // MoE active experts (Mixtral)
+  S.totalExperts=m.totalExperts||null;
   document.querySelectorAll('#model-chips .chip').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   if(m.name.includes('W8A8')) setPrec('fp8',null);
@@ -3412,9 +3527,9 @@ var FLEET_MODELS = [
   {label:'Qwen 2.5 7B',params:7,layers:28,kvHeads:4,headDim:128,attn:'gqa'},
   {label:'Qwen 2.5 72B',params:72,layers:80,kvHeads:8,headDim:128,attn:'gqa'},
   {label:'Mistral 7B',params:7,layers:32,kvHeads:8,headDim:128,attn:'gqa'},
-  {label:'Gemma 4 31B',params:31,layers:60,kvHeads:4, headDim:256,attn:'gqa'},
-  {label:'Gemma 4 26B',params:26,layers:46,kvHeads:16,headDim:128,attn:'gqa'},
-  {label:'Gemma 4 E4B',params:4, layers:34,kvHeads:4, headDim:256,attn:'gqa'},
+  {label:'Gemma 4 31B',params:31,layers:60,kvHeads:4, headDim:256,attn:'gqa',kvLayers:7},
+  {label:'Gemma 4 26B',params:26,layers:46,kvHeads:16,headDim:128,attn:'gqa',kvLayers:6},
+  {label:'Gemma 4 E4B',params:4, layers:34,kvHeads:4, headDim:256,attn:'gqa',kvLayers:5},
   {label:'Gemma 2 9B', params:9, layers:42,kvHeads:8, headDim:256,attn:'gqa'},
   {label:'Gemma 2 27B',params:27,layers:46,kvHeads:16,headDim:256,attn:'gqa'},
   {label:'Phi-4 14B',params:14,layers:40,kvHeads:8,headDim:96,attn:'gqa'},
@@ -4360,13 +4475,4 @@ loadFromURL();
         <div class="fleet-cost-compare" id="fleet-cost-compare"></div>
       </div>
 
-      <!-- Footnote -->
-      <div style="font-size:11px;color:var(--text4);line-height:1.6;padding:12px 0;border-top:1px solid var(--border)">
-        GPU counts assume <span id="fleet-conc-footnote">10%</span> peak concurrency factor. Adjust in the left panel. API prices from provider websites, March 2026. Validate before procurement.
-      </div>
-
-    </div><!-- /adv-right -->
-  </div><!-- /adv-layout -->
-</div>
-</body>
-</html>
+      <!-- Footnote -->>
