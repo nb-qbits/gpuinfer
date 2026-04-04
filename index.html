@@ -1740,7 +1740,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.3.3</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.3.4</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2309,7 +2309,9 @@ function calc(){
   document.getElementById('st-kv').textContent=fmtGB(C.avail)+(C.autoTp>1?' ('+C.autoTp+'× GPU)':'');
   document.getElementById('st-kv-sub').textContent='per replica ('+(S.fw==='vllm'?'95%':'85%')+' PA)'+(C.autoTp>1?' · '+C.autoTp+' GPUs':' · 1 GPU');
   document.getElementById('st-kpu').textContent=fmtGB(C.kvPU);
-  document.getElementById('st-kpu-sub').textContent=Math.round(kvBytesPerToken()/1000)+' MB/tok · '+S.ctx+'K ctx';
+  var kvBytes=kvBytesPerToken();
+  var kvTokLabel=kvBytes>=1e6?(kvBytes/1e6).toFixed(2)+' MB/tok':Math.round(kvBytes/1000)+' KB/tok';
+  document.getElementById('st-kpu-sub').textContent=kvTokLabel+' · '+S.ctx+'K ctx';
   document.getElementById('st-upr').textContent=C.upr;
   document.getElementById('st-upr-sub').textContent=C.replicas+' replicas × '+C.autoTp+'GPU'+(C.tpAutoScaled?' (auto)':'');
   // Outcome cards
@@ -2322,10 +2324,23 @@ function calc(){
   document.getElementById('oc-cost-sub').textContent='GCP default · cloud · 5yr';
   document.getElementById('oc-cost-badge').textContent='based on defaults';
   document.getElementById('oc-vram-val').textContent=Math.round(C.vramPct)+'%';
-  document.getElementById('oc-vram-sub').textContent=Math.round(100-C.vramPct)+'% headroom remaining';
+  document.getElementById('oc-vram-sub').textContent=Math.round(100-C.vramPct)+'% headroom · '+C.totalGPUs+(C.totalGPUs===1?' GPU':' GPUs');
   var vbadge=document.getElementById('oc-vram-badge');
-  vbadge.textContent=C.vramPct<85?S.gpuName+' fits ✓':C.vramPct<100?'tight — consider upgrade':'overflow';
-  vbadge.className='oc-badge '+(C.vramPct<85?'good':C.vramPct<100?'warn':'bad');
+  var headroom=100-C.vramPct;
+  if(C.overflow){
+    vbadge.textContent='overflow';
+    vbadge.className='oc-badge bad';
+  } else if(headroom<3){
+    vbadge.textContent='tight — consider upgrade';
+    vbadge.className='oc-badge warn';
+  } else if(headroom<10){
+    vbadge.textContent='monitor headroom';
+    vbadge.className='oc-badge warn';
+  } else {
+    vbadge.textContent=S.gpuName+' fits ✓';
+    vbadge.className='oc-badge good';
+  }
+  var _dummy=vbadge.className='oc-badge '+(C.vramPct<85?'good':C.vramPct<100?'warn':'bad');
   // KV headroom chart
   renderKVRows(C);
   // Layer summaries & consequences
@@ -2438,7 +2453,7 @@ function renderKVVisual(){
     +bubHtml
     +'</div>'
     +'<div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6">'
-    +'<strong>'+C.upr+' users/replica</strong> × <strong>'+C.replicas+' replicas</strong> = '+S.users+' users total<br>'
+    +'<strong>'+C.upr+' users/replica</strong> × <strong>'+C.replicas+' replica'+(C.replicas>1?'s':'')+' = '+(C.upr*C.replicas)+' capacity</strong> ('+S.users+' requested)<br>'
     +'KV/user: '+fmtGB(C.kvPU)+' · Total KV: '+fmtGB(C.kvPU*S.users)
     +'</div>'
     +'</div>';
@@ -3001,7 +3016,7 @@ function renderSaved(){
   sec('KV CACHE');
   row('KV / user',function(r){return fmtGB(r.kvPU||0)+(r.kvPU===maxKV&&savedResults.length>1?lb('highest','#c81e1e'):'')+pb(r.kvPU||0,maxKV,'#1a56db');});
   row('KV pool',function(r){return fmtGB(r.kvPool||0)+(r.kvPool===maxKVP&&savedResults.length>1?lb('largest','#057a55'):'')+pb(r.kvPool||0,maxKVP,'#057a55');});
-  row('MB / token',function(r){return ((r.kvPU||0)/Math.max(r.ctx,1)*1000).toFixed(3)+' MB/tok';});
+  row('MB / token',function(r){return (function(){var b=(r.kvPU||0)/Math.max(r.ctx,1)*1e9;return b>=1e6?(b/1e6).toFixed(2)+' MB/tok':Math.round(b/1000)+' KB/tok';})();});
   sec('GPU SIZING');
   row('GPUs needed',function(r){return '<strong>'+r.totalGPUs+'</strong>'+(r.totalGPUs===minGPU&&savedResults.length>1?lb('best','#057a55'):r.totalGPUs===maxGPU&&savedResults.length>1?lb('most','#c81e1e'):'')+'<div style="font-size:10px;color:var(--text4)">TP='+r.tp+' · '+r.replicas+' × '+r.tp+' GPUs</div>'+pb(r.totalGPUs,maxGPU,'#1a56db');});
   row('Prod. range',function(r){return r.totalGPUs+' – '+Math.ceil(r.totalGPUs*1.3)+' GPUs';});
