@@ -1727,7 +1727,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.3.0</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.3.1</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -1866,6 +1866,12 @@ var MODELS = [
   {name:'Mistral Nemo',  org:'mistral',params:12,layers:40,kvHeads:8, headDim:128,attn:'gqa',hfId:'mistralai/Mistral-Nemo-Instruct-2407'},
   {name:'Mixtral 8x7B',  org:'mistral',params:47,layers:32,kvHeads:8, headDim:128,attn:'gqa',hfId:'mistralai/Mixtral-8x7B-Instruct-v0.1'},
   // Google
+  // Gemma 4 (released April 2, 2026) — Apache 2.0
+  {name:'Gemma 4 E2B',   org:'google',params:2, layers:26, kvHeads:4, headDim:256,attn:'gqa',hfId:'google/gemma-4-E2B-it'},
+  {name:'Gemma 4 E4B',   org:'google',params:4, layers:34, kvHeads:4, headDim:256,attn:'gqa',hfId:'google/gemma-4-E4B-it'},
+  {name:'Gemma 4 26B',   org:'google',params:26,layers:46, kvHeads:16,headDim:128,attn:'gqa',hfId:'google/gemma-4-26B-A4B-it'},
+  {name:'Gemma 4 31B',   org:'google',params:31,layers:60, kvHeads:4, headDim:256,attn:'gqa',hfId:'google/gemma-4-31B-it'},
+  // Gemma 2
   {name:'Gemma 2 2B',    org:'google',params:2, layers:26, kvHeads:4, headDim:256,attn:'gqa',hfId:'google/gemma-2-2b-it'},
   {name:'Gemma 2 9B',    org:'google',params:9, layers:42, kvHeads:8, headDim:256,attn:'gqa',hfId:'google/gemma-2-9b-it'},
   {name:'Gemma 2 27B',   org:'google',params:27,layers:46, kvHeads:16,headDim:256,attn:'gqa',hfId:'google/gemma-2-27b-it'},
@@ -2493,7 +2499,7 @@ function fetchHFModel(id,statusId,cb){
   var st=document.getElementById(statusId);
   if(!id){st.textContent='Enter a model ID first';st.className='hf-status err';return;}
   st.textContent='Fetching from HuggingFace...';st.className='hf-status';
-  var url=HF_PROXY?HF_PROXY+'?model='+encodeURIComponent(id):'https://huggingface.co/api/models/'+encodeURIComponent(id);
+  var url=HF_PROXY?HF_PROXY+'?id='+encodeURIComponent(id):'https://huggingface.co/api/models/'+encodeURIComponent(id);
   fetch(url).then(function(r){
     if(!r.ok) throw new Error('HTTP '+r.status);
     return r.json();
@@ -3406,7 +3412,10 @@ var FLEET_MODELS = [
   {label:'Qwen 2.5 7B',params:7,layers:28,kvHeads:4,headDim:128,attn:'gqa'},
   {label:'Qwen 2.5 72B',params:72,layers:80,kvHeads:8,headDim:128,attn:'gqa'},
   {label:'Mistral 7B',params:7,layers:32,kvHeads:8,headDim:128,attn:'gqa'},
-  {label:'Gemma 2 9B',params:9,layers:42,kvHeads:8,headDim:256,attn:'gqa'},
+  {label:'Gemma 4 31B',params:31,layers:60,kvHeads:4, headDim:256,attn:'gqa'},
+  {label:'Gemma 4 26B',params:26,layers:46,kvHeads:16,headDim:128,attn:'gqa'},
+  {label:'Gemma 4 E4B',params:4, layers:34,kvHeads:4, headDim:256,attn:'gqa'},
+  {label:'Gemma 2 9B', params:9, layers:42,kvHeads:8, headDim:256,attn:'gqa'},
   {label:'Gemma 2 27B',params:27,layers:46,kvHeads:16,headDim:256,attn:'gqa'},
   {label:'Phi-4 14B',params:14,layers:40,kvHeads:8,headDim:96,attn:'gqa'},
   {label:'Custom',params:8,layers:32,kvHeads:8,headDim:128,attn:'gqa'},
