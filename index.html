@@ -3024,7 +3024,7 @@ function renderSaved(){
   sec('KV CACHE');
   row('KV / user',function(r){return fmtGB(r.kvPU||0)+(r.kvPU===maxKV&&savedResults.length>1?lb('highest','#c81e1e'):'')+pb(r.kvPU||0,maxKV,'#1a56db');});
   row('KV pool',function(r){return fmtGB(r.kvPool||0)+(r.kvPool===maxKVP&&savedResults.length>1?lb('largest','#057a55'):'')+pb(r.kvPool||0,maxKVP,'#057a55');});
-  row('MB / token',function(r){return (function(){var b=(r.kvPU||0)/Math.max(r.ctx,1)*1e9/1000;return b>=1000?(b/1000).toFixed(2)+' MB/tok':Math.round(b)+' KB/tok';})();});
+  row('MB / token',function(r){return (function(){var b=(r.kvPU||0)*1e9/(Math.max(r.ctx,1)*1000);return b>=1e6?(b/1e6).toFixed(2)+' MB/tok':b>=1000?(b/1000).toFixed(1)+' KB/tok':Math.round(b)+' B/tok';})();});
   sec('GPU SIZING');
   row('GPUs needed',function(r){return '<strong>'+r.totalGPUs+'</strong>'+(r.totalGPUs===minGPU&&savedResults.length>1?lb('best','#057a55'):r.totalGPUs===maxGPU&&savedResults.length>1?lb('most','#c81e1e'):'')+'<div style="font-size:10px;color:var(--text4)">TP='+r.tp+' · '+r.replicas+' replica'+(r.replicas>1?'s':'')+' × '+r.tp+' GPU'+(r.tp>1?'s':'')+' </div>'+pb(r.totalGPUs,maxGPU,'#1a56db');});
   row('Prod. range',function(r){return r.totalGPUs+' – '+Math.ceil(r.totalGPUs*1.3)+' GPUs';});
