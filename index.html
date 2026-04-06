@@ -4029,10 +4029,11 @@ function calcFleet(){
   var totalGPUs=results.reduce(function(s,r){return s+r.totalGPUs;},0);
   var activeProvider=PROVIDERS.find(function(p){return p.active;})||PROVIDERS[0];
   var selfHostedYr=totalGPUs*activeProvider.rate*8760;
-  var selfHostedOnprem=totalGPUs*25000; // ~$25K/GPU on-prem amortised 5yr → ÷5
-
-  // Use on-prem cost for ROI (that's the actual investment)
-  var onpremYr=selfHostedOnprem/5 + selfHostedOnprem*0.15; // amort + opex
+  var gpuHwCost=25000; // $25K/GPU H100 purchase price
+  var amortYrs=5;
+  var hwTotal=totalGPUs*gpuHwCost;
+  // Realistic on-prem: hardware amort + 10% infra/yr (power, rack, net) + 8% opex/yr (staff, maintenance)
+  var onpremYr=hwTotal/amortYrs + hwTotal*0.10 + hwTotal*0.08;
 
   var savingsYr=totalApiCostYr-onpremYr;
   var payback=savingsYr>0?(SF.engCost/savingsYr*12):Infinity;
@@ -4305,21 +4306,26 @@ function renderFrontierCompare(){
 function renderFleetCostCompare(totalApiCostYr,onpremYr,totalGPUs,activeProvider){
   var el=document.getElementById('fleet-cost-compare');
   if(!el)return;
-  var cloudYr=totalGPUs*(activeProvider?activeProvider.rate:3)*8760;
-  var dedNodes=Math.ceil(totalGPUs/8);
-  var ded5=dedNodes*18000*12*5;
-  // Naive = 100% traffic to Claude Sonnet (BUG-001: use weighted tokens + correct qpd)
+  // Dedicated node: size on concurrent users (what actually needs to be served), not total GPU count
+  // A dedicated node (e.g. CoreWeave) = 8 GPUs, ~$18K/mo flat. Size by peak concurrent users across tiers.
+  var peakConcurrent=Math.round(SF.totalUsers*(SF.concurrencyFactor||0.10));
+  // Rough GPUs needed for dedicated sizing: concurrent users / ~20 users per GPU (conservative)
+  var dedGpusNeeded=Math.max(8,Math.ceil(peakConcurrent/20/8)*8); // round up to nearest 8
+  var dedNodes=Math.ceil(dedGpusNeeded/8);
+  var dedRateMo=18000; // $18K/mo per 8-GPU node (CoreWeave baseline)
+  var ded5=dedNodes*dedRateMo*12*5;
+  // Naive = 100% traffic to Claude Sonnet (no routing savings)
   var naiveProv=API_PROVIDERS.find(function(p){return p.model==='Claude Sonnet 4.6'||p.model==='Claude 3.7 Sonnet';})||{inputPer1M:3,outputPer1M:15};
   var avgIn=0,avgOut=0;
   SF.tiers.forEach(function(t){avgIn+=t.avgInputTok*(t.trafficPct/100);avgOut+=t.avgOutputTok*(t.trafficPct/100);});
   var naiveQpd=SF.totalUsers*(SF.queriesPerUserPerDay||100);
   var naiveYr=naiveQpd*365*(avgIn*naiveProv.inputPer1M+avgOut*naiveProv.outputPer1M)/1e6;
+  var amortYrs=5;
   var baseScenarios=[
-    {label:'Your API mix',sub:'tiered routing',val:totalApiCostYr*5,color:'var(--green)'},
-    {label:'Self-hosted on-prem',sub:totalGPUs+' GPUs · 5yr amort',val:onpremYr*5,color:'var(--blue)'},
-    // BUG-011: Only show dedicated node if >=4 GPUs needed
-    totalGPUs>=4?{label:'Dedicated node',sub:dedNodes+' node'+(dedNodes!==1?'s':'')+' flat',val:ded5,color:'var(--purple)'}:null,
-    {label:'Naive (all Sonnet)',sub:'5yr · no routing savings',val:naiveYr*5,color:'var(--red)'},
+    {label:'Your API mix',sub:'tiered routing · '+SF.tiers.length+' models',val:totalApiCostYr*amortYrs,color:'var(--green)'},
+    {label:'Self-hosted on-prem',sub:totalGPUs+' GPUs · '+amortYrs+'yr amort',val:onpremYr*amortYrs,color:'var(--blue)'},
+    totalGPUs>=4?{label:'Dedicated node',sub:dedNodes+' node'+(dedNodes!==1?'s':'')+' · $'+Math.round(dedRateMo/1000)+'K/mo flat',val:ded5,color:'var(--purple)'}:null,
+    {label:'Naive (all Sonnet)',sub:amortYrs+'yr · no routing savings',val:naiveYr*amortYrs,color:'var(--red)'},
   ];
   var scenarios=baseScenarios.filter(Boolean);
   var minVal=Math.min.apply(null,scenarios.map(function(s){return s.val;}));
