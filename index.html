@@ -1453,7 +1453,7 @@ button{font-family:var(--sans);cursor:pointer}
           <div class="layer-head" onclick="toggleLayer('l2')">
             <div class="layer-num">2</div>
             <div class="layer-head-info">
-              <div class="layer-name">Reduce memory (quantisation)</div>
+              <div class="layer-name">Reduce memory (quantization)</div>
               <div class="layer-summary" id="l2-sum">FP16 weights · FP16 KV</div>
             </div>
             <span class="layer-consequence" id="l2-con"></span>
@@ -3306,11 +3306,15 @@ function calcHybrid(){
   var rightsized=gpus*rate*8760;
   // Split: use manual override if set, otherwise auto from utilisation
   var hybridSplit=S.hSplit!==null?S.hSplit:Math.round(util*100);
-  var ownedGpus=gpus>0?Math.max(1,Math.round(gpus*hybridSplit/100)):0;
-  var rentedGpus=Math.max(0,gpus-ownedGpus);
+  var onpremFrac=hybridSplit/100, cloudFrac=1-onpremFrac;
+  // Use fractional GPU ownership so split always affects cost (fixes 1-GPU case where integer rounding collapsed to 100% on-prem)
+  var ownedGpus=gpus*onpremFrac;
+  var rentedGpus=gpus*cloudFrac;
   var onpremCost5=ownedGpus*hw+ownedGpus*hw*0.25+ownedGpus*hw*0.15*amort;
   var cloudCost5=rentedGpus*rate*8760*amort;
   var hybridCost5=onpremCost5+cloudCost5;
+  var ownedGpusDisplay=onpremFrac>0?Math.max(1,Math.round(ownedGpus)):0;
+  var rentedGpusDisplay=cloudFrac>0?Math.max(1,Math.round(rentedGpus)):0;
   var purecloudCost5=gpus*rate*8760*amort;
   var pureonpremCost5=gpus*hw+gpus*hw*0.25+gpus*hw*0.15*amort;
   // Best option
@@ -3366,7 +3370,7 @@ function calcHybrid(){
     +'<div style="background:var(--green-bg);border-radius:var(--r);padding:6px 12px;font-size:12px;color:var(--green);font-weight:600">'+hybridSplit+'% on-prem</div>'
     +'<div style="background:var(--blue-bg);border-radius:var(--r);padding:6px 12px;font-size:12px;color:var(--blue);font-weight:600">'+(100-hybridSplit)+'% cloud</div>'
     +'</div>'
-    +'<div class="split-labels" style="margin-top:6px"><span>'+ownedGpus+' GPU owned · $'+(hw/1000)+'K hardware</span><span>'+rentedGpus+' GPU rented · $'+rate.toFixed(2)+'/hr</span></div>'
+    +'<div class="split-labels" style="margin-top:6px"><span>'+ownedGpusDisplay+' GPU owned · $'+(hw/1000)+'K hardware</span><span>'+rentedGpusDisplay+' GPU rented · $'+rate.toFixed(2)+'/hr</span></div>'
     +'</div>'
     // 4-column cost comparison including dedicated node
     +'<div class="section-title" style="margin-bottom:8px">5-YEAR COST COMPARISON</div>'
@@ -3572,7 +3576,7 @@ function submitLead(){
   var payload={email:email,model:S.modelLabel,users:S.users,ctx:S.ctx,gpus:C.totalGPUs,cost:C.cloudCost5yr};
   // Try Worker first, fall back to Formspree
   var workerPromise=fetch(apiUrl('/api/leads'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  var formspreeId=''; // ← paste your Formspree form ID here e.g. 'xpwzgkqb'
+  var formspreeId='xpwzgkqb'; // ← Formspree fallback always enabled
   if(formspreeId){
     fetch('https://formspree.io/f/'+formspreeId,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)}).catch(function(){});
   }
@@ -4374,12 +4378,17 @@ function saveFleet(){
 }
 
 function showFleetValidateModal(){
-  var lines=['You are reviewing a multi-tier LLM inference fleet sizing.\n','FLEET: '+SF.totalUsers+' total concurrent users, '+SF.tiers.length+' tiers\n'];
+  var totalApiYr=SF.tiers.reduce(function(s,t){return s+computeTier(t).apiCostYr;},0);
+  var lines=[
+    'You are reviewing a multi-tier LLM API routing strategy.\n',
+    'FLEET: '+SF.totalUsers+' total users · '+SF.tiers.length+' tiers · '+(SF.queriesPerUserPerDay||100)+' queries/user/day\n'
+  ];
   SF.tiers.forEach(function(t,i){
     var r=computeTier(t);
-    lines.push('TIER '+(i+1)+': '+t.name+' | '+t.model+' | '+t.trafficPct+'% traffic → '+r.users+' users | '+r.totalGPUs+' GPU(s) | '+fmtK(r.cloudCostYr)+'/yr');
+    lines.push('TIER '+(i+1)+': '+t.name+' | API model: '+t.apiModel+' | '+t.trafficPct+'% traffic → '+r.users+' users | '+Math.round(r.queriesPerDay).toLocaleString()+' queries/day | '+fmtK(r.apiCostYr)+'/yr | avg '+t.avgInputTok+' in / '+t.avgOutputTok+' out tokens');
   });
-  lines.push('\nQUESTIONS:\n1. Is this tier breakdown reasonable?\n2. Are GPU counts correct per tier?\n3. What routing infrastructure would you recommend?');
+  lines.push('\nTOTAL API COST: '+fmtK(totalApiYr)+'/yr\n');
+  lines.push('\nQUESTIONS:\n1. Is this tier and model selection reasonable for the traffic split?\n2. Are the token estimates realistic per tier?\n3. What routing logic would you recommend to enforce tier boundaries?\n4. At what API spend level does self-hosting become worth it?');
   document.getElementById('validate-prompt').value=lines.join('\n');
   document.getElementById('validate-modal').style.display='flex';
   T.fire('fleet_validate_open');
