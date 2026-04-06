@@ -752,6 +752,12 @@ button{font-family:var(--sans);cursor:pointer}
 .fleet-breakdown-table td{padding:7px 8px;border-bottom:1px solid var(--border);font-family:var(--mono)}
 .fleet-breakdown-table tr:last-child td{border-bottom:none;font-weight:600;color:var(--text1)}
 .fleet-breakdown-table td:first-child{font-family:var(--sans);font-weight:500}
+.gpu-tip-anchor{border-bottom:1px dotted var(--text4);cursor:help;white-space:nowrap}
+#gpu-tooltip{position:fixed;z-index:500;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:10px 13px;font-size:11px;color:var(--text2);line-height:1.7;box-shadow:0 4px 16px rgba(0,0,0,.15);max-width:260px;pointer-events:none;display:none}
+#gpu-tooltip .tip-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text4);margin-bottom:6px}
+#gpu-tooltip .tip-row{display:flex;justify-content:space-between;gap:16px}
+#gpu-tooltip .tip-val{font-family:var(--mono);font-weight:600;color:var(--text1)}
+#gpu-tooltip .tip-formula{margin-top:6px;padding-top:6px;border-top:1px solid var(--border);font-size:10px;color:var(--text4);font-family:var(--mono)}
 .tier-bar{display:flex;align-items:center;gap:6px}
 .tier-bar-bg{flex:1;height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;min-width:40px}
 .tier-bar-fg{height:100%;border-radius:3px}
@@ -1381,11 +1387,25 @@ button{font-family:var(--sans);cursor:pointer}
           <div class="oc-sub" id="oc-gpus-sub">H100 80GB · 2 replicas</div>
           <span class="oc-badge good" id="oc-gpus-badge">fits ✓</span>
         </div>
-        <div class="oc" id="oc-cost">
-          <div class="oc-label">5-year cost</div>
-          <div class="oc-val" id="oc-cost-val">$163K</div>
-          <div class="oc-sub" id="oc-cost-sub">GCP default · cloud</div>
-          <span class="oc-badge" id="oc-cost-badge">estimate</span>
+        <div class="oc" id="oc-cost" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
+          <div style="padding:10px 14px 6px;border-bottom:1px solid var(--border)">
+            <div class="oc-label">5-year cost</div>
+          </div>
+          <div style="display:flex;flex:1">
+            <div style="flex:1;padding:8px 14px 10px;border-right:1px solid var(--border)">
+              <div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--red);margin-bottom:2px">☁ Cloud</div>
+              <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--red)" id="oc-cost-val">$163K</div>
+              <div style="font-size:10px;color:var(--text4);margin-top:1px" id="oc-cost-sub">GCP · on-demand</div>
+            </div>
+            <div style="flex:1;padding:8px 14px 10px">
+              <div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--green);margin-bottom:2px">⬛ On-prem</div>
+              <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--green)" id="oc-onprem-val">—</div>
+              <div style="font-size:10px;color:var(--text4);margin-top:1px" id="oc-onprem-sub">hardware · amortised</div>
+            </div>
+          </div>
+          <div style="padding:4px 14px 7px;border-top:1px solid var(--border)">
+            <span style="font-size:10px;font-weight:600" id="oc-cost-verdict"></span>
+          </div>
         </div>
         <div class="oc" id="oc-vram">
           <div class="oc-label">VRAM utilisation</div>
@@ -1586,16 +1606,13 @@ button{font-family:var(--sans);cursor:pointer}
 
 
 
-      <!-- Lead capture -->
-      <div class="lead-box">
+      <!-- Save to Sheets -->
+      <div class="lead-box" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
         <div class="lead-box-text">
-          📧 Email this sizing to yourself
-          <span>You'll also get Vikas's occasional notes on LLM infrastructure. Unsubscribe anytime.</span>
+          📊 Save this sizing to Google Sheets
+          <span>Export your full config, GPU count, KV cache breakdown, and 5-year cost as a spreadsheet row.</span>
         </div>
-        <div class="lead-input-row">
-          <input class="lead-input" id="lead-email" type="email" placeholder="your@email.com">
-          <button class="lead-submit" onclick="submitLead()">Send →</button>
-        </div>
+        <button class="lead-submit" style="white-space:nowrap;padding:9px 20px;font-size:13px;font-weight:600" onclick="exportToSheets()">&#128202; Save to Sheets →</button>
       </div>
     </div>
   </div>
@@ -1738,7 +1755,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.0</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.2</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2319,8 +2336,16 @@ function calc(){
   document.getElementById('oc-gpus-badge').textContent=fits?'fits ✓':'needs multi-GPU';
   document.getElementById('oc-gpus-badge').className='oc-badge '+(fits?'good':'bad');
   document.getElementById('oc-cost-val').textContent=fmtK(C.cloudCost5yr);
-  document.getElementById('oc-cost-sub').textContent='GCP default · cloud · 5yr';
-  document.getElementById('oc-cost-badge').textContent='based on defaults';
+  document.getElementById('oc-cost-sub').textContent='GCP · on-demand · 5yr';
+  if(document.getElementById('oc-onprem-val')) document.getElementById('oc-onprem-val').textContent=fmtK(C.onpremCost5yr);
+  if(document.getElementById('oc-onprem-sub')) document.getElementById('oc-onprem-sub').textContent='hardware · '+S.amort+'yr amort';
+  var cheaper = C.onpremCost5yr < C.cloudCost5yr;
+  var diff = Math.abs(C.cloudCost5yr - C.onpremCost5yr);
+  var verdictEl = document.getElementById('oc-cost-verdict');
+  if(verdictEl){
+    verdictEl.textContent = cheaper ? '⬛ On-prem saves '+fmtK(diff)+' over 5yr' : '☁ Cloud saves '+fmtK(diff)+' over 5yr';
+    verdictEl.style.color = cheaper ? 'var(--green)' : 'var(--red)';
+  }
   document.getElementById('oc-vram-val').textContent=Math.round(C.vramPct)+'%';
   document.getElementById('oc-vram-sub').textContent=Math.round(100-C.vramPct)+'% headroom · '+C.totalGPUs+(C.totalGPUs===1?' GPU':' GPUs');
   var vbadge=document.getElementById('oc-vram-badge');
@@ -4174,7 +4199,21 @@ function renderFleetBreakdown(results){
       +'<td><div style="display:flex;align-items:center;gap:5px"><div style="height:4px;width:'+Math.round(t.trafficPct*1.2)+'px;background:'+col+';border-radius:2px"></div><span>'+t.trafficPct+'%</span></div></td>'
       +'<td style="font-family:var(--mono);font-size:11px">'+qpd.toLocaleString()+'</td>'
       +'<td style="font-weight:600">'+fmtK(r.apiCostYr)+'</td>'
-      +'<td style="font-size:11px;color:var(--blue)">'+(r.isApiOnly?'<span style="color:var(--text4)">API only</span>':r.totalGPUs+' GPU'+(r.totalGPUs!==1?'s':''))+'</td>'
+      +(r.isApiOnly
+        ? '<td style="font-size:11px;color:var(--text4)"><span style="color:var(--text4)">API only</span></td>'
+        : '<td style="font-size:11px;color:var(--blue);position:relative;cursor:help">'
+          +'<span class="gpu-tip-anchor" onmouseenter="showGpuTip(this)" onmouseleave="hideGpuTip()"'
+          +' data-gpus="'+r.totalGPUs+'"'
+          +' data-conc="'+r.concurrentUsers+'"'
+          +' data-buf="'+r.concurrentWithBuffer+'"'
+          +' data-upr="'+r.uprRealistic+'"'
+          +' data-theory="'+r.uprTheory+'"'
+          +' data-replicas="'+r.replicas+'"'
+          +' data-tp="'+t.tp+'"'
+          +' data-params="'+t.params+'"'
+          +' data-out="'+(t.avgOutputTok||200)+'">'
+          +r.totalGPUs+' GPU'+(r.totalGPUs!==1?'s':'')+' <span style="font-size:9px;color:var(--text4);text-decoration:underline dotted">why?</span>'
+          +'</span></td>')
       +'<td style="font-size:11px;color:var(--text3)">'+t.avgInputTok+' / '+t.avgOutputTok+'</td>'
       +'<td>'+saveTag+'</td>'
       +'</tr>';
@@ -4189,6 +4228,9 @@ function renderFleetBreakdown(results){
     +'<td colspan="2" style="font-size:11px;color:var(--text3)">vs naive all-Sonnet: '+fmtK(naiveTotalYr)+'</td>'
     +'</tr>';
   el.innerHTML=html;
+  // Footnote
+  var fnEl=document.getElementById('fleet-breakdown-footnote');
+  if(fnEl){fnEl.style.display='block';}
 }
 
 function renderTrafficFlow(){
@@ -4500,6 +4542,42 @@ function formatTokensPerDay(n) {
 
 // ===== URL SHARE LOAD =====
 loadFromURL();
+
+// ===== GPU TOOLTIP =====
+(function(){
+  var tip=document.createElement('div');
+  tip.id='gpu-tooltip';
+  tip.innerHTML='<div class="tip-title">GPU sizing breakdown</div><div id="tip-body"></div>';
+  document.body.appendChild(tip);
+})();
+
+function showGpuTip(el){
+  var tip=document.getElementById('gpu-tooltip');
+  if(!tip)return;
+  var gpus=+el.dataset.gpus, conc=+el.dataset.conc, buf=+el.dataset.buf;
+  var upr=+el.dataset.upr, theory=+el.dataset.theory;
+  var replicas=+el.dataset.replicas, tp=+el.dataset.tp||1;
+  var params=+el.dataset.params, out=+el.dataset.out;
+  var tokSec = params<=10?3000:params<=30?1500:params<=80?800:400;
+  var html='<div class="tip-row"><span>Concurrent users</span><span class="tip-val">'+conc+'</span></div>'
+    +'<div class="tip-row"><span>+ 20% buffer</span><span class="tip-val">'+buf+'</span></div>'
+    +'<div class="tip-row"><span>KV cache capacity</span><span class="tip-val">'+theory+' users/GPU</span></div>'
+    +'<div class="tip-row"><span>Throughput ceiling</span><span class="tip-val">'+Math.floor(tokSec*10*0.7/Math.max(out,1))+' users/GPU</span></div>'
+    +'<div class="tip-row"><span>Realistic (80% eff.)</span><span class="tip-val">'+upr+' users/GPU</span></div>'
+    +'<div class="tip-row"><span>Replicas needed</span><span class="tip-val">'+replicas+' × '+tp+' GPU'+(tp>1?'s':'')+'</span></div>'
+    +'<div class="tip-formula">ceil('+buf+' / '+upr+') = '+replicas+' replica'+(replicas!==1?'s':'')+' × '+tp+' = '+gpus+' GPU'+(gpus!==1?'s':'')+'</div>';
+  document.getElementById('tip-body').innerHTML=html;
+  var rect=el.getBoundingClientRect();
+  tip.style.display='block';
+  var left=rect.left, top=rect.bottom+6;
+  if(left+260>window.innerWidth) left=window.innerWidth-268;
+  tip.style.left=left+'px';
+  tip.style.top=top+'px';
+}
+function hideGpuTip(){
+  var tip=document.getElementById('gpu-tooltip');
+  if(tip) tip.style.display='none';
+}
 </script>
 
 <!-- ===== VALIDATE WITH AI MODAL ===== -->
@@ -4645,8 +4723,11 @@ loadFromURL();
         </div>
         <div style="overflow-x:auto">
           <table class="fleet-breakdown-table" id="fleet-breakdown-table" style="width:100%">
-            <tr><th>Tier</th><th>API model</th><th>Traffic</th><th>Queries/day</th><th>API cost/yr</th><th>Tokens (in/out)</th><th>vs all-Sonnet</th></tr>
+            <tr><th>Tier</th><th>API model</th><th>Traffic</th><th>Queries/day</th><th>API cost/yr</th><th>Self-host GPUs</th><th>Tokens (in/out)</th><th>vs all-Sonnet</th></tr>
           </table>
+        </div>
+        <div id="fleet-breakdown-footnote" style="display:none;padding:8px 14px 10px;border-top:1px solid var(--border);font-size:10px;color:var(--text4);line-height:1.6">
+          &#9432; <strong style="color:var(--text3)">Self-host GPU sizing</strong> uses a continuous batching model (vLLM-style): capacity = (tok/s &times; 10s latency &times; 70% batch efficiency) &divide; tokens per request, capped by KV cache. Applies 80% utilisation + 20% production buffer. Hover any GPU count for per-tier details.
         </div>
       </div>
 
