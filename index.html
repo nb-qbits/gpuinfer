@@ -1210,7 +1210,7 @@ button{font-family:var(--sans);cursor:pointer}
             <button class="chip" id="dep-hybrid" onclick="setDep('hybrid',this)">Hybrid</button>
           </div>
           <div id="cloud-cost-section">
-            <div class="panel-label">Cloud provider</div>
+            <div class="panel-label" style="display:flex;align-items:center;justify-content:space-between">Cloud provider <span id="live-badge-adv" style="font-size:9px;color:var(--text4);font-weight:400"></span></div>
             <table class="provider-table" id="prov-table"></table>
             <button class="add-prov" onclick="addProvider()">+ add provider / instance</button>
             <div class="panel-label" style="margin-top:10px">Reserved discount</div>
@@ -1662,7 +1662,7 @@ button{font-family:var(--sans);cursor:pointer}
             <div class="slider-row"><label>Power ($/kWh)</label><input type="range" min="0.04" max="0.25" step="0.01" value="0.10" id="h-kwh" oninput="S.hKwh=+this.value;calcHybrid()"><span class="slider-val mono" id="hv-kwh">$0.10</span></div>
           </div>
         </div>
-        <div class="section-title">CLOUD PROVIDER (on-demand)</div>
+        <div class="section-title" style="display:flex;align-items:center;justify-content:space-between">CLOUD PROVIDER (on-demand) <span id="live-badge-hyb" style="font-size:9px;color:var(--text4);font-weight:400"></span></div>
         <table class="provider-table" id="h-prov-table"></table>
         <div class="section-title" style="margin-top:14px">DEDICATED NODE (flat rate)</div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Reserved node, always billed 24/7. Cheaper than on-demand at &gt;25% util.</div>
@@ -4514,12 +4514,20 @@ function loadLivePrices(){
 
       // ── Show freshness badge ───────────────────────────────────────────────
       var latest=prices.map(function(p){return p.fetched_at||'';}).filter(Boolean).sort().pop();
-      var badge=document.getElementById('price-freshness-badge');
-      if(badge&&latest){
+      var badgeIds=['price-freshness-badge','live-badge-adv','live-badge-hyb'];
+      if(latest){
         var d=new Date(latest);
         var ago=Math.round((Date.now()-d.getTime())/(1000*60*60*24));
-        badge.textContent='Prices as of '+d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+(ago>0?' ('+ago+'d ago)':'');
-        badge.style.color='var(--green)';
+        var dateStr=d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+        var footerText='Prices as of '+dateStr+(ago>0?' ('+ago+'d ago)':'');
+        var inlineText='● Live prices · '+dateStr+(ago>0?' ('+ago+'d ago)':'');
+        badgeIds.forEach(function(id){
+          var el=document.getElementById(id);
+          if(el){
+            el.textContent=id==='price-freshness-badge'?footerText:inlineText;
+            el.style.color='var(--green)';
+          }
+        });
       }
 
       // ── Re-render tables with fresh prices if anything changed ────────────
@@ -4538,11 +4546,13 @@ function loadLivePrices(){
     })
     .catch(function(e){
       // Pricing Worker down or not configured — hardcoded prices remain
-      var badge=document.getElementById('price-freshness-badge');
-      if(badge){
-        badge.textContent='Using estimated prices';
-        badge.style.color='var(--amber)';
-      }
+      ['price-freshness-badge','live-badge-adv','live-badge-hyb'].forEach(function(id){
+        var el=document.getElementById(id);
+        if(el){
+          el.textContent=id==='price-freshness-badge'?'Using estimated prices':'○ Estimated prices';
+          el.style.color='var(--amber,#b45309)';
+        }
+      });
       console.log('gpu.calc: live prices unavailable, using defaults.',e.message);
     });
 }
