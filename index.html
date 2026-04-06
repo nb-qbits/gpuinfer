@@ -1242,13 +1242,13 @@ button{font-family:var(--sans);cursor:pointer}
               </div>
               <div class="slider-row">
                 <label>Infra setup %</label>
-                <input type="range" min="0" max="60" step="5" value="25" id="s-infra" oninput="S.infraPct=+this.value/100;document.getElementById('sv-infra').textContent=this.value+'%';debouncedCalc()">
-                <span class="slider-val mono" id="sv-infra">25%</span>
+                <input type="range" min="0" max="60" step="5" value="0" id="s-infra" oninput="S.infraPct=+this.value/100;document.getElementById('sv-infra').textContent=this.value+'%';debouncedCalc()">
+                <span class="slider-val mono" id="sv-infra">0%</span>
               </div>
               <div class="slider-row">
                 <label>Annual opex %</label>
-                <input type="range" min="0" max="30" step="5" value="15" id="s-opex" oninput="S.opexPct=+this.value/100;document.getElementById('sv-opex').textContent=this.value+'%';debouncedCalc()">
-                <span class="slider-val mono" id="sv-opex">15%</span>
+                <input type="range" min="0" max="30" step="5" value="0" id="s-opex" oninput="S.opexPct=+this.value/100;document.getElementById('sv-opex').textContent=this.value+'%';debouncedCalc()">
+                <span class="slider-val mono" id="sv-opex">0%</span>
               </div>
             </div>
           </div>
@@ -1844,7 +1844,7 @@ var S = {
   gpuName:'H100', gpuVram:80,
   // Cost
   dep:'cloud', cloudRate:3.00, disc:0,
-  hwCost:25000, amort:5, kwh:0.10, infraPct:0.25, opexPct:0.15,
+  hwCost:25000, amort:5, kwh:0.10, infraPct:0, opexPct:0,
   // Hybrid
   hGpus:2, hRun:16, hHw:25000, hUtil:0.30, hAmort:5, hKwh:0.10,
   hSplit:null, // null = auto from utilisation; number = manual override
@@ -1860,6 +1860,8 @@ var PROVIDERS = [
   {name:'Lambda',rate:2.99,gpu:'H100 SXM',active:false},
   {name:'CoreWeave',rate:2.45,gpu:'H100 SXM',active:false},
   {name:'RunPod',rate:2.72,gpu:'H100 SXM',active:false},
+  {name:'Azure',rate:6.98,gpu:'H100 SXM',active:false},
+  {name:'Vast.ai',rate:0.24,gpu:'H100 SXM',active:false},
   {name:'Lambda',rate:4.99,gpu:'H200 SXM',active:false},
   {name:'RunPod',rate:5.58,gpu:'B200 SXM',active:false},
   {name:'AWS',rate:3.97,gpu:'A100 80GB',active:false},
@@ -4458,17 +4460,29 @@ function loadLivePrices(){
 
       // ── Update cloud GPU providers (PROVIDERS array) ──────────────────────
       var cloudPrices=prices.filter(function(p){
-        return p.category==='gpu_cloud'&&p.pricing_type==='on_demand'&&p.confidence==='high';
+        return p.category==='gpu_cloud'&&p.pricing_type==='on_demand'&&(p.confidence==='high'||p.confidence==='medium');
       });
+      // Group by provider, find cheapest per-GPU price for matching GPU type
+      var bestByProvider={};
       cloudPrices.forEach(function(p){
-        var match=PROVIDERS.find(function(x){return x.name===p.provider;});
-        if(match){
-          var perGPU=p.price_usd/(p.gpu_count||1);
-          if(Math.abs(perGPU-match.rate)/match.rate>0.01){ // Only update if >1% different
-            match.rate=perGPU;
-            match.gpu=p.gpu+' '+(p.vram_gb||80)+'GB';
-            updated=true;
-          }
+        var perGPU=p.price_usd/(p.gpu_count||1);
+        var gpuType=(p.gpu||'').toUpperCase();
+        var key=p.provider+'|'+gpuType;
+        if(!bestByProvider[key]||perGPU<bestByProvider[key].perGPU){
+          bestByProvider[key]={provider:p.provider,perGPU:perGPU,gpu:p.gpu,vram:p.vram_gb||80};
+        }
+      });
+      Object.keys(bestByProvider).forEach(function(key){
+        var best=bestByProvider[key];
+        // Find matching PROVIDERS entry (same provider, same GPU family)
+        var match=PROVIDERS.find(function(x){
+          return x.name===best.provider&&x.gpu.toUpperCase().indexOf(best.gpu.toUpperCase())>=0;
+        });
+        // Fallback: match just by provider name (first entry)
+        if(!match) match=PROVIDERS.find(function(x){return x.name===best.provider;});
+        if(match&&Math.abs(best.perGPU-match.rate)/match.rate>0.01){
+          match.rate=Math.round(best.perGPU*100)/100;
+          updated=true;
         }
       });
 
