@@ -264,6 +264,11 @@ button{font-family:var(--sans);cursor:pointer}
 .hf-status{font-size:11px;color:var(--text3);font-family:var(--mono);margin-bottom:6px}
 .hf-status.ok{color:var(--green)}
 .hf-status.err{color:var(--red)}
+.hf-token-row{margin-bottom:8px}
+.hf-token-toggle{font-size:11px;color:var(--text3);text-decoration:none}
+.hf-token-toggle:hover{color:var(--blue)}
+.hf-token-toggle.saved{color:var(--green)}
+.hf-token-body{margin-top:6px}
 .provider-table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px}
 .provider-table th{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text4);padding:4px 6px;text-align:left;border-bottom:1px solid var(--border)}
 .provider-table td{padding:5px 6px;border-bottom:1px solid var(--border)}
@@ -928,6 +933,16 @@ button{font-family:var(--sans);cursor:pointer}
         <button class="hf-btn" onclick="qsHFLookup()">Lookup</button>
       </div>
       <div class="hf-status" id="qs-hf-status"></div>
+      <div class="hf-token-row" id="qs-hf-token-row" style="max-width:400px">
+        <a href="#" class="hf-token-toggle" onclick="toggleHFToken('qs');return false">🔑 Have a gated model? Paste your HF token</a>
+        <div class="hf-token-body" id="qs-hf-token-body" style="display:none">
+          <div style="display:flex;gap:6px">
+            <input class="hf-input" id="qs-hf-token" type="password" placeholder="hf_abc123..." style="flex:1;font-size:11px">
+            <button class="hf-btn" onclick="saveHFToken('qs')" style="font-size:11px">Save</button>
+          </div>
+          <div style="font-size:10px;color:var(--text4);margin-top:4px">Stored in your browser only — sent directly to HuggingFace, never to our server.</div>
+        </div>
+      </div>
       <div class="qs-footer">
         <div></div>
         <button class="btn btn-primary" onclick="qsNext(1)">Next &#8594;</button>
@@ -1041,6 +1056,16 @@ button{font-family:var(--sans);cursor:pointer}
             <button class="hf-btn" onclick="hfLookup()">Lookup</button>
           </div>
           <div class="hf-status" id="hf-status"></div>
+          <div class="hf-token-row">
+            <a href="#" class="hf-token-toggle" onclick="toggleHFToken('adv');return false">🔑 Have a gated model? Paste your HF token</a>
+            <div class="hf-token-body" id="adv-hf-token-body" style="display:none">
+              <div style="display:flex;gap:6px">
+                <input class="hf-input" id="adv-hf-token" type="password" placeholder="hf_abc123..." style="flex:1;font-size:11px">
+                <button class="hf-btn" onclick="saveHFToken('adv')" style="font-size:11px">Save</button>
+              </div>
+              <div style="font-size:10px;color:var(--text4);margin-top:4px">Stored in your browser only — sent directly to HuggingFace, never to our server.</div>
+            </div>
+          </div>
           <div class="chips-wrap" id="org-chips" style="flex-wrap:wrap">
           <button class="chip on" onclick="filterOrg('all',this)">All</button>
           <button class="chip" onclick="filterOrg('meta',this)">Meta</button>
@@ -1755,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.2</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.4</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -1832,9 +1857,18 @@ var S = {
   // Model
   params:8, modelLabel:'Llama 3.1 8B', attn:'gqa', prec:'fp16',
   numKvHeads:8, headDim:128, numLayers:32, hfId:null,
-  kvLayers:null,        // shared KV layers (Gemma 4 style) — null = use numLayers
+  kvLayers:null,        // effective unique KV layers (Gemma 4 / SSM hybrid) — null = use numLayers
   activeExperts:null,   // MoE active experts per token — null = not MoE
   totalExperts:null,    // MoE total experts
+  // Architecture-specific KV fields (populated by HF Lookup)
+  kvArchType:null,      // null | 'standard' | 'hybrid_sliding' | 'hybrid_ssm' | 'mla' | 'moe'
+  kvGlobalLayers:null,  // hybrid_sliding: unique global attention layers
+  kvSlidingLayers:null, // hybrid_sliding: unique sliding window layers
+  slidingWindow:null,   // hybrid_sliding: window size in tokens
+  globalKvHeads:null,   // hybrid_sliding: KV heads for global layers (if different)
+  globalHeadDim:null,   // hybrid_sliding: head dim for global layers (if different)
+  kvLoraRank:null,      // MLA: compressed KV dimension (DeepSeek V2/V3)
+  qkRopeHeadDim:null,   // MLA: rope head dim added to latent
   // Users
   users:30, ctx:8, hitrate:0.10,
   // Inference
@@ -2126,26 +2160,47 @@ function openLayer(id){
 function weightsGB(){ return S.params * (S.prec==='fp16'?2:S.prec==='fp8'?1:0.5); }
 
 function kvBytesPerToken(){
-  // numKvHeads already IS the reduced KV head count for GQA models
-  // (e.g. Llama 70B: numKvHeads=8, not 80)
-  // No extra kvFactor needed — applying one causes 8x underestimate
+  // Architecture-aware KV cache calculation
+  // Returns bytes per token per replica (not per layer — total across all KV-active layers)
   var kvPrec = S.kvPrec==='fp16'?2:S.kvPrec==='fp8'?1:1;
-  
-  // For Gemma 4 / shared KV cache models: use kvLayers if set
-  // kvLayers = number of layers with UNIQUE KV cache (rest share)
+
+  // Category 5: DeepSeek MLA — compressed latent KV
+  if(S.kvLoraRank){
+    var ropeHead = S.qkRopeHeadDim||64;
+    return (S.kvLoraRank + ropeHead) * kvPrec * S.numLayers;
+  }
+
+  // Category 4: Hybrid SSM — only attention layers have KV cache
+  // Category 3: Hybrid sliding/global — handled in kvGBPerUser for full accuracy
+  // Category 1/2/6: Standard + MoE — all layers, no moeScale (MoE doesn't affect KV)
   var effectiveLayers = S.kvLayers || S.numLayers;
-  
-  // For MoE models: only active experts need KV cache
-  // activeExperts = experts used per token (e.g. 2 of 8 for Mixtral)
-  var moeScale = S.activeExperts ? (S.activeExperts / (S.totalExperts||S.activeExperts)) : 1.0;
-  
-  return 2 * effectiveLayers * S.numKvHeads * S.headDim * kvPrec * moeScale;
+
+  return 2 * effectiveLayers * S.numKvHeads * S.headDim * kvPrec;
 }
 
 function kvGBPerUser(){
-  var bytes = kvBytesPerToken() * S.ctx * 1000;
   var eff = S.fw==='vllm' ? 0.95 : 1.0;
   var prefix = 1 - S.hitrate;
+  var ctxTokens = S.ctx * 1000;
+
+  // Category 3: Hybrid sliding/global — split global vs sliding KV
+  if(S.kvArchType==='hybrid_sliding' && S.kvGlobalLayers!=null){
+    var kvPrec = S.kvPrec==='fp16'?2:S.kvPrec==='fp8'?1:1;
+    var gHeads = S.globalKvHeads || S.numKvHeads;
+    var gDim = S.globalHeadDim || S.headDim;
+    var sWin = S.slidingWindow || 1024;
+
+    // Global layers: full context
+    var globalBytes = S.kvGlobalLayers * ctxTokens * 2 * gHeads * gDim * kvPrec;
+    // Sliding layers: bounded by window size
+    var slidingTokens = Math.min(ctxTokens, sWin);
+    var slidingBytes = S.kvSlidingLayers * slidingTokens * 2 * S.numKvHeads * S.headDim * kvPrec;
+
+    return ((globalBytes + slidingBytes) / 1e9) * prefix / eff;
+  }
+
+  // All other architectures: standard path
+  var bytes = kvBytesPerToken() * ctxTokens;
   return (bytes / 1e9) * prefix / eff;
 }
 
@@ -2623,6 +2678,50 @@ function selectQSLoc(loc,btn){
   document.querySelectorAll('.qs-loc-tile').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
 }
+// ===== HF TOKEN MANAGEMENT =====
+function toggleHFToken(prefix){
+  var body=document.getElementById(prefix+'-hf-token-body');
+  if(!body)return;
+  body.style.display=body.style.display==='none'?'block':'none';
+  // Pre-fill if token exists
+  var existing=localStorage.getItem('hf_token')||'';
+  var inp=document.getElementById(prefix+'-hf-token');
+  if(inp&&existing&&!inp.value) inp.value=existing;
+}
+function saveHFToken(prefix){
+  var inp=document.getElementById(prefix+'-hf-token');
+  if(!inp)return;
+  var token=inp.value.trim();
+  if(token){
+    localStorage.setItem('hf_token',token);
+    inp.type='password';
+    // Update both toggle labels
+    document.querySelectorAll('.hf-token-toggle').forEach(function(a){
+      a.textContent='🔑 HF token saved ✓ (click to update)';
+      a.classList.add('saved');
+    });
+    // Sync the other input too
+    var otherId=(prefix==='qs'?'adv':'qs')+'-hf-token';
+    var other=document.getElementById(otherId);
+    if(other) other.value=token;
+  } else {
+    localStorage.removeItem('hf_token');
+    document.querySelectorAll('.hf-token-toggle').forEach(function(a){
+      a.textContent='🔑 Have a gated model? Paste your HF token';
+      a.classList.remove('saved');
+    });
+  }
+}
+// On load: update toggle labels if token already saved
+(function(){
+  if(localStorage.getItem('hf_token')){
+    document.querySelectorAll('.hf-token-toggle').forEach(function(a){
+      a.textContent='🔑 HF token saved ✓ (click to update)';
+      a.classList.add('saved');
+    });
+  }
+})();
+
 function qsHFLookup(){
   var id=document.getElementById('qs-hf-input').value.trim();
   if(!id)return;
@@ -2639,15 +2738,51 @@ function hfLookup(){
   fetchHFModel(id,'hf-status',function(m){
     S.params=m.params;S.modelLabel=m.name;S.attn=m.attn;
     S.numLayers=m.layers;S.numKvHeads=m.kvHeads;S.headDim=m.headDim;
+    // Architecture-specific KV fields
+    S.kvArchType=m.kvArchType||null;
+    S.kvLayers=m.kvLayers||null;
+    S.kvGlobalLayers=m.kvGlobalLayers!=null?m.kvGlobalLayers:null;
+    S.kvSlidingLayers=m.kvSlidingLayers!=null?m.kvSlidingLayers:null;
+    S.slidingWindow=m.slidingWindow||null;
+    S.globalKvHeads=m.globalKvHeads||null;
+    S.globalHeadDim=m.globalHeadDim||null;
+    S.kvLoraRank=m.kvLoraRank||null;
+    S.qkRopeHeadDim=m.qkRopeHeadDim||null;
+    S.activeExperts=m.activeExperts||null;
+    S.totalExperts=m.totalExperts||null;
     calc();
   });
 }
 function fetchHFModel(id,statusId,cb){
   var st=document.getElementById(statusId);
   if(!id){st.textContent='Enter a model ID first';st.className='hf-status err';return;}
+  // Validate format: must contain org/model
+  if(id.indexOf('/')<1){
+    st.innerHTML='✗ Missing org prefix — try <b>org/model-name</b><br>'
+      +'<span style="font-size:10px;color:var(--text4)">e.g. meta-llama/Llama-3.1-8B, deepseek-ai/DeepSeek-R1-Distill-Qwen-32B</span>';
+    st.className='hf-status err';return;
+  }
   st.textContent='Fetching from HuggingFace...';st.className='hf-status';
-  var url=HF_PROXY?HF_PROXY+'?id='+encodeURIComponent(id):'https://huggingface.co/api/models/'+encodeURIComponent(id);
-  fetch(url).then(function(r){
+  var hfToken=localStorage.getItem('hf_token')||'';
+  var url,useDirectHF=false;
+  if(HF_PROXY){
+    url=HF_PROXY+'?id='+encodeURIComponent(id);
+    if(hfToken) url+='&token='+encodeURIComponent(hfToken);
+  } else if(hfToken) {
+    // No proxy but have token — go direct to HF with auth
+    url='https://huggingface.co/api/models/'+encodeURIComponent(id);
+    useDirectHF=true;
+  } else {
+    url='https://huggingface.co/api/models/'+encodeURIComponent(id);
+  }
+  var fetchOpts={};
+  if(useDirectHF&&hfToken) fetchOpts.headers={'Authorization':'Bearer '+hfToken};
+  fetch(url,fetchOpts).then(function(r){
+    if(r.status===401||r.status===403){
+      var hasToken=!!hfToken;
+      throw {gated:true,hasToken:hasToken,status:r.status};
+    }
+    if(r.status===404) throw {notFound:true};
     if(!r.ok) throw new Error('HTTP '+r.status);
     return r.json();
   }).then(function(d){
@@ -2657,31 +2792,161 @@ function fetchHFModel(id,statusId,cb){
       cfg.num_parameters?cfg.num_parameters/1e9:
       (cfg.num_hidden_layers||32)*(cfg.hidden_size||4096)*4/1e9*3;
     params=Math.max(1,Math.round(params));
+
+    // Base fields (every model has these)
+    var layers = cfg.num_hidden_layers||32;
+    var kvHeads = cfg.num_key_value_heads||cfg.num_attention_heads||32;
+    var headDim = cfg.head_dim||(Math.round((cfg.hidden_size||4096)/(cfg.num_attention_heads||32)));
+    var attn = (cfg.num_key_value_heads&&cfg.num_key_value_heads<(cfg.num_attention_heads||32))?'gqa':'mha';
+
+    // ===== ARCHITECTURE DETECTION (6 categories) =====
+    var kvArchType='standard', kvLayers=null, kvGlobalLayers=null, kvSlidingLayers=null;
+    var slidingWindow=null, globalKvHeads=null, globalHeadDim=null;
+    var kvLoraRank=null, qkRopeHeadDim=null;
+    var activeExperts=null, totalExperts=null;
+    var archLabel = 'Standard';
+
+    // Cat 5: DeepSeek MLA — check first (most specific)
+    if(cfg.kv_lora_rank){
+      kvArchType='mla';
+      kvLoraRank=cfg.kv_lora_rank;
+      qkRopeHeadDim=cfg.qk_rope_head_dim||64;
+      archLabel='MLA (DeepSeek)';
+    }
+    // Cat 6: Hybrid linear attention (Qwen3-Next)
+    else if(cfg.linear_key_head_dim){
+      // Linear layers = fixed state (like SSM), standard layers = normal KV
+      // For now, treat as standard with reduced layers (conservative)
+      var attLayers = 0;
+      if(Array.isArray(cfg.layer_types)){
+        for(var li=0;li<cfg.layer_types.length;li++){
+          var lt=cfg.layer_types[li];
+          if(lt==='full_attention'||lt==='attention'||lt==='full'||lt==='global') attLayers++;
+        }
+      } else { attLayers = layers; }
+      kvLayers = attLayers || layers;
+      kvArchType='standard';
+      archLabel='Hybrid linear ('+kvLayers+' attn layers)';
+    }
+    // Cat 3/4: Has layer_types array — inspect values
+    else if(Array.isArray(cfg.layer_types) && cfg.layer_types.length>0){
+      var ltSet={};
+      cfg.layer_types.forEach(function(t){ ltSet[t]=true; });
+
+      if(ltSet['sliding'] && (ltSet['full']||ltSet['global'])){
+        // Cat 3: Hybrid sliding/global (Gemma 4)
+        kvArchType='hybrid_sliding';
+        var gCount=0, sCount=0;
+        cfg.layer_types.forEach(function(t){
+          if(t==='full'||t==='global') gCount++;
+          else if(t==='sliding') sCount++;
+        });
+        var shared = cfg.num_kv_shared_layers||0;
+        // Shared layers are the LAST N — walk from end to count types
+        var sharedG=0, sharedS=0;
+        if(shared>0){
+          for(var si=cfg.layer_types.length-1;si>=0&&(sharedG+sharedS)<shared;si--){
+            if(cfg.layer_types[si]==='full'||cfg.layer_types[si]==='global') sharedG++;
+            else if(cfg.layer_types[si]==='sliding') sharedS++;
+          }
+        }
+        kvGlobalLayers = gCount - sharedG;
+        kvSlidingLayers = sCount - sharedS;
+        slidingWindow = cfg.sliding_window||1024;
+        globalKvHeads = cfg.num_global_key_value_heads||kvHeads;
+        globalHeadDim = cfg.global_head_dim||headDim;
+        // kvLayers = effective unique layers for the simple formula fallback
+        kvLayers = kvGlobalLayers + kvSlidingLayers;
+        archLabel='Hybrid sliding/global ('+kvGlobalLayers+'g+'+kvSlidingLayers+'s, '+shared+' shared)';
+      }
+      else if(ltSet['conv']||ltSet['mamba']||ltSet['ssm']||ltSet['recurrent']){
+        // Cat 4: Hybrid SSM/attention (LiquidAI, Bamba, Zamba)
+        kvArchType='hybrid_ssm';
+        var attLayers2=0;
+        cfg.layer_types.forEach(function(t){
+          if(t.indexOf('attention')>=0||t==='full'||t==='global') attLayers2++;
+        });
+        kvLayers = attLayers2 || 1;
+        archLabel='Hybrid SSM ('+kvLayers+' attn of '+layers+' total)';
+      }
+      else {
+        // Unknown layer_types values — count anything with "attention" or "full"
+        var attLayers3=0;
+        cfg.layer_types.forEach(function(t){
+          if(t.indexOf('attention')>=0||t.indexOf('full')>=0||t.indexOf('global')>=0) attLayers3++;
+        });
+        kvLayers = attLayers3 || layers; // fallback: all layers
+        archLabel='Hybrid ('+kvLayers+' attn of '+layers+' total)';
+      }
+    }
+    // Cat 4: Jamba-style (no layer_types array, but attn_layer_period)
+    else if(cfg.attn_layer_period){
+      kvArchType='hybrid_ssm';
+      var attPeriod = cfg.attn_layer_period;
+      var attOffset = cfg.attn_layer_offset||1;
+      kvLayers = Math.floor((layers - attOffset) / attPeriod) + 1;
+      archLabel='Hybrid SSM/Jamba ('+kvLayers+' attn of '+layers+' total)';
+    }
+
+    // Cat 2: MoE — detected separately, doesn't change KV formula
+    if(cfg.num_local_experts||cfg.num_experts){
+      activeExperts = cfg.num_experts_per_tok||cfg.num_activated_experts||2;
+      totalExperts = cfg.num_local_experts||cfg.num_experts||8;
+      if(kvArchType==='standard') kvArchType='moe';
+      archLabel += (archLabel!=='Standard'?' + ':'')+('MoE '+activeExperts+'/'+totalExperts);
+    }
+
     var m={
       name:id.split('/').pop(),
       params:params,
-      layers:cfg.num_hidden_layers||32,
-      kvHeads:cfg.num_key_value_heads||cfg.num_attention_heads||32,
-      headDim:cfg.head_dim||(Math.round((cfg.hidden_size||4096)/(cfg.num_attention_heads||32))),
-      attn:(cfg.num_key_value_heads&&cfg.num_key_value_heads<(cfg.num_attention_heads||32))?'gqa':'mha',
-      // BUG-029/030: Architecture-specific KV modifiers from model type
-      kvLayers:(cfg.model_type==='gemma4'||id.includes('gemma-4'))?Math.round((cfg.num_hidden_layers||60)*0.12):null,
-      activeExperts:(cfg.model_type==='mixtral')?2:null,
-      totalExperts:(cfg.model_type==='mixtral')?(cfg.num_local_experts||8):null,
+      layers:layers,
+      kvHeads:kvHeads,
+      headDim:headDim,
+      attn:attn,
+      // Architecture-specific
+      kvArchType:kvArchType,
+      kvLayers:kvLayers,
+      kvGlobalLayers:kvGlobalLayers,
+      kvSlidingLayers:kvSlidingLayers,
+      slidingWindow:slidingWindow,
+      globalKvHeads:globalKvHeads,
+      globalHeadDim:globalHeadDim,
+      kvLoraRank:kvLoraRank,
+      qkRopeHeadDim:qkRopeHeadDim,
+      activeExperts:activeExperts,
+      totalExperts:totalExperts,
+      archLabel:archLabel,
       org:'hf'
     };
-    st.textContent='✓ '+m.name+' ('+m.params+'B, '+m.layers+' layers, '+(m.attn==='gqa'?'GQA':'MHA')+')';
+    st.textContent='✓ '+m.name+' ('+m.params+'B, '+m.layers+'L, '+(m.attn==='gqa'?'GQA':'MHA')+', '+archLabel+')';
     st.className='hf-status ok';
     cb(m);
   }).catch(function(e){
-    var msg = e.message||'';
-    var isNetwork = msg.includes('fetch')||msg.includes('network')||msg.includes('Failed')||msg.includes('Load')||msg.includes('NetworkError');
-    if(isNetwork || !HF_PROXY) {
-      st.innerHTML='⚠ Live lookup requires the Worker proxy — pick from the model grid above<br>'
-        +'<span style="font-size:10px;color:var(--text4)">Once Worker is deployed at '+HF_PROXY+', live lookup will work</span>';
-    } else {
+    if(e&&e.gated){
+      if(e.hasToken){
+        st.innerHTML='🔒 Gated model — your token was rejected. Check it has access to <b>'+id+'</b><br>'
+          +'<span style="font-size:10px;color:var(--text4)">Accept the license at huggingface.co/'+id+' then retry</span>';
+      } else {
+        st.innerHTML='🔒 This is a gated model — paste your HuggingFace token below to access it<br>'
+          +'<span style="font-size:10px;color:var(--text4)">Get a free token at huggingface.co/settings/tokens</span>';
+        // Auto-expand token input
+        var prefix=statusId==='qs-hf-status'?'qs':'adv';
+        var body=document.getElementById(prefix+'-hf-token-body');
+        if(body) body.style.display='block';
+      }
+    } else if(e&&e.notFound){
       st.innerHTML='✗ Model not found on HuggingFace — check exact ID<br>'
         +'<span style="font-size:10px;color:var(--text4)">Format: owner/model-name (e.g. meta-llama/Llama-3.1-8B)</span>';
+    } else {
+      var msg = (e&&e.message)||'';
+      var isNetwork = msg.includes('fetch')||msg.includes('network')||msg.includes('Failed')||msg.includes('Load')||msg.includes('NetworkError');
+      if(isNetwork || !HF_PROXY) {
+        st.innerHTML='⚠ Live lookup requires the Worker proxy — pick from the model grid above<br>'
+          +'<span style="font-size:10px;color:var(--text4)">Once Worker is deployed at '+HF_PROXY+', live lookup will work</span>';
+      } else {
+        st.innerHTML='✗ Lookup failed: '+(msg||'unknown error')+'<br>'
+          +'<span style="font-size:10px;color:var(--text4)">Format: owner/model-name (e.g. meta-llama/Llama-3.1-8B)</span>';
+      }
     }
     st.className='hf-status err';
   });
@@ -2700,10 +2965,19 @@ function selectModel(idx,btn){
   if(!m)return;
   S.params=m.params;S.modelLabel=m.name;S.attn=m.attn;
   S.numLayers=m.layers;S.numKvHeads=m.kvHeads;S.headDim=m.headDim;
-  // BUG-029/030: Architecture-specific KV modifiers
-  S.kvLayers=m.kvLayers||null;          // shared KV cache (Gemma 4)
-  S.activeExperts=m.activeExperts||null; // MoE active experts (Mixtral)
+  // Architecture-specific KV modifiers
+  S.kvLayers=m.kvLayers||null;
+  S.activeExperts=m.activeExperts||null;
   S.totalExperts=m.totalExperts||null;
+  // Reset dynamic arch fields (presets don't use these yet)
+  S.kvArchType=m.kvArchType||null;
+  S.kvGlobalLayers=m.kvGlobalLayers!=null?m.kvGlobalLayers:null;
+  S.kvSlidingLayers=m.kvSlidingLayers!=null?m.kvSlidingLayers:null;
+  S.slidingWindow=m.slidingWindow||null;
+  S.globalKvHeads=m.globalKvHeads||null;
+  S.globalHeadDim=m.globalHeadDim||null;
+  S.kvLoraRank=m.kvLoraRank||null;
+  S.qkRopeHeadDim=m.qkRopeHeadDim||null;
   document.querySelectorAll('#model-chips .chip').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   if(m.name.includes('W8A8')) setPrec('fp8',null);
