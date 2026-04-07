@@ -1780,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.4</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.6</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2298,7 +2298,8 @@ function calc(){
   document.getElementById('outcome-subtitle').textContent =
     S.modelLabel+' · '+S.users+' users · '+S.ctx+'K ctx · TP='+C.autoTp;
   document.getElementById('ph-model-sum').textContent =
-    S.modelLabel+' · '+(S.attn==='gqa'?'GQA':'MHA')+' · '+S.prec.toUpperCase();
+    S.modelLabel+' · '+(S.attn==='gqa'?'GQA':'MHA')+' · '+S.prec.toUpperCase()
+    +(S.kvArchType && S.kvArchType!=='standard' && S.kvArchType!=='moe' ? ' · '+({hybrid_sliding:'Hybrid attn',hybrid_ssm:'Hybrid SSM',mla:'MLA'}[S.kvArchType]||S.kvArchType) : '');
   document.getElementById('ph-users-sum').textContent =
     S.users+' users · '+S.ctx+'K ctx · '+Math.round(S.hitrate*100)+'% prefix';
   document.getElementById('ph-inf-sum').textContent =
@@ -2383,7 +2384,18 @@ function calc(){
   document.getElementById('st-kpu').textContent=fmtGB(C.kvPU);
   var kvBytes=kvBytesPerToken();
   var kvTokLabel=kvBytes>=1e6?(kvBytes/1e6).toFixed(2)+' MB/tok':Math.round(kvBytes/1000)+' KB/tok';
-  document.getElementById('st-kpu-sub').textContent=kvTokLabel+' · '+S.ctx+'K ctx';
+  // Show architecture-aware formula breakdown
+  var kvFormula = kvTokLabel+' · '+S.ctx+'K ctx';
+  if(S.kvArchType==='hybrid_sliding' && S.kvGlobalLayers!=null){
+    kvFormula = S.kvGlobalLayers+'g+'+S.kvSlidingLayers+'s layers · '+S.ctx+'K ctx';
+  } else if(S.kvArchType==='hybrid_ssm' && S.kvLayers){
+    kvFormula = S.kvLayers+' of '+S.numLayers+' layers attn · '+S.ctx+'K ctx';
+  } else if(S.kvArchType==='mla'){
+    kvFormula = 'MLA rank '+S.kvLoraRank+' · '+S.numLayers+'L · '+S.ctx+'K ctx';
+  } else if(S.kvLayers && S.kvLayers !== S.numLayers){
+    kvFormula = S.kvLayers+' of '+S.numLayers+' layers · '+kvTokLabel+' · '+S.ctx+'K ctx';
+  }
+  document.getElementById('st-kpu-sub').textContent=kvFormula;
   document.getElementById('st-upr').textContent=C.upr;
   document.getElementById('st-upr-sub').textContent=C.replicas+' replicas × '+C.autoTp+'GPU'+(C.tpAutoScaled?' (auto)':'');
   // Outcome cards
@@ -2828,16 +2840,30 @@ function fetchHFModel(id,statusId,cb){
       kvArchType='standard';
       archLabel='Hybrid linear ('+kvLayers+' attn layers)';
     }
-    // Cat 3/4: Has layer_types array — inspect values
-    else if(Array.isArray(cfg.layer_types) && cfg.layer_types.length>0){
+    // Cat 3/4: Has layer_types or layers_block_type array — inspect values
+    // Different models use different field names:
+    //   layer_types:       Gemma 4, LiquidAI (values: sliding/full/conv/full_attention)
+    //   layers_block_type: Zamba2 (values: mamba/hybrid)
+    var layerArr = Array.isArray(cfg.layer_types) && cfg.layer_types.length>0 ? cfg.layer_types :
+                   Array.isArray(cfg.layers_block_type) && cfg.layers_block_type.length>0 ? cfg.layers_block_type : null;
+
+    // Also check hybrid_layer_ids (Zamba2 shortcut — directly lists attention layer indices)
+    if(!layerArr && Array.isArray(cfg.hybrid_layer_ids) && cfg.hybrid_layer_ids.length>0){
+      kvArchType='hybrid_ssm';
+      kvLayers = cfg.hybrid_layer_ids.length;
+      // Use kv_channels if available for head_dim override
+      if(cfg.kv_channels) headDim = cfg.kv_channels;
+      archLabel='Hybrid SSM ('+kvLayers+' attn of '+layers+' total)';
+    }
+    else if(layerArr){
       var ltSet={};
-      cfg.layer_types.forEach(function(t){ ltSet[t]=true; });
+      layerArr.forEach(function(t){ ltSet[t]=true; });
 
       if(ltSet['sliding'] && (ltSet['full']||ltSet['global'])){
         // Cat 3: Hybrid sliding/global (Gemma 4)
         kvArchType='hybrid_sliding';
         var gCount=0, sCount=0;
-        cfg.layer_types.forEach(function(t){
+        layerArr.forEach(function(t){
           if(t==='full'||t==='global') gCount++;
           else if(t==='sliding') sCount++;
         });
@@ -2845,9 +2871,9 @@ function fetchHFModel(id,statusId,cb){
         // Shared layers are the LAST N — walk from end to count types
         var sharedG=0, sharedS=0;
         if(shared>0){
-          for(var si=cfg.layer_types.length-1;si>=0&&(sharedG+sharedS)<shared;si--){
-            if(cfg.layer_types[si]==='full'||cfg.layer_types[si]==='global') sharedG++;
-            else if(cfg.layer_types[si]==='sliding') sharedS++;
+          for(var si=layerArr.length-1;si>=0&&(sharedG+sharedS)<shared;si--){
+            if(layerArr[si]==='full'||layerArr[si]==='global') sharedG++;
+            else if(layerArr[si]==='sliding') sharedS++;
           }
         }
         kvGlobalLayers = gCount - sharedG;
@@ -2855,27 +2881,28 @@ function fetchHFModel(id,statusId,cb){
         slidingWindow = cfg.sliding_window||1024;
         globalKvHeads = cfg.num_global_key_value_heads||kvHeads;
         globalHeadDim = cfg.global_head_dim||headDim;
-        // kvLayers = effective unique layers for the simple formula fallback
         kvLayers = kvGlobalLayers + kvSlidingLayers;
         archLabel='Hybrid sliding/global ('+kvGlobalLayers+'g+'+kvSlidingLayers+'s, '+shared+' shared)';
       }
       else if(ltSet['conv']||ltSet['mamba']||ltSet['ssm']||ltSet['recurrent']){
-        // Cat 4: Hybrid SSM/attention (LiquidAI, Bamba, Zamba)
+        // Cat 4: Hybrid SSM/attention (LiquidAI, Bamba, Zamba2)
         kvArchType='hybrid_ssm';
         var attLayers2=0;
-        cfg.layer_types.forEach(function(t){
-          if(t.indexOf('attention')>=0||t==='full'||t==='global') attLayers2++;
+        layerArr.forEach(function(t){
+          if(t.indexOf('attention')>=0||t==='full'||t==='global'||t==='hybrid') attLayers2++;
         });
         kvLayers = attLayers2 || 1;
+        // Zamba2: use kv_channels for head_dim if available
+        if(cfg.kv_channels) headDim = cfg.kv_channels;
         archLabel='Hybrid SSM ('+kvLayers+' attn of '+layers+' total)';
       }
       else {
-        // Unknown layer_types values — count anything with "attention" or "full"
+        // Unknown layer_types values — count anything attention-like
         var attLayers3=0;
-        cfg.layer_types.forEach(function(t){
-          if(t.indexOf('attention')>=0||t.indexOf('full')>=0||t.indexOf('global')>=0) attLayers3++;
+        layerArr.forEach(function(t){
+          if(t.indexOf('attention')>=0||t.indexOf('full')>=0||t.indexOf('global')>=0||t==='hybrid') attLayers3++;
         });
-        kvLayers = attLayers3 || layers; // fallback: all layers
+        kvLayers = attLayers3 || layers;
         archLabel='Hybrid ('+kvLayers+' attn of '+layers+' total)';
       }
     }
