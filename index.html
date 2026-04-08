@@ -1780,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.11</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.12</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -3654,7 +3654,7 @@ function renderDedNodeTable(){
     h+='<tr>'
       +'<td><input type="radio" class="prov-radio" name="hded" '+(d.active?'checked':'')+' onchange="selectDedNode('+i+')"></td>'
       +'<td><input type="text" value="'+d.name+'" style="width:62px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:'+(d.active?'var(--blue)':'var(--text1)')+';font-size:10px;font-weight:'+(d.active?'600':'400')+'" onchange="DED_NODES['+i+'].name=this.value"></td>'
-      +'<td><select id="ded-gpu-'+i+'" style="padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:10px;font-family:var(--mono)" onchange="DED_NODES['+i+'].gpu=this.value;if(DED_NODES['+i+'].active){S.hDedGpus=DED_NODES['+i+'].gpus;}calcHybrid()">'+gpuOpts+'</select></td>'
+      +'<td><select id="ded-gpu-'+i+'" style="padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:10px;font-family:var(--mono)" onchange="updateDedGpu('+i+',this.value)">'+gpuOpts+'</select></td>'
       +'<td><input type="number" value="'+d.gpus+'" min="1" max="64" style="width:36px;padding:2px 3px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)" onchange="DED_NODES['+i+'].gpus=+this.value;if(DED_NODES['+i+'].active){S.hDedGpus=+this.value;}calcHybrid()"></td>'
       +'<td><input type="number" value="'+d.rateMo+'" style="width:58px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:10px;font-family:var(--mono)" onchange="DED_NODES['+i+'].rateMo=+this.value;if(DED_NODES['+i+'].active){S.hDedRate=+this.value;}calcHybrid()"></td>'
       +'<td><button class="prov-del" onclick="delDedNode('+i+')">&#215;</button></td>'
@@ -3673,6 +3673,30 @@ function selectDedNode(i){
   S.hDedRate=DED_NODES[i].rateMo;
   S.hDedGpus=DED_NODES[i].gpus;
   renderDedNodeTable();
+  calcHybrid();
+}
+function updateDedGpu(i,gpu){
+  DED_NODES[i].gpu=gpu;
+  if(DED_NODES[i].active){S.hDedGpus=DED_NODES[i].gpus;}
+  // Look up live dedicated price for this provider+GPU combo
+  var name=DED_NODES[i].name;
+  var gpuUp=gpu.toUpperCase();
+  var price=_liveDedPriceMap[name+'|'+gpuUp];
+  if(!price){
+    var keys=Object.keys(_liveDedPriceMap);
+    for(var ki=0;ki<keys.length;ki++){
+      var parts=keys[ki].split('|');
+      if(parts[0]===name && (parts[1].indexOf(gpuUp)>=0 || gpuUp.indexOf(parts[1])>=0)){
+        price=_liveDedPriceMap[keys[ki]];
+        break;
+      }
+    }
+  }
+  if(price){
+    DED_NODES[i].rateMo=price;
+    if(DED_NODES[i].active){S.hDedRate=price;}
+    renderDedNodeTable();
+  }
   calcHybrid();
 }
 function delDedNode(i){
@@ -4839,6 +4863,7 @@ function showFleetValidateModal(){
 
 // ===== LIVE PRICING FROM PRICING WORKER =====
 var _livePriceMap = {}; // provider|GPU → rate (populated by loadLivePrices)
+var _liveDedPriceMap = {}; // provider|GPU → monthly rate per node
 function loadLivePrices(){
   if(!PRICING_WORKER) return; // Not configured yet — use hardcoded defaults
   fetch(PRICING_WORKER+'/prices')
@@ -4882,6 +4907,10 @@ function loadLivePrices(){
         return p.category==='gpu_cloud'&&p.pricing_type==='dedicated';
       });
       dedPrices.forEach(function(p){
+        var gpuType=(p.gpu||'').toUpperCase();
+        var dedKey=p.provider+'|'+gpuType;
+        var rateMo=Math.round(p.price_usd*30*24*(p.gpu_count||8));
+        _liveDedPriceMap[dedKey]=rateMo;
         var match=DED_NODES.find(function(x){return x.name===p.provider;});
         if(match&&p.price_usd){
           match.rateMo=Math.round(p.price_usd*30*24*(p.gpu_count||8));
@@ -4932,6 +4961,7 @@ function loadLivePrices(){
         if(document.getElementById('page-fleet').classList.contains('active')) calcFleet();
         console.log('gpu.calc: live prices loaded from pricing Worker');
         console.log('gpu.calc: price map keys:', Object.keys(_livePriceMap).join(', '));
+        console.log('gpu.calc: ded price map keys:', Object.keys(_liveDedPriceMap).join(', '));
       }
 
       T.fire('live_prices_loaded',{count:prices.length,updated:updated});
