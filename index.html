@@ -1780,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.7</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.8</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2821,7 +2821,7 @@ function fetchHFModel(id,statusId,cb){
     var cfg=d.config||{};
     var params=d.safetensors&&d.safetensors.total?d.safetensors.total/1e9:
       cfg.num_parameters?cfg.num_parameters/1e9:
-      (cfg.num_hidden_layers||32)*(cfg.hidden_size||4096)*4/1e9*3;
+      12*(cfg.num_hidden_layers||32)*Math.pow(cfg.hidden_size||4096,2)/1e9;
     params=Math.max(1,Math.round(params));
 
     // Base fields (every model has these)
