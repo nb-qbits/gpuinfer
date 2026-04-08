@@ -1780,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.16</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.18</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -4423,7 +4423,7 @@ function renderFleetLeftPanel(){
     [4,8,16,32,64,128,256].forEach(function(c){html+='<option value="'+c+'"'+(c===t.ctx?' selected':'')+'>'+c+'K</option>';});
     html+='</select></div>';
     html+='<div><div class="panel-label">GPU type</div>';
-    html+='<select class="fleet-tier-select" style="width:100%" onchange="var v=this.value.split('|');SF.tiers['+i+'].gpuName=v[0];SF.tiers['+i+'].gpuVram=+v[1];calcFleet()">';
+    html+='<select class="fleet-tier-select" style="width:100%" onchange="var v=this.value.split(String.fromCharCode(124));SF.tiers['+i+'].gpuName=v[0];SF.tiers['+i+'].gpuVram=+v[1];calcFleet()">';
     [['H100',80],['H200',141],['B100',192],['B200',180],['A100',80],['L40S',48],['MI300X',192]].forEach(function(g){
       var sel=(g[0]===t.gpuName&&+g[1]===t.gpuVram)?' selected':'';
       html+='<option value="'+g[0]+'|'+g[1]+'"'+sel+'>'+g[0]+' '+g[1]+'GB</option>';
@@ -4978,38 +4978,23 @@ function loadLivePrices(){
         }
       });
 
-      // ── Rebuild PROVIDERS from live price map to show all real combos ────
+      // ── Merge live prices into PROVIDERS — keep defaults, add new combos ──
       if(Object.keys(_livePriceMap).length > 0){
-        var wasActive = PROVIDERS.find(function(p){return p.active;});
-        var activeKey = wasActive ? wasActive.name+'|'+wasActive.gpu.toUpperCase().split(' ')[0] : '';
-        var newProviders = [];
-        var seen = {};
-        Object.keys(_livePriceMap).sort().forEach(function(key){
+        // Add any provider+GPU combos from live data that aren't already in PROVIDERS
+        Object.keys(_livePriceMap).forEach(function(key){
           var parts = key.split('|');
           var pName = parts[0], gpuRaw = parts[1];
-          // Map DB name to display name
           var gpuDisplay = gpuRaw;
           var match = CLOUD_GPU_OPTIONS.find(function(o){return o.toUpperCase().indexOf(gpuRaw)>=0;});
           if(match) gpuDisplay = match;
-          var dedup = pName+'|'+gpuDisplay;
-          if(seen[dedup]) return;
-          seen[dedup] = true;
-          var isActive = (key === activeKey || pName+'|'+gpuRaw === activeKey);
-          newProviders.push({name:pName, rate:Math.round(_livePriceMap[key]*100)/100, gpu:gpuDisplay, active:false});
-        });
-        // Restore active selection
-        if(newProviders.length > 0){
-          var restored = false;
-          if(wasActive){
-            newProviders.forEach(function(p){
-              if(p.name===wasActive.name && p.gpu===wasActive.gpu){p.active=true;restored=true;}
-            });
+          // Check if this combo already exists
+          var exists = PROVIDERS.find(function(x){
+            return x.name===pName && (x.gpu.toUpperCase().indexOf(gpuRaw)>=0 || gpuRaw.indexOf(x.gpu.toUpperCase().split(' ')[0])>=0);
+          });
+          if(!exists){
+            PROVIDERS.push({name:pName, rate:Math.round(_livePriceMap[key]*100)/100, gpu:gpuDisplay, active:false});
           }
-          if(!restored) newProviders[0].active = true;
-          PROVIDERS = newProviders;
-          var act = PROVIDERS.find(function(p){return p.active;});
-          if(act) S.cloudRate = act.rate;
-        }
+        });
       }
 
       // ── Show freshness badge ───────────────────────────────────────────────
