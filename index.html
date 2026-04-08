@@ -1414,7 +1414,7 @@ button{font-family:var(--sans);cursor:pointer}
         </div>
         <div class="oc" id="oc-cost" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
           <div style="padding:10px 14px 6px;border-bottom:1px solid var(--border)">
-            <div class="oc-label">5-year cost</div>
+            <div class="oc-label">Monthly cost</div>
           </div>
           <div style="display:flex;flex:1">
             <div style="flex:1;padding:8px 14px 10px;border-right:1px solid var(--border)">
@@ -1780,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.9</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.10</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2278,13 +2278,15 @@ function compute(){
   var tpMinRequired = minTp;
   
   var costPerGPUHr = S.cloudRate * (1-S.disc);
-  var cloudCost5yr = totalGPUs * costPerGPUHr * 8760 * 5;
+  var cloudMo = totalGPUs * costPerGPUHr * 730; // 730 hrs/mo avg
+  var cloudCost5yr = cloudMo * 12 * 5;
   var hwTotal = totalGPUs * S.hwCost;
-  var powerYr = totalGPUs * 0.7 * S.kwh * 8760; // ~700W per GPU avg
-  var onpremCost5yr = hwTotal + hwTotal*S.infraPct + (hwTotal*S.opexPct + powerYr)*S.amort;
+  var powerMo = totalGPUs * 0.7 * S.kwh * 730;
+  var onpremMo = hwTotal / (S.amort * 12) + powerMo + (hwTotal * S.opexPct / 12);
+  var onpremCost5yr = onpremMo * S.amort * 12 + hwTotal * S.infraPct;
   
   return {wGB,ohGB,kvPU,avail,upr,replicas,totalGPUs,gpuPerReplica,
-          kvTotal,vramPct,costPerGPUHr,cloudCost5yr,onpremCost5yr,
+          kvTotal,vramPct,costPerGPUHr,cloudCost5yr,onpremCost5yr,cloudMo,onpremMo,
           autoTp,tpAutoScaled,tpMinRequired,overflow,llmdInfo};
 }
 
@@ -2443,16 +2445,16 @@ function calc(){
   var fits=!C.overflow && (C.wGB+C.ohGB+C.kvPU<=(S.gpuVram*C.autoTp));
   document.getElementById('oc-gpus-badge').textContent=fits?'fits ✓':'needs multi-GPU';
   document.getElementById('oc-gpus-badge').className='oc-badge '+(fits?'good':'bad');
-  document.getElementById('oc-cost-val').textContent=fmtK(C.cloudCost5yr);
+  document.getElementById('oc-cost-val').textContent=fmtK(C.cloudMo)+'/mo';
   var activeProv = (typeof PROVIDERS!=='undefined'&&PROVIDERS.find(function(p){return p.active;}))||{name:'GCP'};
-  document.getElementById('oc-cost-sub').textContent=activeProv.name+' · on-demand · 5yr';
-  if(document.getElementById('oc-onprem-val')) document.getElementById('oc-onprem-val').textContent=fmtK(C.onpremCost5yr);
-  if(document.getElementById('oc-onprem-sub')) document.getElementById('oc-onprem-sub').textContent='hardware · '+S.amort+'yr amort';
-  var cheaper = C.onpremCost5yr < C.cloudCost5yr;
-  var diff = Math.abs(C.cloudCost5yr - C.onpremCost5yr);
+  document.getElementById('oc-cost-sub').textContent=activeProv.name+' · '+fmtK(C.cloudCost5yr)+' over 5yr';
+  if(document.getElementById('oc-onprem-val')) document.getElementById('oc-onprem-val').textContent=fmtK(C.onpremMo)+'/mo';
+  if(document.getElementById('oc-onprem-sub')) document.getElementById('oc-onprem-sub').textContent=S.amort+'yr amort · '+fmtK(C.onpremCost5yr)+' total';
+  var cheaper = C.onpremMo < C.cloudMo;
+  var diff = Math.abs(C.cloudMo - C.onpremMo);
   var verdictEl = document.getElementById('oc-cost-verdict');
   if(verdictEl){
-    verdictEl.textContent = cheaper ? '⬛ On-prem saves '+fmtK(diff)+' over 5yr' : '☁ Cloud saves '+fmtK(diff)+' over 5yr';
+    verdictEl.textContent = cheaper ? '⬛ On-prem saves '+fmtK(diff)+'/mo' : '☁ Cloud saves '+fmtK(diff)+'/mo';
     verdictEl.style.color = cheaper ? 'var(--green)' : 'var(--red)';
   }
   document.getElementById('oc-vram-val').textContent=Math.round(C.vramPct)+'%';
@@ -3199,7 +3201,7 @@ function renderProviderTable(){
     h+='<tr>'
       +'<td><input type="radio" class="prov-radio" name="prov" '+(p.active?'checked':'')+' onchange="selectProv('+i+')"></td>'
       +'<td><input type="text" value="'+p.name+'" style="width:70px;padding:2px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:'+(p.active?'var(--blue)':'var(--text1)')+';font-size:12px;font-weight:'+(p.active?'600':'400')+'" onchange="PROVIDERS['+i+'].name=this.value"></td>'
-      +'<td><select id="aprov-gpu-'+i+'" style="padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:10px;font-family:var(--mono)" onchange="PROVIDERS['+i+'].gpu=this.value">'+gpuOpts+'</select></td>'
+      +'<td><select id="aprov-gpu-'+i+'" style="padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:10px;font-family:var(--mono)" onchange="updateProvGpu('+i+',this.value)">'+gpuOpts+'</select></td>'
       +'<td><input type="number" value="'+p.rate.toFixed(2)+'" step="0.01" style="width:58px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-family:var(--mono);font-size:11px" onchange="updateProvRate('+i+',+this.value)"></td>'
       +'<td><button class="prov-del" onclick="delProv('+i+')">&#215;</button></td>'
       +'</tr>';
@@ -3212,6 +3214,17 @@ function renderProviderTable(){
 }
 function selectProv(i){PROVIDERS.forEach((p,j)=>p.active=j===i);S.cloudRate=PROVIDERS[i].rate;renderProviderTable();calc();}
 function updateProvRate(i,v){PROVIDERS[i].rate=v;if(PROVIDERS[i].active){S.cloudRate=v;calc();}}
+function updateProvGpu(i,gpu){
+  PROVIDERS[i].gpu=gpu;
+  // Look up live price for this provider+GPU combo
+  var key=PROVIDERS[i].name+'|'+gpu.toUpperCase();
+  if(_livePriceMap[key]){
+    PROVIDERS[i].rate=Math.round(_livePriceMap[key]*100)/100;
+    if(PROVIDERS[i].active){S.cloudRate=PROVIDERS[i].rate;}
+    renderProviderTable();
+    calc();
+  }
+}
 function delProv(i){PROVIDERS.splice(i,1);if(!PROVIDERS.some(p=>p.active)&&PROVIDERS.length){PROVIDERS[0].active=true;S.cloudRate=PROVIDERS[0].rate;}renderProviderTable();calc();}
 function addProvider(){
   PROVIDERS.push({name:'Custom',rate:2.50,gpu:'H100 SXM',active:false});
@@ -3604,7 +3617,7 @@ function renderHProviderTable(){
   PROVIDERS.forEach(function(p,i){
     h+='<tr><td><input type="radio" class="prov-radio" name="hprov" '+(p.active?'checked':'')+' onchange="selectHProv('+i+')"></td>'
       +'<td><input type="text" value="'+p.name+'" style="width:68px;padding:2px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:'+(p.active?'var(--blue)':'var(--text1)')+';font-size:11px;font-weight:'+(p.active?'600':'400')+'" onchange="PROVIDERS['+i+'].name=this.value"></td>'
-      +'<td><select id="hprov-gpu-'+i+'" style="padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:10px;font-family:var(--mono)" onchange="PROVIDERS['+i+'].gpu=this.value">'+gpuOpts+'</select></td>'
+      +'<td><select id="hprov-gpu-'+i+'" style="padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:10px;font-family:var(--mono)" onchange="updateProvGpu('+i+',this.value);renderHProviderTable();calcHybrid()">'+gpuOpts+'</select></td>'
       +'<td><input type="number" value="'+p.rate.toFixed(2)+'" step="0.01" style="width:52px;padding:2px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-family:var(--mono);font-size:11px" onchange="updateHProvRate('+i+',+this.value)"></td>'
       +'<td><button class="prov-del" onclick="delHProv('+i+')">&#215;</button></td>'
       +'</tr>';
@@ -4810,6 +4823,7 @@ function showFleetValidateModal(){
 
 
 // ===== LIVE PRICING FROM PRICING WORKER =====
+var _livePriceMap = {}; // provider|GPU → rate (populated by loadLivePrices)
 function loadLivePrices(){
   if(!PRICING_WORKER) return; // Not configured yet — use hardcoded defaults
   fetch(PRICING_WORKER+'/prices')
@@ -4834,6 +4848,8 @@ function loadLivePrices(){
       });
       Object.keys(bestByProvider).forEach(function(key){
         var best=bestByProvider[key];
+        // Store in global map for dropdown lookups
+        _livePriceMap[key] = best.perGPU;
         // Find matching PROVIDERS entry (same provider, same GPU family)
         var match=PROVIDERS.find(function(x){
           return x.name===best.provider&&x.gpu.toUpperCase().indexOf(best.gpu.toUpperCase())>=0;
