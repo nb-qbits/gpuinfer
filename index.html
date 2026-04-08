@@ -1179,7 +1179,7 @@ button{font-family:var(--sans);cursor:pointer}
           <div class="panel-label">Framework</div>
           <div class="chips-wrap">
             <button class="chip on" id="fw-vllm" onclick="setFW('vllm',this)">vLLM (recommended)</button>
-            <button class="chip" id="fw-naive" onclick="setFW('naive',this)">Naive / custom</button>
+            <button class="chip" id="fw-naive" onclick="setFW('naive',this)" title="No memory paging — uses ~85% of GPU memory vs vLLM's 95%. Fewer users per GPU but simpler setup.">Naive / custom</button>
           </div>
           <div class="panel-label">Mode</div>
           <div class="chips-wrap">
@@ -1324,8 +1324,8 @@ button{font-family:var(--sans);cursor:pointer}
           <div>
             <div class="panel-label" style="margin-bottom:6px">Framework</div>
             <div class="chips-wrap">
-              <button class="chip on" id="vp-fw-vllm" onclick="setFW('vllm',this);document.getElementById('vp-fw-naive').classList.remove('on');this.classList.add('on')">vLLM</button>
-              <button class="chip" id="vp-fw-naive" onclick="setFW('naive',this);document.getElementById('vp-fw-vllm').classList.remove('on');this.classList.add('on')">Naive</button>
+              <button class="chip on" id="vp-fw-vllm" onclick="setFW('vllm',this);document.getElementById('vp-fw-naive').classList.remove('on');this.classList.add('on')" title="PagedAttention — 95% GPU memory utilisation, prefix caching support">vLLM</button>
+              <button class="chip" id="vp-fw-naive" onclick="setFW('naive',this);document.getElementById('vp-fw-vllm').classList.remove('on');this.classList.add('on')" title="No paging — 85% GPU memory utilisation. Fewer users per GPU.">Naive</button>
             </div>
           </div>
           <div>
@@ -1543,7 +1543,7 @@ button{font-family:var(--sans);cursor:pointer}
                 <label>Framework</label>
                 <div class="chips-wrap">
                   <button class="chip on" id="l3-vllm" onclick="setFW('vllm',this)">vLLM paging ON</button>
-                  <button class="chip" id="l3-naive" onclick="setFW('naive',this)">Naive (no paging)</button>
+                  <button class="chip" id="l3-naive" onclick="setFW('naive',this)" title="No memory paging — 85% GPU memory utilisation. Fewer users per GPU.">Naive (no paging)</button>
                 </div>
               </div>
               <div class="layer-field">
@@ -1780,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.8</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.9</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2239,6 +2239,36 @@ function compute(){
   var replicas = Math.ceil(S.users / upr);
   var gpuPerReplica = autoTp;
   var totalGPUs = replicas * gpuPerReplica;
+
+  // ── llm-d disaggregated mode ────────────────────────────────────────────
+  // Prefill and decode run on separate GPU pools
+  // Prefill: compute-heavy, no KV cache needed (short-lived)
+  // Decode: memory-heavy, KV cache lives here
+  var llmdInfo = null;
+  if(S.mode==='llmd'){
+    // Decode pool: sized by KV cache (same as standard replicas)
+    var decodeGpus = Math.max(autoTp, S.dcGpus * autoTp);
+    var decodeReplicas = Math.max(1, Math.ceil(decodeGpus / autoTp));
+    // Recalculate: each decode replica serves upr users
+    var decodeUpr = upr;
+    decodeReplicas = Math.ceil(S.users / decodeUpr);
+    decodeGpus = decodeReplicas * autoTp;
+
+    // Prefill pool: compute-bound, sized by throughput not memory
+    // User sets prefill GPUs directly — these handle initial prompt processing
+    var prefillGpus = Math.max(autoTp, S.pfGpus * autoTp);
+
+    totalGPUs = decodeGpus + prefillGpus;
+    replicas = decodeReplicas; // for display — "replicas" refers to decode replicas
+
+    llmdInfo = {
+      prefillGpus: prefillGpus,
+      decodeGpus: decodeGpus,
+      decodeReplicas: decodeReplicas,
+      prefillReplicas: Math.ceil(prefillGpus / autoTp)
+    };
+  }
+
   var kvTotal = kvPU * S.users;
   var vramPct = Math.min((wGB + ohGB + kvPU*Math.min(S.users,upr)) / totalVram * 100, 100);
   
@@ -2250,11 +2280,12 @@ function compute(){
   var costPerGPUHr = S.cloudRate * (1-S.disc);
   var cloudCost5yr = totalGPUs * costPerGPUHr * 8760 * 5;
   var hwTotal = totalGPUs * S.hwCost;
-  var onpremCost5yr = hwTotal + hwTotal*S.infraPct + hwTotal*S.opexPct*5;
+  var powerYr = totalGPUs * 0.7 * S.kwh * 8760; // ~700W per GPU avg
+  var onpremCost5yr = hwTotal + hwTotal*S.infraPct + (hwTotal*S.opexPct + powerYr)*S.amort;
   
   return {wGB,ohGB,kvPU,avail,upr,replicas,totalGPUs,gpuPerReplica,
           kvTotal,vramPct,costPerGPUHr,cloudCost5yr,onpremCost5yr,
-          autoTp,tpAutoScaled,tpMinRequired,overflow};
+          autoTp,tpAutoScaled,tpMinRequired,overflow,llmdInfo};
 }
 
 function fmtGB(n){ return n>=1?n.toFixed(1)+' GB':Math.round(n*1000)+' MB'; }
@@ -2303,7 +2334,7 @@ function calc(){
   document.getElementById('ph-users-sum').textContent =
     S.users+' users · '+S.ctx+'K ctx · '+Math.round(S.hitrate*100)+'% prefix';
   document.getElementById('ph-inf-sum').textContent =
-    (S.fw==='vllm'?'vLLM':'Naive')+' · '+(S.mode==='llmd'?'llm-d':'standard')+' · TP='+C.autoTp;
+    (S.fw==='vllm'?'vLLM':'Naive')+' · '+(S.mode==='llmd'?'llm-d ('+S.pfGpus+'pf+'+S.dcGpus+'dc)':'standard')+' · TP='+C.autoTp;
   document.getElementById('ph-cost-sum').textContent =
     S.dep+' · GCP $'+S.cloudRate.toFixed(2)+'/hr · '+(S.disc>0?'-'+Math.round(S.disc*100)+'%':'no discount');
   // ── BUG-027: TP warning banners ─────────────────────────────────────────
@@ -2380,7 +2411,7 @@ function calc(){
   document.getElementById('st-wt').textContent=fmtGB(C.wGB);
   document.getElementById('st-wt-sub').textContent='+'+fmtGB(C.ohGB)+' overhead';
   document.getElementById('st-kv').textContent=fmtGB(C.avail)+(C.autoTp>1?' ('+C.autoTp+'× GPU)':'');
-  document.getElementById('st-kv-sub').textContent='per replica ('+(S.fw==='vllm'?'95%':'85%')+' PA)'+(C.autoTp>1?' · '+C.autoTp+' GPUs':' · 1 GPU');
+  document.getElementById('st-kv-sub').textContent='per replica ('+(S.fw==='vllm'?'95% vLLM':'85% naive')+' PA)'+(C.autoTp>1?' · '+C.autoTp+' GPUs':' · 1 GPU');
   document.getElementById('st-kpu').textContent=fmtGB(C.kvPU);
   var kvBytes=kvBytesPerToken();
   var kvTokLabel=kvBytes>=1e6?(kvBytes/1e6).toFixed(2)+' MB/tok':Math.round(kvBytes/1000)+' KB/tok';
@@ -2397,15 +2428,24 @@ function calc(){
   }
   document.getElementById('st-kpu-sub').textContent=kvFormula;
   document.getElementById('st-upr').textContent=C.upr;
-  document.getElementById('st-upr-sub').textContent=C.replicas+' replicas × '+C.autoTp+'GPU'+(C.tpAutoScaled?' (auto)':'');
+  if(C.llmdInfo){
+    document.getElementById('st-upr-sub').textContent=C.llmdInfo.decodeReplicas+' decode + '+C.llmdInfo.prefillReplicas+' prefill';
+  } else {
+    document.getElementById('st-upr-sub').textContent=C.replicas+' replicas × '+C.autoTp+'GPU'+(C.tpAutoScaled?' (auto)':'');
+  }
   // Outcome cards
   document.getElementById('oc-gpus-val').textContent=C.totalGPUs;
-  document.getElementById('oc-gpus-sub').textContent=S.gpuName+' '+S.gpuVram+'GB · '+C.replicas+' replicas';
+  if(C.llmdInfo){
+    document.getElementById('oc-gpus-sub').textContent=S.gpuName+' '+S.gpuVram+'GB · '+C.llmdInfo.prefillGpus+'pf + '+C.llmdInfo.decodeGpus+'dc';
+  } else {
+    document.getElementById('oc-gpus-sub').textContent=S.gpuName+' '+S.gpuVram+'GB · '+C.replicas+' replicas';
+  }
   var fits=!C.overflow && (C.wGB+C.ohGB+C.kvPU<=(S.gpuVram*C.autoTp));
   document.getElementById('oc-gpus-badge').textContent=fits?'fits ✓':'needs multi-GPU';
   document.getElementById('oc-gpus-badge').className='oc-badge '+(fits?'good':'bad');
   document.getElementById('oc-cost-val').textContent=fmtK(C.cloudCost5yr);
-  document.getElementById('oc-cost-sub').textContent='GCP · on-demand · 5yr';
+  var activeProv = (typeof PROVIDERS!=='undefined'&&PROVIDERS.find(function(p){return p.active;}))||{name:'GCP'};
+  document.getElementById('oc-cost-sub').textContent=activeProv.name+' · on-demand · 5yr';
   if(document.getElementById('oc-onprem-val')) document.getElementById('oc-onprem-val').textContent=fmtK(C.onpremCost5yr);
   if(document.getElementById('oc-onprem-sub')) document.getElementById('oc-onprem-sub').textContent='hardware · '+S.amort+'yr amort';
   var cheaper = C.onpremCost5yr < C.cloudCost5yr;
