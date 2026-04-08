@@ -1780,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.6</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.7</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2634,6 +2634,18 @@ function qsComplete(){
     S.numLayers=qsData.model.layers;
     S.numKvHeads=qsData.model.kvHeads;
     S.headDim=qsData.model.headDim;
+    // Architecture-specific KV fields
+    S.kvArchType=qsData.model.kvArchType||null;
+    S.kvLayers=qsData.model.kvLayers||null;
+    S.kvGlobalLayers=qsData.model.kvGlobalLayers!=null?qsData.model.kvGlobalLayers:null;
+    S.kvSlidingLayers=qsData.model.kvSlidingLayers!=null?qsData.model.kvSlidingLayers:null;
+    S.slidingWindow=qsData.model.slidingWindow||null;
+    S.globalKvHeads=qsData.model.globalKvHeads||null;
+    S.globalHeadDim=qsData.model.globalHeadDim||null;
+    S.kvLoraRank=qsData.model.kvLoraRank||null;
+    S.qkRopeHeadDim=qsData.model.qkRopeHeadDim||null;
+    S.activeExperts=qsData.model.activeExperts||null;
+    S.totalExperts=qsData.model.totalExperts||null;
   }
   S.users=qsData.users;
   S.ctx=qsData.ctx;
@@ -2662,6 +2674,13 @@ function selectQSModel(idx,btn){
   if(m){
     S.params=m.params;S.modelLabel=m.name;S.attn=m.attn;
     S.numLayers=m.layers;S.numKvHeads=m.kvHeads;S.headDim=m.headDim;
+    S.kvArchType=m.kvArchType||null;S.kvLayers=m.kvLayers||null;
+    S.kvGlobalLayers=m.kvGlobalLayers!=null?m.kvGlobalLayers:null;
+    S.kvSlidingLayers=m.kvSlidingLayers!=null?m.kvSlidingLayers:null;
+    S.slidingWindow=m.slidingWindow||null;S.globalKvHeads=m.globalKvHeads||null;
+    S.globalHeadDim=m.globalHeadDim||null;S.kvLoraRank=m.kvLoraRank||null;
+    S.qkRopeHeadDim=m.qkRopeHeadDim||null;
+    S.activeExperts=m.activeExperts||null;S.totalExperts=m.totalExperts||null;
     document.getElementById('ph-model-sum').textContent=m.name+' · '+(m.attn==='gqa'?'GQA':'MHA')+' · '+S.prec.toUpperCase();
     // Highlight Next button to guide user
     var nextBtn=document.querySelector('#qs-s1 .btn-primary');
