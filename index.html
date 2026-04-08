@@ -1780,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.10</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.11</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2322,6 +2322,7 @@ function usersToPos(n){
   return Math.round((Math.log(Math.max(1,n))-minV)/(maxV-minV)*100);
 }
 function fmtK(n){ return '$'+Math.round(n/1000)+'K'; }
+function fmtMo(n){ return n>=1000?'$'+(n/1000).toFixed(1)+'K':'$'+Math.round(n); }
 function fmtNum(n){ return n.toLocaleString(); }
 
 // ===== MAIN CALC =====
@@ -2445,16 +2446,16 @@ function calc(){
   var fits=!C.overflow && (C.wGB+C.ohGB+C.kvPU<=(S.gpuVram*C.autoTp));
   document.getElementById('oc-gpus-badge').textContent=fits?'fits ✓':'needs multi-GPU';
   document.getElementById('oc-gpus-badge').className='oc-badge '+(fits?'good':'bad');
-  document.getElementById('oc-cost-val').textContent=fmtK(C.cloudMo)+'/mo';
+  document.getElementById('oc-cost-val').textContent=fmtMo(C.cloudMo)+'/mo';
   var activeProv = (typeof PROVIDERS!=='undefined'&&PROVIDERS.find(function(p){return p.active;}))||{name:'GCP'};
   document.getElementById('oc-cost-sub').textContent=activeProv.name+' · '+fmtK(C.cloudCost5yr)+' over 5yr';
-  if(document.getElementById('oc-onprem-val')) document.getElementById('oc-onprem-val').textContent=fmtK(C.onpremMo)+'/mo';
+  if(document.getElementById('oc-onprem-val')) document.getElementById('oc-onprem-val').textContent=fmtMo(C.onpremMo)+'/mo';
   if(document.getElementById('oc-onprem-sub')) document.getElementById('oc-onprem-sub').textContent=S.amort+'yr amort · '+fmtK(C.onpremCost5yr)+' total';
   var cheaper = C.onpremMo < C.cloudMo;
   var diff = Math.abs(C.cloudMo - C.onpremMo);
   var verdictEl = document.getElementById('oc-cost-verdict');
   if(verdictEl){
-    verdictEl.textContent = cheaper ? '⬛ On-prem saves '+fmtK(diff)+'/mo' : '☁ Cloud saves '+fmtK(diff)+'/mo';
+    verdictEl.textContent = cheaper ? '⬛ On-prem saves '+fmtMo(diff)+'/mo' : '☁ Cloud saves '+fmtMo(diff)+'/mo';
     verdictEl.style.color = cheaper ? 'var(--green)' : 'var(--red)';
   }
   document.getElementById('oc-vram-val').textContent=Math.round(C.vramPct)+'%';
@@ -3217,9 +3218,23 @@ function updateProvRate(i,v){PROVIDERS[i].rate=v;if(PROVIDERS[i].active){S.cloud
 function updateProvGpu(i,gpu){
   PROVIDERS[i].gpu=gpu;
   // Look up live price for this provider+GPU combo
-  var key=PROVIDERS[i].name+'|'+gpu.toUpperCase();
-  if(_livePriceMap[key]){
-    PROVIDERS[i].rate=Math.round(_livePriceMap[key]*100)/100;
+  // Try exact match, then partial matches (GPU naming varies between pricing DB and dropdown)
+  var name=PROVIDERS[i].name;
+  var gpuUp=gpu.toUpperCase();
+  var price=_livePriceMap[name+'|'+gpuUp];
+  if(!price){
+    // Try matching just the GPU family (e.g. "H100" matches "H100 SXM")
+    var keys=Object.keys(_livePriceMap);
+    for(var ki=0;ki<keys.length;ki++){
+      var parts=keys[ki].split('|');
+      if(parts[0]===name && (parts[1].indexOf(gpuUp)>=0 || gpuUp.indexOf(parts[1])>=0)){
+        price=_livePriceMap[keys[ki]];
+        break;
+      }
+    }
+  }
+  if(price){
+    PROVIDERS[i].rate=Math.round(price*100)/100;
     if(PROVIDERS[i].active){S.cloudRate=PROVIDERS[i].rate;}
     renderProviderTable();
     calc();
@@ -4916,6 +4931,7 @@ function loadLivePrices(){
         if(document.getElementById('page-hybrid').classList.contains('active')) calcHybrid();
         if(document.getElementById('page-fleet').classList.contains('active')) calcFleet();
         console.log('gpu.calc: live prices loaded from pricing Worker');
+        console.log('gpu.calc: price map keys:', Object.keys(_livePriceMap).join(', '));
       }
 
       T.fire('live_prices_loaded',{count:prices.length,updated:updated});
