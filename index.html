@@ -1780,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.12</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.13</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -1844,7 +1844,7 @@ var T=(function(){
   function fire(event,data){
     try{
       var payload={sid:sid,event:event,data:data||{},ts:Date.now(),tss:Math.round((Date.now()-sessionStart)/1000),url:location.hash};
-      navigator.sendBeacon&&navigator.sendBeacon(apiUrl('/api/track'),JSON.stringify(payload));
+      navigator.sendBeacon&&API_BASE&&navigator.sendBeacon(apiUrl('/api/track'),JSON.stringify(payload));
     }catch(e){}
   }
   setInterval(function(){fire('heartbeat',{t:Math.round((Date.now()-sessionStart)/1000)});},30000);
@@ -1924,7 +1924,7 @@ var MODELS = [
   {name:'Llama 3.3 70B', org:'meta',params:70, layers:80, kvHeads:8, headDim:128,attn:'gqa',hfId:'meta-llama/Llama-3.3-70B-Instruct'},
   // Qwen
   {name:'Qwen 2.5 7B',   org:'qwen',params:7,  layers:28, kvHeads:4, headDim:128,attn:'gqa',hfId:'Qwen/Qwen2.5-7B-Instruct'},
-  {name:'Qwen 2.5 14B',  org:'qwen',params:14, layers:40, kvHeads:8, headDim:128,attn:'gqa',hfId:'Qwen/Qwen2.5-14B-Instruct'},
+  {name:'Qwen 2.5 14B',  org:'qwen',params:14, layers:48, kvHeads:8, headDim:128,attn:'gqa',hfId:'Qwen/Qwen2.5-14B-Instruct'},
   {name:'Qwen 2.5 32B',  org:'qwen',params:32, layers:64, kvHeads:8, headDim:128,attn:'gqa',hfId:'Qwen/Qwen2.5-32B-Instruct'},
   {name:'Qwen 2.5 72B',  org:'qwen',params:72, layers:80, kvHeads:8, headDim:128,attn:'gqa',hfId:'Qwen/Qwen2.5-72B-Instruct'},
   {name:'QwQ 32B',       org:'qwen',params:32, layers:64, kvHeads:8, headDim:128,attn:'gqa',hfId:'Qwen/QwQ-32B'},
@@ -3963,6 +3963,11 @@ function checkAdminTokenValue(token){
 function loadAdminData(period,token){
   var tok=token||localStorage.getItem(ADMIN_TOKEN_KEY);
   if(!tok)return;
+  if(!API_BASE){
+    document.getElementById('admin-locked-screen').classList.add('hidden');
+    document.getElementById('admin-content').classList.remove('hidden');
+    return;
+  }
   fetch(apiUrl('/api/admin?period='+period),{headers:{'X-Admin-Token':tok}})
     .then(r=>{if(!r.ok)throw new Error('Unauthorized');return r.json();})
     .then(function(d){
@@ -4004,6 +4009,7 @@ function renderAdminData(d){
 // ===== LEAD & INTENT =====
 function submitLead(){
   var emailEl=document.getElementById('lead-email');
+  if(!emailEl) return; // Email box was replaced with Sheets button
   var email=emailEl.value.trim();
   if(!email||!email.includes('@')){
     emailEl.style.border='1px solid var(--red)';
@@ -4013,14 +4019,13 @@ function submitLead(){
   var C=compute();
   T.fire('lead_email',{email_hash:btoa(email).substring(0,16),org:'unknown',model:S.modelLabel,gpus:C.totalGPUs,cost:Math.round(C.cloudCost5yr)});
   var payload={email:email,model:S.modelLabel,users:S.users,ctx:S.ctx,gpus:C.totalGPUs,cost:C.cloudCost5yr};
-  // Try Worker first, fall back to Formspree
-  var workerPromise=fetch(apiUrl('/api/leads'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-  var formspreeId='xpwzgkqb'; // ← Formspree fallback always enabled
+  if(API_BASE){
+    fetch(apiUrl('/api/leads'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(function(){});
+  }
+  var formspreeId='xpwzgkqb';
   if(formspreeId){
     fetch('https://formspree.io/f/'+formspreeId,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)}).catch(function(){});
   }
-  workerPromise.catch(function(){});
-  // Show confirmation immediately
   emailEl.value='';
   emailEl.placeholder='✓ Sent! Check your inbox shortly';
   emailEl.style.border='1px solid var(--green)';
@@ -4048,7 +4053,7 @@ function submitIntentLead(){
   closeIntent();
 }
 function submitLeadEmail(email){
-  fetch(apiUrl('/api/leads'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,source:'intent'})}).catch(()=>{});
+  if(API_BASE) fetch(apiUrl('/api/leads'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,source:'intent'})}).catch(()=>{});
 }
 function closeIntent(){document.getElementById('intent-modal').classList.remove('open');}
 function dismissLI(){
@@ -4890,16 +4895,21 @@ function loadLivePrices(){
         var best=bestByProvider[key];
         // Store in global map for dropdown lookups
         _livePriceMap[key] = best.perGPU;
-        // Find matching PROVIDERS entry (same provider, same GPU family)
-        var match=PROVIDERS.find(function(x){
-          return x.name===best.provider&&x.gpu.toUpperCase().indexOf(best.gpu.toUpperCase())>=0;
+        // Find matching PROVIDERS entry — must match BOTH provider name AND GPU family
+        // e.g. "GCP|H100" matches PROVIDERS entry {name:'GCP', gpu:'H100 SXM'}
+        // but NOT {name:'GCP', gpu:'A100 80GB'}
+        var bestGpuUp = best.gpu.toUpperCase();
+        PROVIDERS.forEach(function(x){
+          if(x.name!==best.provider) return;
+          var xGpuUp = x.gpu.toUpperCase();
+          // Match: "H100" in "H100 SXM" or "A100" in "A100 80GB"
+          if(xGpuUp.indexOf(bestGpuUp)>=0 || bestGpuUp.indexOf(xGpuUp.split(' ')[0])>=0){
+            if(Math.abs(best.perGPU-x.rate)/Math.max(x.rate,0.01)>0.01){
+              x.rate=Math.round(best.perGPU*100)/100;
+              updated=true;
+            }
+          }
         });
-        // Fallback: match just by provider name (first entry)
-        if(!match) match=PROVIDERS.find(function(x){return x.name===best.provider;});
-        if(match&&Math.abs(best.perGPU-match.rate)/match.rate>0.01){
-          match.rate=Math.round(best.perGPU*100)/100;
-          updated=true;
-        }
       });
 
       // ── Update dedicated node pricing (DED_NODES array) ───────────────────
