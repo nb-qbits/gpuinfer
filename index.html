@@ -1780,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.20</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.21</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -1896,7 +1896,7 @@ var PROVIDERS = [
   {name:'RunPod',rate:2.72,gpu:'H100 SXM',active:false},
   {name:'Azure',rate:6.98,gpu:'H100 SXM',active:false},
   {name:'Vast.ai',rate:0.24,gpu:'H100 SXM',active:false},
-];
+  ];
 
 var DED_NODES = [
   {name:'CoreWeave', gpu:'H100 SXM', gpus:8, rateMo:18000, active:true},
@@ -3196,7 +3196,7 @@ function renderProviderTable(){
   var h='<tr><th></th><th>Provider</th><th>GPU</th><th>$/hr</th><th></th></tr>';
   var lpm = (typeof _livePriceMap !== 'undefined' && _livePriceMap) ? _livePriceMap : {};
   PROVIDERS.forEach(function(p,i){
-    // Build GPU options from live prices for this specific provider only
+    // Build GPU options from live prices for this provider, plus Custom
     var provGpuKeys = Object.keys(lpm).filter(function(k){return k.split('|')[0]===p.name;});
     var gpuOpts = '';
     if(provGpuKeys.length > 0){
@@ -3207,7 +3207,6 @@ function renderProviderTable(){
         gpuOpts += '<option value="'+display+'">'+display+'</option>';
       });
     } else {
-      // No live prices for this provider — show full GPU list
       gpuOpts = CLOUD_GPU_OPTIONS.map(function(g){return '<option value="'+g+'">'+g+'</option>';}).join('');
     }
     gpuOpts += '<option value="Custom">Custom</option>';
@@ -4975,22 +4974,21 @@ function loadLivePrices(){
         }
       });
 
-      // ── Merge live prices into PROVIDERS — keep defaults, add new combos ──
+      // ── Update live rates for existing PROVIDERS — never add new rows ──
       if(Object.keys(_livePriceMap).length > 0){
-        // Add any provider+GPU combos from live data that aren't already in PROVIDERS
-        Object.keys(_livePriceMap).forEach(function(key){
-          var parts = key.split('|');
-          var pName = parts[0], gpuRaw = parts[1];
-          var gpuDisplay = gpuRaw;
-          var match = CLOUD_GPU_OPTIONS.find(function(o){return o.toUpperCase().indexOf(gpuRaw)>=0;});
-          if(match) gpuDisplay = match;
-          // Check if this combo already exists
-          var exists = PROVIDERS.find(function(x){
-            return x.name===pName && (x.gpu.toUpperCase().indexOf(gpuRaw)>=0 || gpuRaw.indexOf(x.gpu.toUpperCase().split(' ')[0])>=0);
-          });
-          if(!exists){
-            PROVIDERS.push({name:pName, rate:Math.round(_livePriceMap[key]*100)/100, gpu:gpuDisplay, active:false});
+        PROVIDERS.forEach(function(p){
+          var gpuUp = p.gpu.toUpperCase();
+          var price = _livePriceMap[p.name+'|'+gpuUp];
+          if(!price){
+            var keys = Object.keys(_livePriceMap);
+            for(var ki=0;ki<keys.length;ki++){
+              var parts=keys[ki].split('|');
+              if(parts[0]===p.name && (parts[1].indexOf(gpuUp)>=0||gpuUp.indexOf(parts[1])>=0)){
+                price=_livePriceMap[keys[ki]]; break;
+              }
+            }
           }
+          if(price) p.rate = Math.round(price*100)/100;
         });
       }
 
