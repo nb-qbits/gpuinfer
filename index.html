@@ -1680,6 +1680,7 @@ button{font-family:var(--sans);cursor:pointer}
           <div class="slider-row"><label>GPUs needed</label><input type="range" min="1" max="64" step="1" value="2" id="h-gpus" oninput="S.hGpus=+this.value;calcHybrid()"><span class="slider-val mono" id="hv-gpus">2</span></div>
           <div class="slider-row"><label>GPUs running</label><input type="range" min="1" max="128" step="1" value="16" id="h-run" oninput="S.hRun=+this.value;calcHybrid()"><span class="slider-val mono" id="hv-run">16</span></div>
           <div class="slider-row"><label>HW price ($K)</label><input type="range" min="5" max="60" step="1" value="25" id="h-hw" oninput="S.hHw=+this.value*1000;calcHybrid()"><span class="slider-val mono" id="hv-hw">$25K</span></div>
+          <div class="slider-row" style="align-items:flex-start"><label style="padding-top:4px">On-prem GPU</label><div style="display:flex;flex-wrap:wrap;gap:4px" id="h-gpu-chips"></div></div>
           <div class="slider-row"><label>Avg utilisation</label><input type="range" min="5" max="100" step="5" value="30" id="h-util" oninput="S.hUtil=+this.value/100;calcHybrid()"><span class="slider-val mono" id="hv-util">30%</span></div>
           <div class="slider-row"><label>Amortisation</label><input type="range" min="1" max="7" step="1" value="5" id="h-amort" oninput="S.hAmort=+this.value;calcHybrid()"><span class="slider-val mono" id="hv-amort">5 yrs</span></div>
           <button class="add-prov" onclick="document.getElementById('h-extra').classList.toggle('hidden')">+ add cost (power, ops, networking...)</button>
@@ -1780,7 +1781,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.25</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.26</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -1880,7 +1881,7 @@ var S = {
   dep:'cloud', cloudRate:3.00, disc:0,
   hwCost:25000, amort:5, kwh:0.10, infraPct:0, opexPct:0,
   // Hybrid
-  hGpus:2, hRun:16, hHw:25000, hUtil:0.30, hAmort:5, hKwh:0.10,
+  hGpus:2, hRun:16, hHw:25000, hGpuName:'H100', hUtil:0.30, hAmort:5, hKwh:0.10,
   hSplit:null, // null = auto from utilisation; number = manual override
   hDedRate:18000, // dedicated node $/mo for 8-GPU node (CoreWeave default)
   hDedGpus:8,    // GPUs per dedicated node
@@ -2012,6 +2013,7 @@ if(liDismissed) document.getElementById('li-card').classList.add('hidden');
 renderProviderTable();
 renderHProviderTable();
 renderDedNodeTable();
+renderHGpuChips();
 renderModelChips('all');
 renderQSModels('all');
 buildQSProgress(1);
@@ -3678,21 +3680,8 @@ function renderDedNodeTable(){
   if(!t)return;
   var h='<tr><th></th><th style="font-size:9px">Provider</th><th style="font-size:9px">GPU</th><th style="font-size:9px">N</th><th style="font-size:9px">$/mo</th><th></th></tr>';
   DED_NODES.forEach(function(d,i){
-    // Build GPU options from live ded price map for this provider only
-    var lpdm=(typeof _liveDedPriceMap!=='undefined'&&_liveDedPriceMap)?_liveDedPriceMap:{};
-    var dedKeys=Object.keys(lpdm).filter(function(k){return k.split('|')[0]===d.name;});
-    var gpuOpts='';
-    if(dedKeys.length>0){
-      dedKeys.forEach(function(k){
-        var g=k.split('|')[1];
-        var match=GPU_OPTIONS.find(function(o){return o.toUpperCase().indexOf(g)>=0||g.indexOf(o.toUpperCase().split(' ')[0])>=0;});
-        var display=match||g;
-        gpuOpts+='<option value="'+display+'">'+display+'</option>';
-      });
-    } else {
-      gpuOpts=GPU_OPTIONS.map(function(g){return '<option value="'+g+'">'+g+'</option>';}).join('');
-    }
-    gpuOpts+='<option value="Custom">Custom</option>';
+    // Build options without selected attr — we set .value after render
+    var gpuOpts=GPU_OPTIONS.map(function(g){return '<option value="'+g+'">'+g+'</option>';}).join('');
     h+='<tr>'
       +'<td><input type="radio" class="prov-radio" name="hded" '+(d.active?'checked':'')+' onchange="selectDedNode('+i+')"></td>'
       +'<td><input type="text" value="'+d.name+'" style="width:62px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:'+(d.active?'var(--blue)':'var(--text1)')+';font-size:10px;font-weight:'+(d.active?'600':'400')+'" onchange="DED_NODES['+i+'].name=this.value"></td>'
@@ -3720,34 +3709,25 @@ function selectDedNode(i){
 function updateDedGpu(i,gpu){
   DED_NODES[i].gpu=gpu;
   if(DED_NODES[i].active){S.hDedGpus=DED_NODES[i].gpus;}
+  // Look up live dedicated price for this provider+GPU combo
   var name=DED_NODES[i].name;
   var gpuUp=gpu.toUpperCase();
-  // Exact match first, then partial — key is short ("H100"), dropdown is long ("H100 SXM")
   var price=_liveDedPriceMap[name+'|'+gpuUp];
   if(!price){
     var keys=Object.keys(_liveDedPriceMap);
     for(var ki=0;ki<keys.length;ki++){
       var parts=keys[ki].split('|');
-      if(parts[0]===name){
-        var kGpu=parts[1];
-        if(gpuUp.indexOf(kGpu)>=0||kGpu.indexOf(gpuUp)>=0){price=_liveDedPriceMap[keys[ki]];break;}
+      if(parts[0]===name && (parts[1].indexOf(gpuUp)>=0 || gpuUp.indexOf(parts[1])>=0)){
+        price=_liveDedPriceMap[keys[ki]];
+        break;
       }
     }
   }
   if(price){
     DED_NODES[i].rateMo=price;
     if(DED_NODES[i].active){S.hDedRate=price;}
+    renderDedNodeTable();
   }
-  // Sync hw price slider when active node GPU changes
-  if(DED_NODES[i].active){
-    var HW={'H100':25000,'H200':32000,'B100':35000,'B200':45000,'B300':60000,
-      'A100':15000,'A100 80GB':15000,'A100 40GB':10000,'H20':12000,'L40S':9000,
-      'MI300X':25000,'MI325X':30000,'MI350X':40000,'A40':6000,'A6000':8000};
-    var hw=HW[gpu];
-    if(!hw){var gU=gpu.toUpperCase();Object.keys(HW).forEach(function(k){if(!hw&&(gU.indexOf(k.toUpperCase())>=0||k.toUpperCase().indexOf(gU)>=0))hw=HW[k];});}
-    if(hw){S.hHw=hw;var sl=document.getElementById('h-hw'),vl=document.getElementById('hv-hw');if(sl)sl.value=hw/1000;if(vl)vl.textContent='$'+(hw/1000)+'K';}
-  }
-  renderDedNodeTable();
   calcHybrid();
 }
 function delDedNode(i){
@@ -3781,6 +3761,38 @@ function setHybridSplit(val){
   calcHybrid();
 }
 
+// On-prem GPU chips for Hybrid page — drives S.hHw
+var H_GPU_HW=[
+  {name:'H100', vram:80,  hw:25000, label:'H100 80GB'},
+  {name:'H200', vram:141, hw:32000, label:'H200 141GB'},
+  {name:'B100', vram:192, hw:35000, label:'B100 192GB'},
+  {name:'B200', vram:180, hw:45000, label:'B200 180GB'},
+  {name:'B300', vram:288, hw:60000, label:'B300 288GB'},
+  {name:'A100', vram:80,  hw:15000, label:'A100 80GB'},
+  {name:'L40S', vram:48,  hw:9000,  label:'L40S 48GB'},
+  {name:'MI300X',vram:192,hw:25000, label:'MI300X 192GB'},
+];
+function renderHGpuChips(){
+  var wrap=document.getElementById('h-gpu-chips');
+  if(!wrap) return;
+  wrap.innerHTML='';
+  H_GPU_HW.forEach(function(g){
+    var active=S.hHw===g.hw;
+    var btn=document.createElement('button');
+    btn.className='chip'+(active?' on':'');
+    btn.style.cssText='font-size:10px;padding:2px 7px;margin:0';
+    btn.textContent=g.label;
+    btn.onclick=function(){
+      S.hHw=g.hw; S.hGpuName=g.name;
+      var sl=document.getElementById('h-hw'),vl=document.getElementById('hv-hw');
+      if(sl) sl.value=g.hw/1000;
+      if(vl) vl.textContent='$'+(g.hw/1000)+'K';
+      renderHGpuChips();
+      calcHybrid();
+    };
+    wrap.appendChild(btn);
+  });
+}
 function calcHybrid(){
   var gpus=S.hGpus||2, running=S.hRun||16;
   var hw=S.hHw||25000, util=S.hUtil||0.3, amort=S.hAmort||5;
@@ -3868,7 +3880,7 @@ function calcHybrid(){
     +'<div class="cc-card'+(bestKey==='cloud'?' recommended':'')+'"><div class="cc-label">Pure cloud</div><div class="cc-price" style="color:var(--red)">'+fmtK(purecloudCost5)+'</div><div class="cc-sub">on-demand · all rented</div>'+(bestKey==='cloud'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
     +'<div class="cc-card'+(bestKey==='ded'?' recommended':'')+'"><div class="cc-label">Dedicated node</div><div class="cc-price" style="color:var(--purple)">'+fmtK(dedCost5)+'</div><div class="cc-sub">'+dedNodes+' node'+(dedNodes>1?'s':'')+' · $'+Math.round(dedRateMo/1000)+'K/mo flat</div>'+(bestKey==='ded'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
     +'<div class="cc-card'+(bestKey==='hybrid'?' recommended':'')+'"><div class="cc-badge">✦ HYBRID</div><div class="cc-label">Hybrid</div><div class="cc-price" style="color:var(--blue)">'+fmtK(hybridCost5)+'</div><div class="cc-sub">'+hybridSplit+'% own · '+(100-hybridSplit)+'% rent</div>'+(bestKey==='hybrid'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
-    +'<div class="cc-card'+(bestKey==='onprem'?' recommended':'')+'"><div class="cc-label">Pure on-prem</div><div class="cc-price" style="color:var(--green)">'+fmtK(pureonpremCost5)+'</div><div class="cc-sub">'+gpus+'× $'+(hw/1000).toFixed(0)+'K GPU · '+amort+'yr amort</div>'+(bestKey==='onprem'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
+    +'<div class="cc-card'+(bestKey==='onprem'?' recommended':'')+'"><div class="cc-label">Pure on-prem</div><div class="cc-price" style="color:var(--green)">'+fmtK(pureonpremCost5)+'</div><div class="cc-sub">'+(S.hGpuName||'H100')+' · $'+(hw/1000).toFixed(0)+'K/GPU · '+amort+'yr amort</div>'+(bestKey==='onprem'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
     +'</div>'
     +'<div style="font-size:11px;color:var(--text4);margin-bottom:12px">★ = cheapest at your current utilisation ('+Math.round(util*100)+'%). Dedicated node wins at 25–65% utilisation. On-prem wins above 65%.</div>'
     // bars including dedicated node
