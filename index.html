@@ -1781,7 +1781,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.27</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.28</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -1911,9 +1911,8 @@ var DED_NODES = [
 ];
 var GPU_OPTIONS=['H100 SXM','H200 SXM','B100 SXM','B200 SXM','B300 SXM','A100 80GB','H20','L40S','MI300X','MI350X','Custom'];
 var CLOUD_GPU_OPTIONS=['H100 SXM','H200 SXM','B100 SXM','B200 SXM','A100 80GB','A100 40GB','H20','L40S','MI300X','Custom'];
-// Declared here so all functions can safely reference them before loadLivePrices runs
-var _livePriceMap = {};
-var _liveDedPriceMap = {};
+var _livePriceMap={};
+var _liveDedPriceMap={};
 
 var MODELS = [
   // Meta Llama
@@ -3208,8 +3207,7 @@ function renderProviderTable(){
       provGpuKeys.forEach(function(k){
         var g=k.split('|')[1];
         var match=CLOUD_GPU_OPTIONS.find(function(o){return o.toUpperCase().indexOf(g)>=0||g.indexOf(o.toUpperCase())>=0;});
-        var display=match||g;
-        gpuOpts+='<option value="'+display+'">'+display+'</option>';
+        gpuOpts+='<option value="'+(match||g)+'">'+(match||g)+'</option>';
       });
     }else{
       gpuOpts=CLOUD_GPU_OPTIONS.map(function(g){return '<option value="'+g+'">'+g+'</option>';}).join('');
@@ -3233,48 +3231,17 @@ function selectProv(i){PROVIDERS.forEach((p,j)=>p.active=j===i);S.cloudRate=PROV
 function updateProvRate(i,v){PROVIDERS[i].rate=v;if(PROVIDERS[i].active){S.cloudRate=v;calc();}}
 function updateProvGpu(i,gpu){
   PROVIDERS[i].gpu=gpu;
-  var name=PROVIDERS[i].name;
-  var gpuUp=gpu.toUpperCase();
-  var lpm=_livePriceMap||{};
-  var price=lpm[name+'|'+gpuUp];
-  if(!price){
-    var keys=Object.keys(lpm);
-    for(var ki=0;ki<keys.length;ki++){
-      var parts=keys[ki].split('|');
-      if(parts[0]===name&&(parts[1].indexOf(gpuUp)>=0||gpuUp.indexOf(parts[1])>=0)){price=lpm[keys[ki]];break;}
-    }
-  }
+  var name=PROVIDERS[i].name,gpuUp=gpu.toUpperCase();
+  var price=_livePriceMap[name+'|'+gpuUp];
+  if(!price){var keys=Object.keys(_livePriceMap);for(var ki=0;ki<keys.length;ki++){var parts=keys[ki].split('|');if(parts[0]===name&&(parts[1].indexOf(gpuUp)>=0||gpuUp.indexOf(parts[1])>=0)){price=_livePriceMap[keys[ki]];break;}}}
   if(price) PROVIDERS[i].rate=Math.round(price*100)/100;
   if(PROVIDERS[i].active){
     S.cloudRate=PROVIDERS[i].rate;
-    var VM={'H100':80,'H100 SXM':80,'H200':141,'H200 SXM':141,'B100':192,'B100 SXM':192,
-      'B200':180,'B200 SXM':180,'B300':288,'B300 SXM':288,'A100':80,'A100 80GB':80,
-      'A100 40GB':40,'A10G':24,'H20':96,'L40S':48,'MI300X':192,'MI325X':256,'MI350X':288,
-      'A40':48,'A6000':48,'RTX3090':24,'RTX4090':24,'V100':16,'T4':16};
-    var vr=VM[gpu];
-    if(!vr){var gU=gpu.toUpperCase();
-      Object.keys(VM).forEach(function(k){if(!vr&&k.toUpperCase()===gU)vr=VM[k];});
-      if(!vr)Object.keys(VM).forEach(function(k){if(!vr&&(gU.indexOf(k.toUpperCase())>=0||k.toUpperCase().indexOf(gU)>=0))vr=VM[k];});
-    }
-    if(vr){
-      var gb=gpu.replace(/ SXM| PCIe| NVL/gi,'').trim();
-      S.gpuVram=vr;
-      var cb=null;
-      document.querySelectorAll('#gpu-tier-chips .chip').forEach(function(b){
-        if(b.textContent.toUpperCase().indexOf(gb.toUpperCase())>=0)cb=b;
-      });
-      if(cb){
-        var m=cb.getAttribute('onclick').match(/setGPU\('([^']+)'/);
-        if(m)S.gpuName=m[1];
-        document.querySelectorAll('#gpu-tier-chips .chip').forEach(function(b){b.classList.remove('on');});
-        cb.classList.add('on');
-      }else{S.gpuName=gb;}
-    }
-    renderProviderTable();
-    calc();
-  }else{
-    renderProviderTable();
-  }
+    var VM={'H100':80,'H100 SXM':80,'H200':141,'H200 SXM':141,'B100':192,'B100 SXM':192,'B200':180,'B200 SXM':180,'B300':288,'B300 SXM':288,'A100':80,'A100 80GB':80,'A100 40GB':40,'A10G':24,'H20':96,'L40S':48,'MI300X':192,'MI325X':256,'MI350X':288,'A40':48,'A6000':48,'RTX3090':24,'RTX4090':24,'V100':16,'T4':16};
+    var vr=VM[gpu];if(!vr){var gU=gpu.toUpperCase();Object.keys(VM).forEach(function(k){if(!vr&&k.toUpperCase()===gU)vr=VM[k];});if(!vr)Object.keys(VM).forEach(function(k){if(!vr&&(gU.indexOf(k.toUpperCase())>=0||k.toUpperCase().indexOf(gU)>=0))vr=VM[k];});}
+    if(vr){var gb=gpu.replace(/ SXM| PCIe| NVL/gi,'').trim();S.gpuVram=vr;var cb=null;document.querySelectorAll('#gpu-tier-chips .chip').forEach(function(b){if(b.textContent.toUpperCase().indexOf(gb.toUpperCase())>=0)cb=b;});if(cb){var m=cb.getAttribute('onclick').match(/setGPU\('([^']+)'/);if(m)S.gpuName=m[1];document.querySelectorAll('#gpu-tier-chips .chip').forEach(function(b){b.classList.remove('on');});cb.classList.add('on');}else{S.gpuName=gb;}}
+    renderProviderTable();calc();
+  }else{renderProviderTable();}
 }
 function delProv(i){PROVIDERS.splice(i,1);if(!PROVIDERS.some(p=>p.active)&&PROVIDERS.length){PROVIDERS[0].active=true;S.cloudRate=PROVIDERS[0].rate;}renderProviderTable();calc();}
 function addProvider(){
@@ -3672,8 +3639,7 @@ function renderHProviderTable(){
       provGpuKeys.forEach(function(k){
         var g=k.split('|')[1];
         var match=CLOUD_GPU_OPTIONS.find(function(o){return o.toUpperCase().indexOf(g)>=0||g.indexOf(o.toUpperCase())>=0;});
-        var display=match||g;
-        gpuOpts+='<option value="'+display+'">'+display+'</option>';
+        gpuOpts+='<option value="'+(match||g)+'">'+(match||g)+'</option>';
       });
     }else{
       gpuOpts=CLOUD_GPU_OPTIONS.map(function(g){return '<option value="'+g+'">'+g+'</option>';}).join('');
@@ -3698,15 +3664,13 @@ function renderDedNodeTable(){
   if(!t)return;
   var h='<tr><th></th><th style="font-size:9px">Provider</th><th style="font-size:9px">GPU</th><th style="font-size:9px">N</th><th style="font-size:9px">$/mo</th><th></th></tr>';
   DED_NODES.forEach(function(d,i){
-    var ldpm3=_liveDedPriceMap||{};
-    var dedKeys=Object.keys(ldpm3).filter(function(k){return k.split('|')[0]===d.name;});
+    var dedKeys=Object.keys(_liveDedPriceMap).filter(function(k){return k.split('|')[0]===d.name;});
     var gpuOpts='';
     if(dedKeys.length>0){
       dedKeys.forEach(function(k){
         var g=k.split('|')[1];
         var match=GPU_OPTIONS.find(function(o){return o.toUpperCase().indexOf(g)>=0||g.indexOf(o.replace(/ SXM| PCIe/gi,'').trim().toUpperCase())>=0;});
-        var display=match||g;
-        gpuOpts+='<option value="'+display+'">'+display+'</option>';
+        gpuOpts+='<option value="'+(match||g)+'">'+(match||g)+'</option>';
       });
     }else{
       gpuOpts=GPU_OPTIONS.map(function(g){return '<option value="'+g+'">'+g+'</option>';}).join('');
@@ -3741,22 +3705,18 @@ function updateDedGpu(i,gpu){
   if(DED_NODES[i].active){S.hDedGpus=DED_NODES[i].gpus;}
   var name=DED_NODES[i].name;
   var gpuUp=gpu.toUpperCase();
-  var ldpm=_liveDedPriceMap||{};
-  var price=ldpm[name+'|'+gpuUp];
+  var price=_liveDedPriceMap[name+'|'+gpuUp];
   if(!price){
-    var keys=Object.keys(ldpm);
+    var keys=Object.keys(_liveDedPriceMap);
     for(var ki=0;ki<keys.length;ki++){
       var parts=keys[ki].split('|');
       if(parts[0]===name){
         var kGpu=parts[1];
-        if(gpuUp.indexOf(kGpu)>=0||kGpu.indexOf(gpuUp)>=0){price=ldpm[keys[ki]];break;}
+        if(gpuUp.indexOf(kGpu)>=0||kGpu.indexOf(gpuUp)>=0){price=_liveDedPriceMap[keys[ki]];break;}
       }
     }
   }
-  if(price){
-    DED_NODES[i].rateMo=price;
-    if(DED_NODES[i].active){S.hDedRate=price;}
-  }
+  if(price){DED_NODES[i].rateMo=price;if(DED_NODES[i].active){S.hDedRate=price;}}
   renderDedNodeTable();
   calcHybrid();
 }
@@ -3792,18 +3752,14 @@ function setHybridSplit(val){
 }
 
 var H_GPU_HW=[
-  {name:'H100', hw:25000, label:'H100 80GB'},
-  {name:'H200', hw:32000, label:'H200 141GB'},
-  {name:'B100', hw:35000, label:'B100 192GB'},
-  {name:'B200', hw:45000, label:'B200 180GB'},
-  {name:'B300', hw:60000, label:'B300 288GB'},
-  {name:'A100', hw:15000, label:'A100 80GB'},
-  {name:'L40S', hw:9000,  label:'L40S 48GB'},
-  {name:'MI300X',hw:25000,label:'MI300X 192GB'},
+  {name:'H100',hw:25000,label:'H100 80GB'},{name:'H200',hw:32000,label:'H200 141GB'},
+  {name:'B100',hw:35000,label:'B100 192GB'},{name:'B200',hw:45000,label:'B200 180GB'},
+  {name:'B300',hw:60000,label:'B300 288GB'},{name:'A100',hw:15000,label:'A100 80GB'},
+  {name:'L40S',hw:9000,label:'L40S 48GB'},{name:'MI300X',hw:25000,label:'MI300X 192GB'},
 ];
 function renderHGpuChips(){
   var wrap=document.getElementById('h-gpu-chips');
-  if(!wrap) return;
+  if(!wrap)return;
   wrap.innerHTML='';
   H_GPU_HW.forEach(function(g){
     var active=(S.hGpuName||'H100')===g.name;
@@ -3811,13 +3767,7 @@ function renderHGpuChips(){
     btn.className='chip'+(active?' on':'');
     btn.style.cssText='font-size:10px;padding:2px 7px;margin:0';
     btn.textContent=g.label;
-    btn.onclick=function(){
-      S.hHw=g.hw; S.hGpuName=g.name;
-      var sl=document.getElementById('h-hw'),vl=document.getElementById('hv-hw');
-      if(sl)sl.value=g.hw/1000;
-      if(vl)vl.textContent='$'+(g.hw/1000)+'K';
-      renderHGpuChips(); calcHybrid();
-    };
+    btn.onclick=function(){S.hHw=g.hw;S.hGpuName=g.name;var sl=document.getElementById('h-hw'),vl=document.getElementById('hv-hw');if(sl)sl.value=g.hw/1000;if(vl)vl.textContent='$'+(g.hw/1000)+'K';renderHGpuChips();calcHybrid();};
     wrap.appendChild(btn);
   });
 }
@@ -3908,7 +3858,7 @@ function calcHybrid(){
     +'<div class="cc-card'+(bestKey==='cloud'?' recommended':'')+'"><div class="cc-label">Pure cloud</div><div class="cc-price" style="color:var(--red)">'+fmtK(purecloudCost5)+'</div><div class="cc-sub">on-demand · all rented</div>'+(bestKey==='cloud'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
     +'<div class="cc-card'+(bestKey==='ded'?' recommended':'')+'"><div class="cc-label">Dedicated node</div><div class="cc-price" style="color:var(--purple)">'+fmtK(dedCost5)+'</div><div class="cc-sub">'+dedNodes+' node'+(dedNodes>1?'s':'')+' · $'+Math.round(dedRateMo/1000)+'K/mo flat</div>'+(bestKey==='ded'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
     +'<div class="cc-card'+(bestKey==='hybrid'?' recommended':'')+'"><div class="cc-badge">✦ HYBRID</div><div class="cc-label">Hybrid</div><div class="cc-price" style="color:var(--blue)">'+fmtK(hybridCost5)+'</div><div class="cc-sub">'+hybridSplit+'% own · '+(100-hybridSplit)+'% rent</div>'+(bestKey==='hybrid'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
-    +'<div class="cc-card'+(bestKey==='onprem'?' recommended':'')+'"><div class="cc-label">Pure on-prem</div><div class="cc-price" style="color:var(--green)">'+fmtK(pureonpremCost5)+'</div><div class="cc-sub">'+(S.hGpuName||'H100')+' · $'+(hw/1000).toFixed(0)+'K/GPU · '+amort+'yr amort</div>'+(bestKey==='onprem'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
+    +'<div class="cc-card'+(bestKey==='onprem'?' recommended':'')+'"><div class="cc-label">Pure on-prem</div><div class="cc-price" style="color:var(--green)">'+fmtK(pureonpremCost5)+'</div><div class="cc-sub">hardware only · '+amort+'yr amort</div>'+(bestKey==='onprem'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
     +'</div>'
     +'<div style="font-size:11px;color:var(--text4);margin-bottom:12px">★ = cheapest at your current utilisation ('+Math.round(util*100)+'%). Dedicated node wins at 25–65% utilisation. On-prem wins above 65%.</div>'
     // bars including dedicated node
@@ -4966,7 +4916,7 @@ function showFleetValidateModal(){
 
 
 // ===== LIVE PRICING FROM PRICING WORKER =====
-// _livePriceMap and _liveDedPriceMap declared near PROVIDERS above
+// moved to top
 function loadLivePrices(){
   if(!PRICING_WORKER) return; // Not configured yet — use hardcoded defaults
   fetch(PRICING_WORKER+'/prices')
@@ -5040,13 +4990,12 @@ function loadLivePrices(){
         }
       });
 
-      // ── Update live rates for existing PROVIDERS — never add new rows ──
+      // ── Update rates for existing PROVIDERS — never add new rows ──
       if(Object.keys(_livePriceMap).length > 0){
         PROVIDERS.forEach(function(p){
           var gpuUp=p.gpu.toUpperCase();
-          var lpm2=_livePriceMap||{};
-          var price=lpm2[p.name+'|'+gpuUp];
-          if(!price){var keys=Object.keys(lpm2);for(var ki=0;ki<keys.length;ki++){var parts=keys[ki].split('|');if(parts[0]===p.name&&(parts[1].indexOf(gpuUp)>=0||gpuUp.indexOf(parts[1])>=0)){price=lpm2[keys[ki]];break;}}}
+          var price=_livePriceMap[p.name+'|'+gpuUp];
+          if(!price){var keys=Object.keys(_livePriceMap);for(var ki=0;ki<keys.length;ki++){var parts=keys[ki].split('|');if(parts[0]===p.name&&(parts[1].indexOf(gpuUp)>=0||gpuUp.indexOf(parts[1])>=0)){price=_livePriceMap[keys[ki]];break;}}}
           if(price) p.rate=Math.round(price*100)/100;
         });
       }
