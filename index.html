@@ -1780,7 +1780,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.18</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.19</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -3197,9 +3197,10 @@ function editAnswers(){openQS();}
 // ===== PROVIDER TABLE =====
 function renderProviderTable(){
   var h='<tr><th></th><th>Provider</th><th>GPU</th><th>$/hr</th><th></th></tr>';
+  var lpm = (typeof _livePriceMap !== 'undefined' && _livePriceMap) ? _livePriceMap : {};
   PROVIDERS.forEach(function(p,i){
     // Build GPU options from live prices for this provider, plus Custom
-    var provGpus = Object.keys(_livePriceMap).filter(function(k){return k.split('|')[0]===p.name;})
+    var provGpus = Object.keys(lpm).filter(function(k){return k.split('|')[0]===p.name;})
       .map(function(k){return k.split('|')[1];});
     // Map DB names to display names (e.g. "H100" → "H100 SXM")
     var gpuOpts = '';
@@ -3645,8 +3646,9 @@ function _doExportSheets() {
 // ===== HYBRID =====
 function renderHProviderTable(){
   var h='<tr><th></th><th>Provider</th><th>GPU</th><th>$/hr</th><th></th></tr>';
+  var lpm = (typeof _livePriceMap !== 'undefined' && _livePriceMap) ? _livePriceMap : {};
   PROVIDERS.forEach(function(p,i){
-    var provGpus = Object.keys(_livePriceMap).filter(function(k){return k.split('|')[0]===p.name;})
+    var provGpus = Object.keys(lpm).filter(function(k){return k.split('|')[0]===p.name;})
       .map(function(k){return k.split('|')[1];});
     var gpuOpts = '';
     if(provGpus.length > 0){
