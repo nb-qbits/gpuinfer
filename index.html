@@ -827,7 +827,7 @@ button{font-family:var(--sans);cursor:pointer}
     <button class="nav-tab" onclick="nav('advanced')">Advanced</button>
     <button class="nav-tab" onclick="nav('explorer')">GPU Explorer</button>
     <button class="nav-tab" onclick="nav('saved')">&#128204; Saved</button>
-    <button class="nav-tab" onclick="nav('hybrid')">&#128200; Hybrid savings</button>
+    <button class="nav-tab" onclick="nav('hybrid');setTimeout(renderHGpuChips,50)">&#128200; Hybrid savings</button>
     <button class="nav-tab" id="nav-fleet" onclick="nav('fleet')">&#9776; Fleet routing</button>
   </div>
   <div class="nav-right">
@@ -871,7 +871,7 @@ button{font-family:var(--sans);cursor:pointer}
         <p>Compare NVIDIA and AMD GPUs by VRAM, throughput, and price. Interactive bubble chart.</p>
         <div class="home-tile-cta">Explore &#8594;</div>
       </div>
-      <div class="home-tile" onclick="nav('hybrid')">
+      <div class="home-tile" onclick="nav('hybrid');setTimeout(renderHGpuChips,50)">
         <div class="home-tile-tag">Economics</div>
         <div class="home-tile-icon">&#128200;</div>
         <h3>Hybrid savings</h3>
@@ -1781,7 +1781,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.28</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.29</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2015,7 +2015,7 @@ if(liDismissed) document.getElementById('li-card').classList.add('hidden');
 renderProviderTable();
 renderHProviderTable();
 renderDedNodeTable();
-renderHGpuChips();
+// renderHGpuChips called lazily when hybrid page shown
 renderModelChips('all');
 renderQSModels('all');
 buildQSProgress(1);
@@ -3211,8 +3211,9 @@ function renderProviderTable(){
       });
     }else{
       gpuOpts=CLOUD_GPU_OPTIONS.map(function(g){return '<option value="'+g+'">'+g+'</option>';}).join('');
+      // CLOUD_GPU_OPTIONS already includes Custom — don't add again
     }
-    gpuOpts+='<option value="Custom">Custom</option>';
+    if(provGpuKeys.length>0) gpuOpts+='<option value="Custom">Custom</option>';
     h+='<tr>'
       +'<td><input type="radio" class="prov-radio" name="prov" '+(p.active?'checked':'')+' onchange="selectProv('+i+')"></td>'
       +'<td style="font-size:12px;font-weight:'+(p.active?'600':'400')+';color:'+(p.active?'var(--blue)':'var(--text1)')+'">'+p.name+'</td>'
@@ -3644,7 +3645,7 @@ function renderHProviderTable(){
     }else{
       gpuOpts=CLOUD_GPU_OPTIONS.map(function(g){return '<option value="'+g+'">'+g+'</option>';}).join('');
     }
-    gpuOpts+='<option value="Custom">Custom</option>';
+    if(provGpuKeys.length>0) gpuOpts+='<option value="Custom">Custom</option>';
     h+='<tr><td><input type="radio" class="prov-radio" name="hprov" '+(p.active?'checked':'')+' onchange="selectHProv('+i+')"></td>'
       +'<td style="font-size:11px;font-weight:'+(p.active?'600':'400')+';color:'+(p.active?'var(--blue)':'var(--text1)')+'">'+p.name+'</td>'
       +'<td><select id="hprov-gpu-'+i+'" style="padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:10px;font-family:var(--mono)" onchange="updateProvGpu('+i+',this.value);renderHProviderTable();calcHybrid()">'+gpuOpts+'</select></td>'
@@ -3674,8 +3675,9 @@ function renderDedNodeTable(){
       });
     }else{
       gpuOpts=GPU_OPTIONS.map(function(g){return '<option value="'+g+'">'+g+'</option>';}).join('');
+      // GPU_OPTIONS already includes Custom — don't add again
     }
-    gpuOpts+='<option value="Custom">Custom</option>';
+    if(dedKeys.length>0) gpuOpts+='<option value="Custom">Custom</option>';
     h+='<tr>'
       +'<td><input type="radio" class="prov-radio" name="hded" '+(d.active?'checked':'')+' onchange="selectDedNode('+i+')"></td>'
       +'<td><input type="text" value="'+d.name+'" style="width:62px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:'+(d.active?'var(--blue)':'var(--text1)')+';font-size:10px;font-weight:'+(d.active?'600':'400')+'" onchange="DED_NODES['+i+'].name=this.value"></td>'
@@ -3858,7 +3860,7 @@ function calcHybrid(){
     +'<div class="cc-card'+(bestKey==='cloud'?' recommended':'')+'"><div class="cc-label">Pure cloud</div><div class="cc-price" style="color:var(--red)">'+fmtK(purecloudCost5)+'</div><div class="cc-sub">on-demand · all rented</div>'+(bestKey==='cloud'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
     +'<div class="cc-card'+(bestKey==='ded'?' recommended':'')+'"><div class="cc-label">Dedicated node</div><div class="cc-price" style="color:var(--purple)">'+fmtK(dedCost5)+'</div><div class="cc-sub">'+dedNodes+' node'+(dedNodes>1?'s':'')+' · $'+Math.round(dedRateMo/1000)+'K/mo flat</div>'+(bestKey==='ded'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
     +'<div class="cc-card'+(bestKey==='hybrid'?' recommended':'')+'"><div class="cc-badge">✦ HYBRID</div><div class="cc-label">Hybrid</div><div class="cc-price" style="color:var(--blue)">'+fmtK(hybridCost5)+'</div><div class="cc-sub">'+hybridSplit+'% own · '+(100-hybridSplit)+'% rent</div>'+(bestKey==='hybrid'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
-    +'<div class="cc-card'+(bestKey==='onprem'?' recommended':'')+'"><div class="cc-label">Pure on-prem</div><div class="cc-price" style="color:var(--green)">'+fmtK(pureonpremCost5)+'</div><div class="cc-sub">hardware only · '+amort+'yr amort</div>'+(bestKey==='onprem'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
+    +'<div class="cc-card'+(bestKey==='onprem'?' recommended':'')+'"><div class="cc-label">Pure on-prem</div><div class="cc-price" style="color:var(--green)">'+fmtK(pureonpremCost5)+'</div><div class="cc-sub">'+(S.hGpuName||'H100')+' · $'+(hw/1000).toFixed(0)+'K/GPU · '+amort+'yr amort</div>'+(bestKey==='onprem'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
     +'</div>'
     +'<div style="font-size:11px;color:var(--text4);margin-bottom:12px">★ = cheapest at your current utilisation ('+Math.round(util*100)+'%). Dedicated node wins at 25–65% utilisation. On-prem wins above 65%.</div>'
     // bars including dedicated node
