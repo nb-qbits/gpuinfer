@@ -1781,7 +1781,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.29</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.30</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -1899,15 +1899,13 @@ var PROVIDERS = [
   {name:'Vast.ai',rate:0.24,gpu:'H100 SXM',active:false},
 ];
 
+// DED_NODES: fallback defaults — rebuilt from Worker data when live prices load
 var DED_NODES = [
-  {name:'CoreWeave', gpu:'H100 SXM', gpus:8, rateMo:18000, active:true},
-  {name:'Lambda',    gpu:'H100 SXM', gpus:8, rateMo:14000, active:false},
-  {name:'Voltage Park',gpu:'H100 SXM',gpus:8,rateMo:12000, active:false},
-  {name:'CoreWeave', gpu:'H200 SXM', gpus:8, rateMo:28000, active:false},
-  {name:'Lambda',    gpu:'H200 SXM', gpus:8, rateMo:22000, active:false},
-  {name:'CoreWeave', gpu:'B200 SXM', gpus:8, rateMo:38000, active:false},
-  {name:'AWS p5',    gpu:'H100 SXM', gpus:8, rateMo:98000, active:false},
-  {name:'GCP a3',    gpu:'H100 SXM', gpus:8, rateMo:88000, active:false},
+  {name:'CoreWeave',   gpu:'H100 SXM', gpus:8, rateMo:18000, active:true},
+  {name:'Lambda',      gpu:'H100 SXM', gpus:8, rateMo:14000, active:false},
+  {name:'Voltage Park',gpu:'H100 SXM', gpus:8, rateMo:12000, active:false},
+  {name:'AWS p5',      gpu:'H100 SXM', gpus:8, rateMo:98000, active:false},
+  {name:'GCP a3',      gpu:'H100 SXM', gpus:8, rateMo:88000, active:false},
 ];
 var GPU_OPTIONS=['H100 SXM','H200 SXM','B100 SXM','B200 SXM','B300 SXM','A100 80GB','H20','L40S','MI300X','MI350X','Custom'];
 var CLOUD_GPU_OPTIONS=['H100 SXM','H200 SXM','B100 SXM','B200 SXM','A100 80GB','A100 40GB','H20','L40S','MI300X','Custom'];
@@ -4962,21 +4960,49 @@ function loadLivePrices(){
         });
       });
 
-      // ── Update dedicated node pricing (DED_NODES array) ───────────────────
+      // ── Rebuild dedicated node pricing from Worker data (single source of truth) ──
       var dedPrices=prices.filter(function(p){
-        return p.category==='gpu_cloud'&&p.pricing_type==='dedicated';
+        return p.category==='gpu_cloud'&&p.pricing_type==='dedicated'&&p.price_usd>0;
       });
-      dedPrices.forEach(function(p){
-        var gpuType=(p.gpu||'').toUpperCase();
-        var dedKey=p.provider+'|'+gpuType;
-        var rateMo=Math.round(p.price_usd*30*24*(p.gpu_count||8));
-        _liveDedPriceMap[dedKey]=rateMo;
-        var match=DED_NODES.find(function(x){return x.name===p.provider;});
-        if(match&&p.price_usd){
-          match.rateMo=Math.round(p.price_usd*30*24*(p.gpu_count||8));
+      if(dedPrices.length>0){
+        // Build _liveDedPriceMap: provider|GPU → $/mo
+        dedPrices.forEach(function(p){
+          var gpuType=(p.gpu||'').toUpperCase();
+          var dedKey=p.provider+'|'+gpuType;
+          var rateMo=Math.round(p.price_usd*30*24*(p.gpu_count||8));
+          _liveDedPriceMap[dedKey]=rateMo;
+        });
+        // Rebuild DED_NODES from live data — one row per provider+GPU combo
+        // Keep whichever row was active if it still exists
+        var activeProvName=DED_NODES.find(function(d){return d.active;})||{name:null,gpu:null};
+        var seen={};
+        var newNodes=[];
+        dedPrices.forEach(function(p){
+          var gpuType=(p.gpu||'').toUpperCase();
+          var gpuDisplay=GPU_OPTIONS.find(function(o){return o.toUpperCase().indexOf(gpuType)>=0||gpuType.indexOf(o.replace(/ SXM| PCIe/gi,'').trim().toUpperCase())>=0;})||p.gpu||gpuType;
+          var key=p.provider+'|'+gpuDisplay;
+          if(seen[key])return; seen[key]=true;
+          var rateMo=Math.round(p.price_usd*30*24*(p.gpu_count||8));
+          newNodes.push({
+            name:p.provider,
+            gpu:gpuDisplay,
+            gpus:p.gpu_count||8,
+            rateMo:rateMo,
+            active:false
+          });
+        });
+        if(newNodes.length>0){
+          // Restore active selection
+          var activeNode=newNodes.find(function(d){return d.name===activeProvName.name&&d.gpu===activeProvName.gpu;});
+          if(!activeNode) activeNode=newNodes[0];
+          activeNode.active=true;
+          S.hDedRate=activeNode.rateMo;
+          S.hDedGpus=activeNode.gpus;
+          DED_NODES.length=0;
+          newNodes.forEach(function(n){DED_NODES.push(n);});
           updated=true;
         }
-      });
+      }
 
       // ── Update API token prices (API_PROVIDERS array) ─────────────────────
       var apiPrices=prices.filter(function(p){return p.category==='api_token';});
