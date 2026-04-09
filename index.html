@@ -827,7 +827,7 @@ button{font-family:var(--sans);cursor:pointer}
     <button class="nav-tab" onclick="nav('advanced')">Advanced</button>
     <button class="nav-tab" onclick="nav('explorer')">GPU Explorer</button>
     <button class="nav-tab" onclick="nav('saved')">&#128204; Saved</button>
-    <button class="nav-tab" onclick="nav('hybrid');setTimeout(renderHGpuChips,50)">&#128200; Hybrid savings</button>
+    <button class="nav-tab" onclick="nav('hybrid')">&#128200; Hybrid savings</button>
     <button class="nav-tab" id="nav-fleet" onclick="nav('fleet')">&#9776; Fleet routing</button>
   </div>
   <div class="nav-right">
@@ -871,7 +871,7 @@ button{font-family:var(--sans);cursor:pointer}
         <p>Compare NVIDIA and AMD GPUs by VRAM, throughput, and price. Interactive bubble chart.</p>
         <div class="home-tile-cta">Explore &#8594;</div>
       </div>
-      <div class="home-tile" onclick="nav('hybrid');setTimeout(renderHGpuChips,50)">
+      <div class="home-tile" onclick="nav('hybrid')">
         <div class="home-tile-tag">Economics</div>
         <div class="home-tile-icon">&#128200;</div>
         <h3>Hybrid savings</h3>
@@ -1781,7 +1781,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.31</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.32</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2014,11 +2014,8 @@ renderProviderTable();
 renderHProviderTable();
 renderDedNodeTable();
 // renderHGpuChips — retry until the element exists (handles hidden pages at init)
-(function tryRenderChips(attempts){
-  var el=document.getElementById('h-gpu-chips');
-  if(el){renderHGpuChips();}
-  else if(attempts>0){setTimeout(function(){tryRenderChips(attempts-1);},200);}
-})(20);
+// Render chips when hybrid page becomes visible — not at init (element hidden)
+// renderHGpuChips is called by: nav('hybrid'), hybrid tab click, calcHybrid first run
 renderModelChips('all');
 renderQSModels('all');
 buildQSProgress(1);
@@ -2068,7 +2065,7 @@ function navTo(page,fromHash){
   if(map[page]!==undefined && tabs[map[page]]) tabs[map[page]].classList.add('active');
   if(!fromHash) location.hash='#'+page;
   if(page==='advanced') calc();
-  if(page==='hybrid') calcHybrid();
+  if(page==='hybrid'){calcHybrid();renderHGpuChips();}
   if(page==='explorer') loadExplorer(); // lazy — Chart.js loads only here
   if(page==='saved') renderSaved();
   if(page==='admin'){var tok=localStorage.getItem('admin_token');if(tok) checkAdminTokenValue(tok);}
@@ -3777,9 +3774,6 @@ function renderHGpuChips(){
   });
 }
 function calcHybrid(){
-  // Ensure chips are rendered if div exists but is empty
-  var chipsWrap=document.getElementById('h-gpu-chips');
-  if(chipsWrap&&chipsWrap.children.length===0) renderHGpuChips();
   var gpus=S.hGpus||2, running=S.hRun||16;
   var hw=S.hHw||25000, util=S.hUtil||0.3, amort=S.hAmort||5;
   var rate=S.cloudRate||3.00;
