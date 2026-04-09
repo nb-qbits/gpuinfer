@@ -1679,7 +1679,7 @@ button{font-family:var(--sans);cursor:pointer}
         <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px">
           <div class="slider-row"><label>GPUs needed</label><input type="range" min="1" max="64" step="1" value="2" id="h-gpus" oninput="S.hGpus=+this.value;calcHybrid()"><span class="slider-val mono" id="hv-gpus">2</span></div>
           <div class="slider-row"><label>GPUs running</label><input type="range" min="1" max="128" step="1" value="16" id="h-run" oninput="S.hRun=+this.value;calcHybrid()"><span class="slider-val mono" id="hv-run">16</span></div>
-          <div class="slider-row"><label>HW price ($K)</label><input type="range" min="5" max="60" step="1" value="25" id="h-hw" oninput="S.hHw=+this.value*1000;calcHybrid()"><span class="slider-val mono" id="hv-hw">$25K</span></div>
+          <div class="slider-row"><label>HW price ($K)</label><input type="range" min="5" max="60" step="1" value="25" id="h-hw" oninput="S.hHw=+this.value*1000;S.hGpuName='Custom';renderHGpuChips();calcHybrid()"><span class="slider-val mono" id="hv-hw">$25K</span></div>
           <div class="slider-row" style="align-items:flex-start"><label style="padding-top:4px">On-prem GPU</label><div style="display:flex;flex-wrap:wrap;gap:4px" id="h-gpu-chips"></div></div>
           <div class="slider-row"><label>Avg utilisation</label><input type="range" min="5" max="100" step="5" value="30" id="h-util" oninput="S.hUtil=+this.value/100;calcHybrid()"><span class="slider-val mono" id="hv-util">30%</span></div>
           <div class="slider-row"><label>Amortisation</label><input type="range" min="1" max="7" step="1" value="5" id="h-amort" oninput="S.hAmort=+this.value;calcHybrid()"><span class="slider-val mono" id="hv-amort">5 yrs</span></div>
@@ -3680,8 +3680,21 @@ function renderDedNodeTable(){
   if(!t)return;
   var h='<tr><th></th><th style="font-size:9px">Provider</th><th style="font-size:9px">GPU</th><th style="font-size:9px">N</th><th style="font-size:9px">$/mo</th><th></th></tr>';
   DED_NODES.forEach(function(d,i){
-    // Build options without selected attr — we set .value after render
-    var gpuOpts=GPU_OPTIONS.map(function(g){return '<option value="'+g+'">'+g+'</option>';}).join('');
+    // Build GPU options from live ded price map for this provider only
+    var ldpm2=(typeof _liveDedPriceMap!=='undefined'&&_liveDedPriceMap)?_liveDedPriceMap:{};
+    var dedKeys=Object.keys(ldpm2).filter(function(k){return k.split('|')[0]===d.name;});
+    var gpuOpts='';
+    if(dedKeys.length>0){
+      dedKeys.forEach(function(k){
+        var g=k.split('|')[1];
+        var match=GPU_OPTIONS.find(function(o){return o.replace(/ SXM| PCIe/gi,'').toUpperCase()===g||o.toUpperCase().indexOf(g)>=0;});
+        var display=match||g;
+        gpuOpts+='<option value="'+display+'">'+display+'</option>';
+      });
+    } else {
+      gpuOpts=GPU_OPTIONS.map(function(g){return '<option value="'+g+'">'+g+'</option>';}).join('');
+    }
+    gpuOpts+='<option value="Custom">Custom</option>';
     h+='<tr>'
       +'<td><input type="radio" class="prov-radio" name="hded" '+(d.active?'checked':'')+' onchange="selectDedNode('+i+')"></td>'
       +'<td><input type="text" value="'+d.name+'" style="width:62px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:'+(d.active?'var(--blue)':'var(--text1)')+';font-size:10px;font-weight:'+(d.active?'600':'400')+'" onchange="DED_NODES['+i+'].name=this.value"></td>'
@@ -3709,25 +3722,28 @@ function selectDedNode(i){
 function updateDedGpu(i,gpu){
   DED_NODES[i].gpu=gpu;
   if(DED_NODES[i].active){S.hDedGpus=DED_NODES[i].gpus;}
-  // Look up live dedicated price for this provider+GPU combo
   var name=DED_NODES[i].name;
   var gpuUp=gpu.toUpperCase();
-  var price=_liveDedPriceMap[name+'|'+gpuUp];
+  // Guard: _liveDedPriceMap may not be initialised yet
+  var ldpm=(typeof _liveDedPriceMap!=='undefined'&&_liveDedPriceMap)?_liveDedPriceMap:{};
+  // Exact match first, then partial (map key is short "H100", dropdown is long "H100 SXM")
+  var price=ldpm[name+'|'+gpuUp];
   if(!price){
-    var keys=Object.keys(_liveDedPriceMap);
+    var keys=Object.keys(ldpm);
     for(var ki=0;ki<keys.length;ki++){
       var parts=keys[ki].split('|');
-      if(parts[0]===name && (parts[1].indexOf(gpuUp)>=0 || gpuUp.indexOf(parts[1])>=0)){
-        price=_liveDedPriceMap[keys[ki]];
-        break;
+      if(parts[0]===name){
+        var kGpu=parts[1];
+        if(gpuUp.indexOf(kGpu)>=0||kGpu.indexOf(gpuUp)>=0){price=ldpm[keys[ki]];break;}
       }
     }
   }
   if(price){
     DED_NODES[i].rateMo=price;
     if(DED_NODES[i].active){S.hDedRate=price;}
-    renderDedNodeTable();
   }
+  // NOTE: never write to S.hHw here — dedicated rental ≠ on-prem purchase price
+  renderDedNodeTable();
   calcHybrid();
 }
 function delDedNode(i){
@@ -3761,23 +3777,22 @@ function setHybridSplit(val){
   calcHybrid();
 }
 
-// On-prem GPU chips for Hybrid page — drives S.hHw
 var H_GPU_HW=[
-  {name:'H100', vram:80,  hw:25000, label:'H100 80GB'},
-  {name:'H200', vram:141, hw:32000, label:'H200 141GB'},
-  {name:'B100', vram:192, hw:35000, label:'B100 192GB'},
-  {name:'B200', vram:180, hw:45000, label:'B200 180GB'},
-  {name:'B300', vram:288, hw:60000, label:'B300 288GB'},
-  {name:'A100', vram:80,  hw:15000, label:'A100 80GB'},
-  {name:'L40S', vram:48,  hw:9000,  label:'L40S 48GB'},
-  {name:'MI300X',vram:192,hw:25000, label:'MI300X 192GB'},
+  {name:'H100', hw:25000, label:'H100 80GB'},
+  {name:'H200', hw:32000, label:'H200 141GB'},
+  {name:'B100', hw:35000, label:'B100 192GB'},
+  {name:'B200', hw:45000, label:'B200 180GB'},
+  {name:'B300', hw:60000, label:'B300 288GB'},
+  {name:'A100', hw:15000, label:'A100 80GB'},
+  {name:'L40S', hw:9000,  label:'L40S 48GB'},
+  {name:'MI300X',hw:25000,label:'MI300X 192GB'},
 ];
 function renderHGpuChips(){
   var wrap=document.getElementById('h-gpu-chips');
   if(!wrap) return;
   wrap.innerHTML='';
   H_GPU_HW.forEach(function(g){
-    var active=S.hHw===g.hw;
+    var active=(S.hGpuName||'H100')===g.name;
     var btn=document.createElement('button');
     btn.className='chip'+(active?' on':'');
     btn.style.cssText='font-size:10px;padding:2px 7px;margin:0';
@@ -3785,10 +3800,9 @@ function renderHGpuChips(){
     btn.onclick=function(){
       S.hHw=g.hw; S.hGpuName=g.name;
       var sl=document.getElementById('h-hw'),vl=document.getElementById('hv-hw');
-      if(sl) sl.value=g.hw/1000;
-      if(vl) vl.textContent='$'+(g.hw/1000)+'K';
-      renderHGpuChips();
-      calcHybrid();
+      if(sl)sl.value=g.hw/1000;
+      if(vl)vl.textContent='$'+(g.hw/1000)+'K';
+      renderHGpuChips(); calcHybrid();
     };
     wrap.appendChild(btn);
   });
@@ -5017,8 +5031,9 @@ function loadLivePrices(){
       if(Object.keys(_livePriceMap).length > 0){
         PROVIDERS.forEach(function(p){
           var gpuUp=p.gpu.toUpperCase();
-          var price=_livePriceMap[p.name+'|'+gpuUp];
-          if(!price){var keys=Object.keys(_livePriceMap);for(var ki=0;ki<keys.length;ki++){var parts=keys[ki].split('|');if(parts[0]===p.name&&(parts[1].indexOf(gpuUp)>=0||gpuUp.indexOf(parts[1])>=0)){price=_livePriceMap[keys[ki]];break;}}}
+          var lpm2=(typeof _livePriceMap!=='undefined'&&_livePriceMap)?_livePriceMap:{};
+          var price=lpm2[p.name+'|'+gpuUp];
+          if(!price){var keys=Object.keys(lpm2);for(var ki=0;ki<keys.length;ki++){var parts=keys[ki].split('|');if(parts[0]===p.name&&(parts[1].indexOf(gpuUp)>=0||gpuUp.indexOf(parts[1])>=0)){price=lpm2[keys[ki]];break;}}}
           if(price) p.rate=Math.round(price*100)/100;
         });
       }
