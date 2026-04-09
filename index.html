@@ -1781,7 +1781,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.30</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.31</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2013,7 +2013,12 @@ if(liDismissed) document.getElementById('li-card').classList.add('hidden');
 renderProviderTable();
 renderHProviderTable();
 renderDedNodeTable();
-// renderHGpuChips called lazily when hybrid page shown
+// renderHGpuChips — retry until the element exists (handles hidden pages at init)
+(function tryRenderChips(attempts){
+  var el=document.getElementById('h-gpu-chips');
+  if(el){renderHGpuChips();}
+  else if(attempts>0){setTimeout(function(){tryRenderChips(attempts-1);},200);}
+})(20);
 renderModelChips('all');
 renderQSModels('all');
 buildQSProgress(1);
@@ -3772,6 +3777,9 @@ function renderHGpuChips(){
   });
 }
 function calcHybrid(){
+  // Ensure chips are rendered if div exists but is empty
+  var chipsWrap=document.getElementById('h-gpu-chips');
+  if(chipsWrap&&chipsWrap.children.length===0) renderHGpuChips();
   var gpus=S.hGpus||2, running=S.hRun||16;
   var hw=S.hHw||25000, util=S.hUtil||0.3, amort=S.hAmort||5;
   var rate=S.cloudRate||3.00;
