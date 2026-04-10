@@ -1894,36 +1894,43 @@ button{font-family:var(--sans);cursor:pointer}
 
 <div id="page-explorer" class="page">
   <div class="explorer-layout">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
       <div>
-        <h2 style="font-size:18px;font-weight:600">GPU Explorer</h2>
-        <p style="font-size:13px;color:var(--text3)">Compare NVIDIA, AMD, and cloud GPUs</p>
+        <h2 style="font-size:18px;font-weight:700">GPU Explorer</h2>
+        <p style="font-size:12px;color:var(--text3)">LLM inference planning — compare GPU generations by memory, bandwidth, and cost efficiency</p>
       </div>
       <div style="display:flex;gap:6px">
         <button class="chip on" id="exp-nv" onclick="toggleExpNV()">NVIDIA</button>
         <button class="chip on" id="exp-amd" onclick="toggleExpAMD()">AMD</button>
       </div>
     </div>
-    <div class="axis-selectors">
-      <span class="axis-label">X</span>
-      <button class="axis-btn on" onclick="setAxis('x','vram',this)">VRAM</button>
-      <button class="axis-btn" onclick="setAxis('x','price',this)">Price</button>
-      <button class="axis-btn" onclick="setAxis('x','tpp',this)">TPP</button>
-      <span class="axis-label" style="margin-left:8px">Y</span>
-      <button class="axis-btn" onclick="setAxis('y','vram',this)">VRAM</button>
-      <button class="axis-btn" onclick="setAxis('y','price',this)">Price</button>
-      <button class="axis-btn on" onclick="setAxis('y','tpp',this)">TPP</button>
-      <span class="axis-label" style="margin-left:8px">Bubble</span>
-      <button class="axis-btn" onclick="setAxis('b','vram',this)">VRAM</button>
-      <button class="axis-btn" onclick="setAxis('b','price',this)">Price</button>
-      <button class="axis-btn on" onclick="setAxis('b','tpp100',this)">$/100TPP</button>
-      <span style="margin-left:12px;font-size:11px;color:var(--text4)" id="axis-desc">X: VRAM (GB) · Y: Throughput (tok/s) · Bubble: $/100 TPP</span>
+    <div class="axis-selectors" style="gap:4px;margin-bottom:8px">
+      <span class="axis-label" style="font-weight:600">X</span>
+      <button class="axis-btn on" data-axis="x" onclick="setAxis('x','vram',this)">VRAM</button>
+      <button class="axis-btn" data-axis="x" onclick="setAxis('x','price',this)">Price</button>
+      <button class="axis-btn" data-axis="x" onclick="setAxis('x','tpp',this)">Planning TPP</button>
+      <button class="axis-btn" data-axis="x" onclick="setAxis('x','mem_bw',this)">Mem BW</button>
+      <span class="axis-label" style="margin-left:10px;font-weight:600">Y</span>
+      <button class="axis-btn" data-axis="y" onclick="setAxis('y','vram',this)">VRAM</button>
+      <button class="axis-btn" data-axis="y" onclick="setAxis('y','price',this)">Price</button>
+      <button class="axis-btn on" data-axis="y" onclick="setAxis('y','tpp',this)">Planning TPP</button>
+      <button class="axis-btn" data-axis="y" onclick="setAxis('y','mem_bw',this)">Mem BW</button>
+      <span class="axis-label" style="margin-left:10px;font-weight:600">Bubble</span>
+      <button class="axis-btn" data-axis="b" onclick="setAxis('b','vram',this)">VRAM</button>
+      <button class="axis-btn" data-axis="b" onclick="setAxis('b','price',this)">Price</button>
+      <button class="axis-btn on" data-axis="b" onclick="setAxis('b','usdPer100Tpp',this)">$ / 100 TPP</button>
+      <button class="axis-btn" data-axis="b" onclick="setAxis('b','mem_bw',this)">Mem BW</button>
     </div>
+    <div style="font-size:11px;color:var(--text4);margin-bottom:10px" id="axis-desc">X: VRAM (GB) · Y: Planning TPP · Bubble size: $ / 100 TPP</div>
     <div class="explorer-chart-wrap">
       <canvas id="explorer-chart" style="max-height:420px"></canvas>
     </div>
-    <div class="explorer-notice"><strong>Data notice</strong> — Purchase prices are indicative market estimates for planning purposes only. Prices vary by vendor, volume, region, and time. Throughput figures are theoretical peak estimates. Sources: NVIDIA product pages, AMD product pages, published benchmarks, market reports. Validate all figures with vendors before procurement. © gpu.calc<br><br>
-      <strong>Data notice</strong> — Purchase prices are indicative market estimates for planning purposes only. Prices vary by vendor, volume, region, and time. Validate all figures with vendors before procurement. &copy; gpu.calc
+    <div class="explorer-notice" style="margin-top:16px;font-size:11px;color:var(--text3);line-height:1.7;border-top:1px solid var(--border);padding-top:14px">
+      <strong>Planning TPP</strong> is a heuristic derived from memory bandwidth, VRAM capacity, and architecture generation. It is intended for comparative analysis only — not measured tokens/sec for a specific model or workload.<br>
+      <strong>Inference performance</strong> depends on model architecture (GQA vs MHA), sequence length, batching, and inference backend (vLLM, TensorRT-LLM, etc.).<br>
+      <strong>Cluster scaling</strong> — GPU-level performance does not directly translate to cluster-level throughput. Interconnect (NVLink, InfiniBand) and workload distribution impact scaling.<br>
+      <strong>Pricing</strong> reflects indicative estimates and may vary significantly by provider, region, and purchasing model (on-demand vs reserved vs spot). Validate all figures with vendors before procurement.<br>
+      <strong>Sources:</strong> NVIDIA product pages, AMD product pages, published benchmarks, market reports. &copy; gpu.calc
     </div>
   </div>
 </div>
@@ -1971,7 +1978,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.35</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.37</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2076,7 +2083,7 @@ var S = {
   hDedRate:18000, // dedicated node $/mo for 8-GPU node (CoreWeave default)
   hDedGpus:8,    // GPUs per dedicated node
   // Explorer
-  expNV:true, expAMD:true, axX:'vram', axY:'tpp', axB:'tpp100',
+  expNV:true, expAMD:true, axX:'vram', axY:'tpp', axB:'usdPer100Tpp',
 };
 
 var PROVIDERS = [
@@ -2153,22 +2160,26 @@ var MODELS = [
   {name:'gpt-oss-20b',org:'openai',params:21,layers:36,kvHeads:8,numHeads:64,headDim:64,attn:'gqa',activeExperts:4,totalExperts:128,hfId:'openai/gpt-oss-20b'},
 ];
 
+// GPU_DATA: mem_bw = memory bandwidth TB/s (published spec)
+// tpp = Planning Throughput Index — heuristic derived from mem_bw + VRAM, for comparative planning only
 var GPU_DATA = [
-  {name:'A100',vram:40,tpp:5000,price:10000,vendor:'nvidia',col:'#7ab3e0'},
-  {name:'A100 80GB',vram:80,tpp:8000,price:15000,vendor:'nvidia',col:'#7ab3e0'},
-  {name:'H100',vram:80,tpp:18000,price:25000,vendor:'nvidia',col:'#5b9bd5'},
-  {name:'H200',vram:141,tpp:18000,price:32000,vendor:'nvidia',col:'#5b9bd5'},
-  {name:'B100',vram:192,tpp:27000,price:35000,vendor:'nvidia',col:'#4285c8'},
-  {name:'B200',vram:180,tpp:37000,price:45000,vendor:'nvidia',col:'#3575bc'},
-  {name:'B300',vram:288,tpp:60000,price:60000,vendor:'nvidia',col:'#2866b0'},
-  {name:'B30A',vram:120,tpp:30000,price:20000,vendor:'nvidia',col:'#4d8fd4'},
-  {name:'H20',vram:96,tpp:6000,price:12000,vendor:'nvidia',col:'#6aa8dc'},
-  {name:'MI250X',vram:128,tpp:9000,price:15000,vendor:'amd',col:'#e07878'},
-  {name:'MI300A',vram:128,tpp:18000,price:20000,vendor:'amd',col:'#d96060'},
-  {name:'MI300X',vram:192,tpp:22000,price:25000,vendor:'amd',col:'#cc4444'},
-  {name:'MI325X',vram:256,tpp:21000,price:30000,vendor:'amd',col:'#c03838'},
-  {name:'MI350X',vram:288,tpp:34000,price:40000,vendor:'amd',col:'#b42020'},
+  {name:'A100',     vendor:'nvidia', vram:40,  price:10000, mem_bw:2.0,  tpp:6000,  col:'#7ab3e0'},
+  {name:'A100 80GB',vendor:'nvidia', vram:80,  price:15000, mem_bw:2.0,  tpp:10500, col:'#7ab3e0'},
+  {name:'H100',     vendor:'nvidia', vram:80,  price:25000, mem_bw:3.35, tpp:18000, col:'#5b9bd5'},
+  {name:'H200',     vendor:'nvidia', vram:141, price:32000, mem_bw:4.8,  tpp:25000, col:'#5b9bd5'},
+  {name:'B100',     vendor:'nvidia', vram:192, price:35000, mem_bw:6.0,  tpp:28000, col:'#4285c8'},
+  {name:'B200',     vendor:'nvidia', vram:180, price:45000, mem_bw:8.0,  tpp:40000, col:'#3575bc'},
+  {name:'B300',     vendor:'nvidia', vram:288, price:60000, mem_bw:10.0, tpp:60000, col:'#2866b0'},
+  {name:'B30A',     vendor:'nvidia', vram:120, price:20000, mem_bw:4.0,  tpp:18000, col:'#4d8fd4'},
+  {name:'H20',      vendor:'nvidia', vram:96,  price:12000, mem_bw:4.0,  tpp:7000,  col:'#6aa8dc'},
+  {name:'MI250X',   vendor:'amd',    vram:128, price:15000, mem_bw:3.2,  tpp:9000,  col:'#e07878'},
+  {name:'MI300A',   vendor:'amd',    vram:128, price:20000, mem_bw:5.2,  tpp:18000, col:'#d96060'},
+  {name:'MI300X',   vendor:'amd',    vram:192, price:25000, mem_bw:5.3,  tpp:22000, col:'#cc4444'},
+  {name:'MI325X',   vendor:'amd',    vram:256, price:30000, mem_bw:6.0,  tpp:25000, col:'#c03838'},
+  {name:'MI350X',   vendor:'amd',    vram:288, price:40000, mem_bw:8.0,  tpp:34000, col:'#b42020'},
 ];
+// Derive cost-efficiency fields in place
+GPU_DATA.forEach(function(g){ g.usdPerTpp = g.price/g.tpp; g.usdPer100Tpp = (g.price/g.tpp)*100; });
 
 // ===== DEBOUNCE =====
 var calcTimer;
@@ -4099,78 +4110,149 @@ function calcHybrid(){
 function toggleExpNV(){expNV=!expNV;document.getElementById('exp-nv').classList.toggle('on',expNV);renderExplorer();}
 function toggleExpAMD(){expAMD=!expAMD;document.getElementById('exp-amd').classList.toggle('on',expAMD);renderExplorer();}
 function setAxis(axis,val,btn){
-  if(axis==='x'){axX=val;document.querySelectorAll('.axis-selectors .axis-btn').slice(0,3).forEach(b=>b.classList.remove('on'));}
-  else if(axis==='y'){axY=val;}
-  else{axB=val;}
-  if(btn)btn.classList.add('on');
-  var desc={vram:'VRAM (GB)',price:'Price ($K)',tpp:'Throughput (tok/s)',tpp100:'$/100 TPP'};
-  document.getElementById('axis-desc').textContent='X: '+desc[axX]+' · Y: '+desc[axY]+' · Bubble: '+desc[axB];
+  if(axis==='x') axX=val;
+  else if(axis==='y') axY=val;
+  else axB=val;
+  // Update active state on all axis buttons
+  var allBtns = document.querySelectorAll('.axis-selectors .axis-btn');
+  allBtns.forEach(function(b){ if(b.getAttribute('data-axis')===axis) b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  var ml = typeof METRIC_LABELS!=='undefined' ? METRIC_LABELS : {};
+  var lbl = function(k){ return ml[k]||k; };
+  var desc = document.getElementById('axis-desc');
+  if(desc) desc.textContent = 'X: '+lbl(axX)+' · Y: '+lbl(axY)+' · Bubble size: '+lbl(axB);
   renderExplorer();
 }
-function getVal(gpu,key){
-  if(key==='vram')return gpu.vram;
-  if(key==='price')return gpu.price/1000;
-  if(key==='tpp')return gpu.tpp;
-  if(key==='tpp100')return Math.round(gpu.price/gpu.tpp*100);
-  return gpu.vram;
+// Metric labels — used by axis description and tooltips
+var METRIC_LABELS = {
+  vram:      'VRAM (GB)',
+  price:     'Price (USD)',
+  tpp:       'Planning TPP',
+  mem_bw:    'Memory Bandwidth (TB/s)',
+  usdPer100Tpp: '$ / 100 TPP',
+  usdPerTpp:    '$ / TPP'
+};
+
+function metricValue(gpu, key){
+  switch(key){
+    case 'vram':         return gpu.vram;
+    case 'price':        return gpu.price;
+    case 'tpp':          return gpu.tpp;
+    case 'mem_bw':       return gpu.mem_bw;
+    case 'usdPer100Tpp': return gpu.usdPer100Tpp;
+    case 'usdPerTpp':    return gpu.usdPerTpp;
+    default:             return gpu.vram;
+  }
 }
+
+// Keep getVal as alias so other parts of app still work
+function getVal(gpu,key){ return metricValue(gpu,key); }
+
+function bubbleRadius(value, metric, allData){
+  var max = Math.max.apply(null, allData.map(function(g){ return metricValue(g, metric); }));
+  if(!max) return 20;
+  return 20 + (value / max) * 40;
+}
+
 function renderExplorer(){
-  var canvas=document.getElementById('explorer-chart');
-  if(!canvas)return;
-  var data=GPU_DATA.filter(g=>(g.vendor==='nvidia'&&expNV)||(g.vendor==='amd'&&expAMD));
-  if(exploreChart){exploreChart.destroy();exploreChart=null;}
-  var maxB=Math.max(...data.map(g=>getVal(g,axB)));
-  var datasets=data.map(function(g){
-    return{
-      label:g.name,
-      data:[{x:getVal(g,axX),y:getVal(g,axY),r:Math.max(12,Math.sqrt(getVal(g,axB)/maxB)*50)}],
-      backgroundColor:g.col+'99',
-      borderColor:g.col+'cc',
-      borderWidth:2,
+  var canvas = document.getElementById('explorer-chart');
+  if(!canvas) return;
+  var data = GPU_DATA.filter(function(g){ return (g.vendor==='nvidia'&&expNV)||(g.vendor==='amd'&&expAMD); });
+  if(exploreChart){ exploreChart.destroy(); exploreChart=null; }
+
+  var datasets = data.map(function(g){
+    var r = bubbleRadius(metricValue(g, axB), axB, data);
+    return {
+      label: g.name,
+      data: [{x: metricValue(g,axX), y: metricValue(g,axY), r: r}],
+      backgroundColor: g.col+'99',
+      borderColor: g.col+'ee',
+      borderWidth: 1.5
     };
   });
-  var labelPlugin={
+
+  var labelPlugin = {
     id:'bubbleLabels',
-    afterDraw:function(chart){
-      var ctx2=chart.ctx;
+    afterDraw: function(chart){
+      var ctx2 = chart.ctx;
       ctx2.save();
-      ctx2.font='bold 10px DM Sans,sans-serif';
-      ctx2.textAlign='center';
-      ctx2.textBaseline='middle';
+      ctx2.font = '600 10px DM Sans,system-ui,sans-serif';
+      ctx2.textAlign = 'center';
+      ctx2.textBaseline = 'middle';
       data.forEach(function(g,i){
-        var meta=chart.getDatasetMeta(i);
-        if(!meta.data[0])return;
-        var x=meta.data[0].x,y=meta.data[0].y;
-        ctx2.strokeStyle='rgba(255,255,255,0.85)';
-        ctx2.lineWidth=3;
-        ctx2.lineJoin='round';
-        ctx2.strokeText(g.name,x,y);
-        ctx2.fillStyle=isDark?'#fff':'#111';
-        ctx2.fillText(g.name,x,y);
+        var meta = chart.getDatasetMeta(i);
+        if(!meta.data[0]) return;
+        var x = meta.data[0].x, y = meta.data[0].y;
+        ctx2.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx2.lineWidth = 3;
+        ctx2.lineJoin = 'round';
+        ctx2.strokeText(g.name, x, y);
+        ctx2.fillStyle = isDark ? '#fff' : '#111';
+        ctx2.fillText(g.name, x, y);
       });
       ctx2.restore();
     }
   };
-  exploreChart=new Chart(canvas,{
-    type:'bubble',
-    data:{datasets},
-    plugins:[labelPlugin],
-    options:{
-      responsive:true,
-      maintainAspectRatio:true,
-      aspectRatio:2.2,
-      plugins:{
-        legend:{display:false},
-        tooltip:{callbacks:{label:function(ctx){var g=data[ctx.datasetIndex];return g.name+': VRAM '+g.vram+'GB · TPP '+g.tpp.toLocaleString()+' · $'+Math.round(g.price/1000)+'K';}}}
+
+  var fmtVal = function(v, key){
+    if(key==='price') return '$'+Math.round(v/1000)+'K';
+    if(key==='mem_bw') return v.toFixed(1)+' TB/s';
+    if(key==='usdPer100Tpp'||key==='usdPerTpp') return '$'+v.toFixed(1);
+    return v.toLocaleString();
+  };
+
+  exploreChart = new Chart(canvas, {
+    type: 'bubble',
+    data: {datasets: datasets},
+    plugins: [labelPlugin],
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 2.2,
+      plugins: {
+        legend: {display: false},
+        tooltip: {
+          callbacks: {
+            title: function(items){ return data[items[0].datasetIndex].name; },
+            label: function(ctx){
+              var g = data[ctx.datasetIndex];
+              return [
+                'VRAM: ' + g.vram + ' GB',
+                'Price: $' + g.price.toLocaleString(),
+                'Planning TPP: ' + g.tpp.toLocaleString(),
+                'Mem BW: ' + g.mem_bw.toFixed(1) + ' TB/s',
+                '$ / 100 TPP: ' + g.usdPer100Tpp.toFixed(1)
+              ];
+            }
+          }
+        }
       },
-      scales:{
-        x:{grid:{color:isDark?'rgba(255,255,255,.05)':'rgba(0,0,0,.05)'},ticks:{color:isDark?'#666':'#888'}},
-        y:{grid:{color:isDark?'rgba(255,255,255,.05)':'rgba(0,0,0,.05)'},ticks:{color:isDark?'#666':'#888'}},
+      scales: {
+        x: {
+          title: {display:true, text:METRIC_LABELS[axX]||axX, color:isDark?'#888':'#555', font:{size:11,weight:'600'}},
+          grid: {color: isDark?'rgba(255,255,255,.05)':'rgba(0,0,0,.05)'},
+          ticks: {color: isDark?'#666':'#888', font:{size:11},
+            callback: function(v){ return fmtVal(v, axX); }}
+        },
+        y: {
+          title: {display:true, text:METRIC_LABELS[axY]||axY, color:isDark?'#888':'#555', font:{size:11,weight:'600'}},
+          grid: {color: isDark?'rgba(255,255,255,.05)':'rgba(0,0,0,.05)'},
+          ticks: {color: isDark?'#666':'#888', font:{size:11},
+            callback: function(v){ return fmtVal(v, axY); }}
+        }
       },
-      onClick:function(evt,els){if(els.length){var g=data[els[0].datasetIndex];alert(g.name+'\nVRAM: '+g.vram+'GB\nThroughput: '+g.tpp.toLocaleString()+' tok/s\nPrice: $'+g.price.toLocaleString());}}
+      onClick: function(evt,els){
+        if(!els.length) return;
+        var g = data[els[0].datasetIndex];
+        alert(g.name
+          +'\nVRAM: '+g.vram+' GB'
+          +'\nPrice: $'+g.price.toLocaleString()
+          +'\nPlanning TPP: '+g.tpp.toLocaleString()
+          +'\nMem Bandwidth: '+g.mem_bw.toFixed(1)+' TB/s'
+          +'\n$ / 100 TPP: '+g.usdPer100Tpp.toFixed(1));
+      }
     }
   });
-  // Labels drawn via afterDraw plugin (defined above)
 }
 
 
