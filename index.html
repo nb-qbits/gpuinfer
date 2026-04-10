@@ -1894,26 +1894,40 @@ button{font-family:var(--sans);cursor:pointer}
 
 <div id="page-explorer" class="page">
   <div class="explorer-layout">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <div>
         <h2 style="font-size:18px;font-weight:700">GPU Explorer</h2>
         <p style="font-size:12px;color:var(--text3)">LLM inference planning — compare GPU generations by memory, bandwidth, and cost efficiency</p>
       </div>
-      <div style="display:flex;gap:6px">
+      <!-- Vendor toggle + legend -->
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text3)">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#5b9bd5"></span>NVIDIA
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#cc4444;margin-left:6px"></span>AMD
+        </div>
         <button class="chip on" id="exp-nv" onclick="toggleExpNV()">NVIDIA</button>
         <button class="chip on" id="exp-amd" onclick="toggleExpAMD()">AMD</button>
       </div>
     </div>
-    <div class="axis-selectors" style="gap:4px;margin-bottom:8px">
+    <!-- Preset views -->
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--text4);line-height:24px;margin-right:2px">Preset:</span>
+      <button class="chip on" id="exp-preset-balanced"   onclick="setExpPreset('balanced',this)">Balanced</button>
+      <button class="chip"    id="exp-preset-cost"       onclick="setExpPreset('cost',this)">Cost Efficiency</button>
+      <button class="chip"    id="exp-preset-perf"       onclick="setExpPreset('perf',this)">Performance</button>
+    </div>
+    <!-- Axis selectors -->
+    <div class="axis-selectors" style="gap:4px;margin-bottom:4px;flex-wrap:wrap">
       <span class="axis-label" style="font-weight:600">X</span>
       <button class="axis-btn on" data-axis="x" onclick="setAxis('x','vram',this)">VRAM</button>
       <button class="axis-btn" data-axis="x" onclick="setAxis('x','price',this)">Price</button>
-      <button class="axis-btn" data-axis="x" onclick="setAxis('x','tpp',this)">Planning TPP</button>
+      <button class="axis-btn" data-axis="x" onclick="setAxis('x','tpp',this)">Throughput Index</button>
       <button class="axis-btn" data-axis="x" onclick="setAxis('x','mem_bw',this)">Mem BW</button>
       <span class="axis-label" style="margin-left:10px;font-weight:600">Y</span>
       <button class="axis-btn" data-axis="y" onclick="setAxis('y','vram',this)">VRAM</button>
       <button class="axis-btn" data-axis="y" onclick="setAxis('y','price',this)">Price</button>
-      <button class="axis-btn on" data-axis="y" onclick="setAxis('y','tpp',this)">Planning TPP</button>
+      <button class="axis-btn on" data-axis="y" onclick="setAxis('y','tpp',this)">Throughput Index</button>
       <button class="axis-btn" data-axis="y" onclick="setAxis('y','mem_bw',this)">Mem BW</button>
       <span class="axis-label" style="margin-left:10px;font-weight:600">Bubble</span>
       <button class="axis-btn" data-axis="b" onclick="setAxis('b','vram',this)">VRAM</button>
@@ -1921,15 +1935,26 @@ button{font-family:var(--sans);cursor:pointer}
       <button class="axis-btn on" data-axis="b" onclick="setAxis('b','usdPer100Tpp',this)">$ / 100 TPP</button>
       <button class="axis-btn" data-axis="b" onclick="setAxis('b','mem_bw',this)">Mem BW</button>
     </div>
-    <div style="font-size:11px;color:var(--text4);margin-bottom:10px" id="axis-desc">X: VRAM (GB) · Y: Planning TPP · Bubble size: $ / 100 TPP</div>
-    <div class="explorer-chart-wrap">
-      <canvas id="explorer-chart" style="max-height:420px"></canvas>
+    <!-- Chart -->
+    <div class="explorer-chart-wrap" style="position:relative;max-height:420px;padding:12px 16px 8px">
+      <!-- In-chart axis overlay (top-left) -->
+      <div id="exp-axis-overlay" style="position:absolute;top:12px;left:16px;font-size:10px;color:var(--text4);line-height:1.7;pointer-events:none;z-index:2">
+        <div><span style="color:var(--text3);font-weight:600">X</span> <span id="exp-ol-x">VRAM (GB)</span></div>
+        <div><span style="color:var(--text3);font-weight:600">Y</span> <span id="exp-ol-y">Throughput Index</span></div>
+        <div><span style="color:var(--text3);font-weight:600">●</span> <span id="exp-ol-b">Bubble = cost efficiency (smaller = better)</span></div>
+      </div>
+      <canvas id="explorer-chart"></canvas>
     </div>
-    <div class="explorer-notice" style="margin-top:16px;font-size:11px;color:var(--text3);line-height:1.7;border-top:1px solid var(--border);padding-top:14px">
-      <strong>Planning TPP</strong> is a heuristic derived from memory bandwidth, VRAM capacity, and architecture generation. It is intended for comparative analysis only — not measured tokens/sec for a specific model or workload.<br>
+    <!-- Insight bar -->
+    <div style="font-size:11px;color:var(--text3);margin:6px 0 12px;padding:6px 10px;background:var(--bg2);border-left:3px solid var(--blue);border-radius:0 var(--r) var(--r) 0">
+      💡 <span id="exp-insight">Top-right = high throughput. Smaller bubble = better cost efficiency. Top-left = cheaper but lower performance.</span>
+    </div>
+    <!-- Disclaimers -->
+    <div class="explorer-notice" style="font-size:11px;color:var(--text3);line-height:1.7;border-top:1px solid var(--border);padding-top:12px">
+      <strong>Throughput Index</strong> is a planning metric derived from memory bandwidth, VRAM, and architecture generation. It enables relative GPU comparison — not exact model throughput.<br>
       <strong>Inference performance</strong> depends on model architecture (GQA vs MHA), sequence length, batching, and inference backend (vLLM, TensorRT-LLM, etc.).<br>
       <strong>Cluster scaling</strong> — GPU-level performance does not directly translate to cluster-level throughput. Interconnect (NVLink, InfiniBand) and workload distribution impact scaling.<br>
-      <strong>Pricing</strong> reflects indicative estimates and may vary significantly by provider, region, and purchasing model (on-demand vs reserved vs spot). Validate all figures with vendors before procurement.<br>
+      <strong>Pricing</strong> reflects indicative on-prem GPU estimates and may vary significantly by provider, region, and purchasing model. Validate all figures with vendors before procurement.<br>
       <strong>Sources:</strong> NVIDIA product pages, AMD product pages, published benchmarks, market reports. &copy; gpu.calc
     </div>
   </div>
@@ -1978,7 +2003,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.37</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.39</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -4117,20 +4142,22 @@ function setAxis(axis,val,btn){
   var allBtns = document.querySelectorAll('.axis-selectors .axis-btn');
   allBtns.forEach(function(b){ if(b.getAttribute('data-axis')===axis) b.classList.remove('on'); });
   if(btn) btn.classList.add('on');
-  var ml = typeof METRIC_LABELS!=='undefined' ? METRIC_LABELS : {};
-  var lbl = function(k){ return ml[k]||k; };
-  var desc = document.getElementById('axis-desc');
-  if(desc) desc.textContent = 'X: '+lbl(axX)+' · Y: '+lbl(axY)+' · Bubble size: '+lbl(axB);
+  // Overlay updated by renderExplorer
   renderExplorer();
 }
 // Metric labels — used by axis description and tooltips
 var METRIC_LABELS = {
-  vram:      'VRAM (GB)',
-  price:     'Price (USD)',
-  tpp:       'Planning TPP',
-  mem_bw:    'Memory Bandwidth (TB/s)',
-  usdPer100Tpp: '$ / 100 TPP',
+  vram:         'VRAM (GB)',
+  price:        'On-prem GPU price (est.)',
+  tpp:          'Throughput Index',
+  mem_bw:       'Memory Bandwidth (TB/s)',
+  usdPer100Tpp: 'Cost efficiency ($ / 100 TPP)',
   usdPerTpp:    '$ / TPP'
+};
+// Short labels for axis selector buttons
+var METRIC_SHORT = {
+  vram:'VRAM', price:'Price', tpp:'Throughput Index',
+  mem_bw:'Mem BW', usdPer100Tpp:'$ / 100 TPP', usdPerTpp:'$ / TPP'
 };
 
 function metricValue(gpu, key){
@@ -4216,12 +4243,14 @@ function renderExplorer(){
             title: function(items){ return data[items[0].datasetIndex].name; },
             label: function(ctx){
               var g = data[ctx.datasetIndex];
+              var bLabel = METRIC_SHORT[axB]||axB;
               return [
                 'VRAM: ' + g.vram + ' GB',
-                'Price: $' + g.price.toLocaleString(),
-                'Planning TPP: ' + g.tpp.toLocaleString(),
-                'Mem BW: ' + g.mem_bw.toFixed(1) + ' TB/s',
-                '$ / 100 TPP: ' + g.usdPer100Tpp.toFixed(1)
+                'On-prem GPU price (est.): $' + g.price.toLocaleString(),
+                'Throughput Index (Planning TPP): ' + g.tpp.toLocaleString(),
+                'Mem Bandwidth: ' + g.mem_bw.toFixed(1) + ' TB/s',
+                '$ / 100 TPP: ' + g.usdPer100Tpp.toFixed(1),
+                'Bubble size = ' + bLabel + (axB==='usdPer100Tpp'?' (smaller = more efficient)':'')
               ];
             }
           }
@@ -4246,15 +4275,67 @@ function renderExplorer(){
         var g = data[els[0].datasetIndex];
         alert(g.name
           +'\nVRAM: '+g.vram+' GB'
-          +'\nPrice: $'+g.price.toLocaleString()
-          +'\nPlanning TPP: '+g.tpp.toLocaleString()
+          +'\nOn-prem GPU price (est.): $'+g.price.toLocaleString()
+          +'\nThroughput Index (Planning TPP): '+g.tpp.toLocaleString()
           +'\nMem Bandwidth: '+g.mem_bw.toFixed(1)+' TB/s'
           +'\n$ / 100 TPP: '+g.usdPer100Tpp.toFixed(1));
       }
     }
   });
+
+  // Update in-chart axis overlay
+  var ml = METRIC_LABELS;
+  var ms = METRIC_SHORT;
+  var olx = document.getElementById('exp-ol-x');
+  var oly = document.getElementById('exp-ol-y');
+  var olb = document.getElementById('exp-ol-b');
+  if(olx) olx.textContent = ml[axX]||axX;
+  if(oly) oly.textContent = ml[axY]||axY;
+  if(olb) olb.textContent = 'Bubble = '+(ms[axB]||axB)+(axB==='usdPer100Tpp'?' (smaller = more efficient)':'');
+
+  // Update insight bar dynamically
+  var insight = document.getElementById('exp-insight');
+  if(insight){
+    var insightMap = {
+      'vram_tpp':   'Top-right = high VRAM and throughput. These GPUs handle larger models and longer contexts.',
+      'vram_price': 'Top-right = high VRAM, high cost. Look for bottom-right for best VRAM per dollar.',
+      'price_tpp':  'Top-right = expensive and high throughput. Look for top-left for best value.',
+      'mem_bw_tpp': 'Throughput Index scales with memory bandwidth — this view shows that relationship directly.',
+      'vram_mem_bw':'Higher memory bandwidth enables faster decoding. Top-right = ideal for LLM inference.',
+    };
+    var ikey = axX+'_'+axY;
+    insight.textContent = insightMap[ikey] || 'Higher Y = better throughput. Smaller bubble = better cost efficiency. Compare across GPU generations.';
+  }
 }
 
+
+function setExpPreset(mode, btn){
+  // Deactivate all preset buttons
+  document.querySelectorAll('[id^="exp-preset-"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  // Clear all axis button active states
+  document.querySelectorAll('.axis-btn').forEach(function(b){ b.classList.remove('on'); });
+  // Apply preset: {x, y, b}
+  var presets = {
+    balanced:   {x:'vram',  y:'tpp',   b:'usdPer100Tpp'},
+    cost:       {x:'price', y:'tpp',   b:'vram'},
+    perf:       {x:'vram',  y:'tpp',   b:'price'}
+  };
+  var p = presets[mode] || presets.balanced;
+  axX = p.x; axY = p.y; axB = p.b;
+  // Re-activate matching axis buttons
+  document.querySelectorAll('.axis-btn').forEach(function(b){
+    var axis = b.getAttribute('data-axis');
+    var val  = b.getAttribute('onclick')||'';
+    var match = val.match(/setAxis\('(.)','([^']+)'/);
+    if(match && match[1]===axis){
+      if((axis==='x'&&match[2]===axX)||(axis==='y'&&match[2]===axY)||(axis==='b'&&match[2]===axB)){
+        b.classList.add('on');
+      }
+    }
+  });
+  renderExplorer();
+}
 
 // ===== NODE TOPOLOGY =====
 function renderTopology(C){
