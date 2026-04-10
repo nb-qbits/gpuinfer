@@ -2078,7 +2078,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.48</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.50</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2469,50 +2469,50 @@ function openLayer(id){
 }
 
 // ===== CORE MATH =====
-function weightsGB(){ return S.params * (S.prec==='fp16'?2:S.prec==='fp8'?1:0.5); }
+function weightsGB(p){ var o=p||S; return o.params * (o.prec==='fp16'?2:o.prec==='fp8'?1:0.5); }
 
-function kvBytesPerToken(){
+function kvBytesPerToken(p){
   // Architecture-aware KV cache calculation
   // Returns bytes per token per replica (not per layer — total across all KV-active layers)
-  var kvPrec = S.kvPrec==='fp16'?2:S.kvPrec==='fp8'?1:1;
+  var o=p||S;
+  var kvPrec = o.kvPrec==='fp16'?2:o.kvPrec==='fp8'?1:1;
 
   // Category 5: DeepSeek MLA — compressed latent KV
-  if(S.kvLoraRank){
-    var ropeHead = S.qkRopeHeadDim||64;
-    return (S.kvLoraRank + ropeHead) * kvPrec * S.numLayers;
+  if(o.kvLoraRank){
+    var ropeHead = o.qkRopeHeadDim||64;
+    return (o.kvLoraRank + ropeHead) * kvPrec * o.numLayers;
   }
 
   // Category 4: Hybrid SSM — only attention layers have KV cache
   // Category 3: Hybrid sliding/global — handled in kvGBPerUser for full accuracy
   // Category 1/2/6: Standard + MoE — all layers, no moeScale (MoE doesn't affect KV)
-  var effectiveLayers = S.kvLayers || S.numLayers;
+  var effectiveLayers = o.kvLayers || o.numLayers;
 
-  return 2 * effectiveLayers * S.numKvHeads * S.headDim * kvPrec;
+  return 2 * effectiveLayers * o.numKvHeads * o.headDim * kvPrec;
 }
 
-function kvGBPerUser(){
-  var eff = S.fw==='vllm' ? 0.95 : 1.0;
-  var prefix = 1 - S.hitrate;
-  var ctxTokens = S.ctx * 1000;
+function kvGBPerUser(p){
+  var o=p||S;
+  var eff = o.fw==='vllm' ? 0.95 : 1.0;
+  var prefix = 1 - (o.hitrate||0);
+  var ctxTokens = o.ctx * 1000;
 
   // Category 3: Hybrid sliding/global — split global vs sliding KV
-  if(S.kvArchType==='hybrid_sliding' && S.kvGlobalLayers!=null){
-    var kvPrec = S.kvPrec==='fp16'?2:S.kvPrec==='fp8'?1:1;
-    var gHeads = S.globalKvHeads || S.numKvHeads;
-    var gDim = S.globalHeadDim || S.headDim;
-    var sWin = S.slidingWindow || 1024;
+  if(o.kvArchType==='hybrid_sliding' && o.kvGlobalLayers!=null){
+    var kvPrec = o.kvPrec==='fp16'?2:o.kvPrec==='fp8'?1:1;
+    var gHeads = o.globalKvHeads || o.numKvHeads;
+    var gDim = o.globalHeadDim || o.headDim;
+    var sWin = o.slidingWindow || 1024;
 
-    // Global layers: full context
-    var globalBytes = S.kvGlobalLayers * ctxTokens * 2 * gHeads * gDim * kvPrec;
-    // Sliding layers: bounded by window size
+    var globalBytes = o.kvGlobalLayers * ctxTokens * 2 * gHeads * gDim * kvPrec;
     var slidingTokens = Math.min(ctxTokens, sWin);
-    var slidingBytes = S.kvSlidingLayers * slidingTokens * 2 * S.numKvHeads * S.headDim * kvPrec;
+    var slidingBytes = o.kvSlidingLayers * slidingTokens * 2 * o.numKvHeads * o.headDim * kvPrec;
 
     return ((globalBytes + slidingBytes) / 1e9) * prefix / eff;
   }
 
   // All other architectures: standard path
-  var bytes = kvBytesPerToken() * ctxTokens;
+  var bytes = kvBytesPerToken(o) * ctxTokens;
   return (bytes / 1e9) * prefix / eff;
 }
 
@@ -5654,17 +5654,17 @@ function calcCalGPUs(result){
   var demandTps     = rps * tokPerReq;
   var gpusThroughput = tpsPerGpu ? Math.ceil(demandTps / tpsPerGpu) : null;
 
-  // D. Memory/KV fit — uses computeMemoryFit() directly (same as Capacity's compute()).
-  //    Only S fields needed for weightsGB()/kvGBPerUser() are temporarily set.
-  //    No other S fields are touched. No full S-swap needed.
-  var arch = CAL_STATE.modelArch;
+  // D. Memory/KV fit — resolve arch, then call weightsGB(arch) and kvGBPerUser(arch)
+  //    directly. No S mutation. Same functions Capacity uses, just passed arch explicitly.
+  var arch = result.modelArch || CAL_STATE.modelArch;
   if(!arch && typeof MODELS !== 'undefined'){
     var mLookup = MODELS.find(function(x){
-      return x.hfId===CAL_STATE.modelPath || x.name===CAL_STATE.modelLabel;
+      return x.hfId===result.modelPath || x.name===result.modelLabel
+          || x.hfId===CAL_STATE.modelPath || x.name===CAL_STATE.modelLabel;
     });
     if(mLookup){
       arch = {
-        params:mLookup.params, prec:'fp16',
+        params:mLookup.params, prec:'fp16', kvPrec:'fp16',
         numLayers:mLookup.layers, numKvHeads:mLookup.kvHeads,
         numHeads:mLookup.numHeads||mLookup.kvHeads*4||32,
         headDim:mLookup.headDim, attn:mLookup.attn,
@@ -5679,40 +5679,17 @@ function calcCalGPUs(result){
       CAL_STATE.modelArch = arch;
     }
   }
+  // Build the param object for weightsGB/kvGBPerUser — same fields S has
+  var ap = Object.assign({ ctx:ctxK, fw:result.backend==='vllm'?'vllm':'trtllm', hitrate:0 }, arch||{});
 
-  // Temporarily set only the fields weightsGB() and kvGBPerUser() read
-  var _a = {
-    params:S.params, prec:S.prec, kvPrec:S.kvPrec,
-    numLayers:S.numLayers, numKvHeads:S.numKvHeads, numHeads:S.numHeads,
-    headDim:S.headDim, attn:S.attn,
-    kvLayers:S.kvLayers, kvArchType:S.kvArchType,
-    kvGlobalLayers:S.kvGlobalLayers, kvSlidingLayers:S.kvSlidingLayers,
-    slidingWindow:S.slidingWindow, globalKvHeads:S.globalKvHeads,
-    globalHeadDim:S.globalHeadDim, kvLoraRank:S.kvLoraRank,
-    qkRopeHeadDim:S.qkRopeHeadDim, ctx:S.ctx, fw:S.fw, hitrate:S.hitrate
-  };
-  if(arch){
-    S.params=arch.params; S.prec=arch.prec||'fp16'; S.kvPrec=arch.prec||'fp16';
-    S.numLayers=arch.numLayers; S.numKvHeads=arch.numKvHeads;
-    S.numHeads=arch.numHeads; S.headDim=arch.headDim; S.attn=arch.attn;
-    S.kvLayers=arch.kvLayers; S.kvArchType=arch.kvArchType;
-    S.kvGlobalLayers=arch.kvGlobalLayers; S.kvSlidingLayers=arch.kvSlidingLayers;
-    S.slidingWindow=arch.slidingWindow; S.globalKvHeads=arch.globalKvHeads;
-    S.globalHeadDim=arch.globalHeadDim; S.kvLoraRank=arch.kvLoraRank;
-    S.qkRopeHeadDim=arch.qkRopeHeadDim;
-  }
-  S.ctx=ctxK; S.fw=result.backend==='vllm'?'vllm':'trtllm';
+  var wGB  = weightsGB(ap);    // same function as Capacity, param passed explicitly
+  var kvPU = kvGBPerUser(ap);  // same function as Capacity, param passed explicitly
 
-  var wGB  = weightsGB();
-  var kvPU = kvGBPerUser();
-  Object.assign(S, _a); // restore immediately after reading
-
-  // Call the shared function — identical to what compute() uses internally
   var C = computeMemoryFit({
     vramPerGpu: CAL_GPU_VRAM[result.gpu] || 80,
     userTp:     result.tp || 1,
     users:      batch,
-    fw:         result.backend==='vllm'?'vllm':'trtllm',
+    fw:         ap.fw,
     wGB:        wGB,
     kvPU:       kvPU
   });
@@ -5805,6 +5782,11 @@ function selectCalModel(hfId, label, btn){
   if(inp) inp.value = '';
   var ctxEl = document.getElementById('cal-ctx');
   if(ctxEl && S.ctx) ctxEl.value = S.ctx;
+  // Clear last result so recomputeSizing uses fresh arch, not stale cached result
+  if(CAL_STATE.lastResult && CAL_STATE.lastResult.modelPath !== hfId){
+    CAL_STATE.lastResult = null;
+    CAL_STATE.lastSizing = null;
+  }
   calPayloadEdited = false;
   updateCalPayload();
 }
@@ -5997,6 +5979,7 @@ function parseCalResult(data, mode, proxyReason, payload, cacheKey){
     mode: mode,
     modelPath: CAL_STATE.modelPath,
     modelLabel: CAL_STATE.modelLabel,
+    modelArch: CAL_STATE.modelArch || null,  // carry arch with result for sizing
     proxyModel: payload.model_path,
     proxyReason: proxyReason,
     gpu: payload.system,
