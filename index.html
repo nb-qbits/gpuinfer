@@ -2078,7 +2078,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.46</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.48</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2518,39 +2518,56 @@ function kvGBPerUser(){
 
 function overhead(){ return Math.max(0.5, weightsGB()*0.12); }
 
+// ── Shared memory/KV fit logic — called by both compute() (Capacity) and calcCalGPUs (Performance) ──
+// p: { vramPerGpu, userTp, users, fw, wGB, kvPU }
+// Returns: { autoTp, ohGB, totalVram, avail, upr, replicas, totalGPUs, vramPct, overflow, tpMinRequired, tpAutoScaled }
+function computeMemoryFit(p){
+  var vramPerGpu = p.vramPerGpu;
+  var wGB        = p.wGB;
+  var kvPU       = p.kvPU;
+  var userTp     = p.userTp || 1;
+  var users      = p.users  || 1;
+  var fw         = p.fw     || 'trtllm';
+
+  var ohPerGpu = Math.max(0.5, vramPerGpu * 0.08);
+  var tpOptions = [1,2,4,8];
+  var minTp = 8;
+  for(var ti=0; ti<tpOptions.length; ti++){
+    var tp = tpOptions[ti];
+    if(wGB/tp + ohPerGpu < vramPerGpu * 0.95){ minTp = tp; break; }
+  }
+  var autoTp    = Math.max(userTp, minTp);
+  var ohGB      = ohPerGpu * autoTp;
+  var totalVram = vramPerGpu * autoTp;
+  var avail     = (totalVram - wGB - ohGB) * (fw==='vllm' ? 0.95 : 0.85);
+  avail = Math.max(avail, 0.1);
+  var upr       = Math.max(1, Math.floor(avail / kvPU));
+  var replicas  = Math.ceil(users / upr);
+  var totalGPUs = replicas * autoTp;
+  var vramPct   = Math.min((wGB + ohGB + kvPU*Math.min(users,upr)) / totalVram * 100, 100);
+  var overflow  = (wGB/8 + ohPerGpu) >= vramPerGpu;
+  return {autoTp, ohGB, totalVram, avail, upr, replicas,
+          totalGPUs, gpuPerReplica:autoTp,
+          vramPct, overflow, tpMinRequired:minTp, tpAutoScaled:autoTp>userTp};
+}
+
 function compute(){
   var wGB = weightsGB();
-  var vramPerGpu = S.gpuVram;
-
-  // ── Auto-TP: find minimum TP so model fits on GPU ─────────────────────────
-  // Overhead is per-GPU (framework, activations) = 8% of GPU VRAM
-  var ohPerGpu = Math.max(0.5, vramPerGpu * 0.08);
-  var tpOptions = [1, 2, 4, 8];
-  var minTp = 8; // default: assume needs max TP
-  for (var ti = 0; ti < tpOptions.length; ti++) {
-    var tp = tpOptions[ti];
-    var wPerGpu = wGB / tp;
-    if (wPerGpu + ohPerGpu < vramPerGpu * 0.95) {
-      minTp = tp;
-      break;
-    }
-  }
-  
-  // Use the larger of: user-selected TP or minimum required TP
-  var autoTp = Math.max(S.tp, minTp);
-  var ohGB = ohPerGpu * autoTp; // total overhead across all GPUs in replica
-  
   var kvPU = kvGBPerUser();
-  
-  // KV available = (total VRAM across TP GPUs - weights - overhead) * packing
-  var totalVram = vramPerGpu * autoTp;
-  var avail = (totalVram - wGB - ohGB) * (S.fw==='vllm'?0.95:0.85);
-  avail = Math.max(avail, 0.1);
-  
-  var upr = Math.max(1, Math.floor(avail / kvPU));
-  var replicas = Math.ceil(S.users / upr);
-  var gpuPerReplica = autoTp;
-  var totalGPUs = replicas * gpuPerReplica;
+
+  // ── Memory/KV fit — delegated to shared computeMemoryFit() ──
+  var M = computeMemoryFit({
+    vramPerGpu: S.gpuVram,
+    userTp:     S.tp,
+    users:      S.users,
+    fw:         S.fw,
+    wGB:        wGB,
+    kvPU:       kvPU
+  });
+  var autoTp = M.autoTp, ohGB = M.ohGB, totalVram = M.totalVram;
+  var avail = M.avail, upr = M.upr, replicas = M.replicas;
+  var gpuPerReplica = M.gpuPerReplica, totalGPUs = M.totalGPUs;
+  var vramPerGpu = S.gpuVram;
 
   // ── llm-d disaggregated mode ────────────────────────────────────────────
   // Prefill and decode run on separate GPU pools
@@ -2582,12 +2599,10 @@ function compute(){
   }
 
   var kvTotal = kvPU * S.users;
-  var vramPct = Math.min((wGB + ohGB + kvPU*Math.min(S.users,upr)) / totalVram * 100, 100);
-  
-  // Overflow: model doesn't fit even at TP=8
-  var overflow = (wGB / 8 + ohPerGpu) >= vramPerGpu;
-  var tpAutoScaled = autoTp > S.tp;
-  var tpMinRequired = minTp;
+  var vramPct       = M.vramPct;
+  var overflow      = M.overflow;
+  var tpAutoScaled  = M.tpAutoScaled;
+  var tpMinRequired = M.tpMinRequired;
   
   var costPerGPUHr = S.cloudRate * (1-S.disc);
   var cloudMo = totalGPUs * costPerGPUHr * 730; // 730 hrs/mo avg
@@ -5639,60 +5654,68 @@ function calcCalGPUs(result){
   var demandTps     = rps * tokPerReq;
   var gpusThroughput = tpsPerGpu ? Math.ceil(demandTps / tpsPerGpu) : null;
 
-  // D. Memory/KV fit — call compute() directly, the same function Capacity uses.
-  //    Swap ALL S fields that weightsGB() and kvGBPerUser() depend on, then restore.
-  var arch = CAL_STATE.modelArch;  // stored on model select / HF lookup
-  var _saved = {
-    gpuVram: S.gpuVram, gpuName: S.gpuName,
-    users: S.users, ctx: S.ctx, tp: S.tp, fw: S.fw,
-    params: S.params, prec: S.prec, kvPrec: S.kvPrec,
-    numLayers: S.numLayers, numKvHeads: S.numKvHeads,
-    numHeads: S.numHeads, headDim: S.headDim, attn: S.attn,
-    kvLayers: S.kvLayers, kvArchType: S.kvArchType,
-    kvGlobalLayers: S.kvGlobalLayers, kvSlidingLayers: S.kvSlidingLayers,
-    slidingWindow: S.slidingWindow,
-    globalKvHeads: S.globalKvHeads, globalHeadDim: S.globalHeadDim,
-    kvLoraRank: S.kvLoraRank, qkRopeHeadDim: S.qkRopeHeadDim,
-    activeExperts: S.activeExperts, totalExperts: S.totalExperts,
-    mode: S.mode
-  };
-
-  // GPU
-  S.gpuVram = CAL_GPU_VRAM[result.gpu] || 80;
-  S.gpuName = gpuLabel;
-  // Concurrency + context
-  S.users   = batch;
-  S.ctx     = ctxK;
-  S.tp      = result.tp || 1;
-  S.fw      = result.backend === 'vllm' ? 'vllm' : 'trtllm';
-  S.mode    = 'cloud'; // standard (not llm-d)
-  // Model arch — use CAL_STATE.modelArch if available, else leave S as-is
-  if(arch){
-    S.params       = arch.params;
-    S.prec         = arch.prec || 'fp16';
-    S.kvPrec       = arch.prec || 'fp16';
-    S.numLayers    = arch.numLayers;
-    S.numKvHeads   = arch.numKvHeads;
-    S.numHeads     = arch.numHeads;
-    S.headDim      = arch.headDim;
-    S.attn         = arch.attn;
-    S.kvLayers     = arch.kvLayers;
-    S.kvArchType   = arch.kvArchType;
-    S.kvGlobalLayers  = arch.kvGlobalLayers;
-    S.kvSlidingLayers = arch.kvSlidingLayers;
-    S.slidingWindow   = arch.slidingWindow;
-    S.globalKvHeads   = arch.globalKvHeads;
-    S.globalHeadDim   = arch.globalHeadDim;
-    S.kvLoraRank      = arch.kvLoraRank;
-    S.qkRopeHeadDim   = arch.qkRopeHeadDim;
-    S.activeExperts   = arch.activeExperts;
-    S.totalExperts    = arch.totalExperts;
+  // D. Memory/KV fit — uses computeMemoryFit() directly (same as Capacity's compute()).
+  //    Only S fields needed for weightsGB()/kvGBPerUser() are temporarily set.
+  //    No other S fields are touched. No full S-swap needed.
+  var arch = CAL_STATE.modelArch;
+  if(!arch && typeof MODELS !== 'undefined'){
+    var mLookup = MODELS.find(function(x){
+      return x.hfId===CAL_STATE.modelPath || x.name===CAL_STATE.modelLabel;
+    });
+    if(mLookup){
+      arch = {
+        params:mLookup.params, prec:'fp16',
+        numLayers:mLookup.layers, numKvHeads:mLookup.kvHeads,
+        numHeads:mLookup.numHeads||mLookup.kvHeads*4||32,
+        headDim:mLookup.headDim, attn:mLookup.attn,
+        kvLayers:mLookup.kvLayers||null, kvArchType:mLookup.kvArchType||null,
+        kvGlobalLayers:mLookup.kvGlobalLayers!=null?mLookup.kvGlobalLayers:null,
+        kvSlidingLayers:mLookup.kvSlidingLayers!=null?mLookup.kvSlidingLayers:null,
+        slidingWindow:mLookup.slidingWindow||null,
+        globalKvHeads:mLookup.globalKvHeads||null, globalHeadDim:mLookup.globalHeadDim||null,
+        kvLoraRank:mLookup.kvLoraRank||null, qkRopeHeadDim:mLookup.qkRopeHeadDim||null,
+        activeExperts:mLookup.activeExperts||null, totalExperts:mLookup.totalExperts||null
+      };
+      CAL_STATE.modelArch = arch;
+    }
   }
 
-  var C = compute(); // ← exact same Capacity formula, same S state
+  // Temporarily set only the fields weightsGB() and kvGBPerUser() read
+  var _a = {
+    params:S.params, prec:S.prec, kvPrec:S.kvPrec,
+    numLayers:S.numLayers, numKvHeads:S.numKvHeads, numHeads:S.numHeads,
+    headDim:S.headDim, attn:S.attn,
+    kvLayers:S.kvLayers, kvArchType:S.kvArchType,
+    kvGlobalLayers:S.kvGlobalLayers, kvSlidingLayers:S.kvSlidingLayers,
+    slidingWindow:S.slidingWindow, globalKvHeads:S.globalKvHeads,
+    globalHeadDim:S.globalHeadDim, kvLoraRank:S.kvLoraRank,
+    qkRopeHeadDim:S.qkRopeHeadDim, ctx:S.ctx, fw:S.fw, hitrate:S.hitrate
+  };
+  if(arch){
+    S.params=arch.params; S.prec=arch.prec||'fp16'; S.kvPrec=arch.prec||'fp16';
+    S.numLayers=arch.numLayers; S.numKvHeads=arch.numKvHeads;
+    S.numHeads=arch.numHeads; S.headDim=arch.headDim; S.attn=arch.attn;
+    S.kvLayers=arch.kvLayers; S.kvArchType=arch.kvArchType;
+    S.kvGlobalLayers=arch.kvGlobalLayers; S.kvSlidingLayers=arch.kvSlidingLayers;
+    S.slidingWindow=arch.slidingWindow; S.globalKvHeads=arch.globalKvHeads;
+    S.globalHeadDim=arch.globalHeadDim; S.kvLoraRank=arch.kvLoraRank;
+    S.qkRopeHeadDim=arch.qkRopeHeadDim;
+  }
+  S.ctx=ctxK; S.fw=result.backend==='vllm'?'vllm':'trtllm';
 
-  // Restore S fully
-  Object.assign(S, _saved);
+  var wGB  = weightsGB();
+  var kvPU = kvGBPerUser();
+  Object.assign(S, _a); // restore immediately after reading
+
+  // Call the shared function — identical to what compute() uses internally
+  var C = computeMemoryFit({
+    vramPerGpu: CAL_GPU_VRAM[result.gpu] || 80,
+    userTp:     result.tp || 1,
+    users:      batch,
+    fw:         result.backend==='vllm'?'vllm':'trtllm',
+    wGB:        wGB,
+    kvPU:       kvPU
+  });
 
   var gpusMemory = C.totalGPUs;
   var gpusFinal  = gpusThroughput ? Math.max(gpusThroughput, gpusMemory) : gpusMemory;
@@ -5700,9 +5723,7 @@ function calcCalGPUs(result){
   return {
     tokPerReq, rps, demandTps, tpsPerGpu,
     gpusThroughput, gpusMemory, gpusFinal,
-    // pass through compute() internals for the breakdown display
-    wGB:      C.wGB,
-    kvPU:     C.kvPU,
+    wGB,  kvPU,
     avail:    C.avail,
     upr:      C.upr,
     replicas: C.replicas,
@@ -5736,7 +5757,24 @@ var calCache = {};
 })();
 
 function initCalibratedPage(){
-  // Always update payload and restore comparison — safe to call multiple times
+  // Ensure modelArch is populated for the default/current model
+  if(!CAL_STATE.modelArch && typeof MODELS !== 'undefined'){
+    var m = MODELS.find(function(x){
+      return x.hfId === CAL_STATE.modelPath || x.name === CAL_STATE.modelLabel;
+    });
+    if(m) CAL_STATE.modelArch = {
+      params: m.params, prec:'fp16',
+      numLayers:m.layers, numKvHeads:m.kvHeads,
+      numHeads:m.numHeads||m.kvHeads*4||32, headDim:m.headDim, attn:m.attn,
+      kvLayers:m.kvLayers||null, kvArchType:m.kvArchType||null,
+      kvGlobalLayers:m.kvGlobalLayers!=null?m.kvGlobalLayers:null,
+      kvSlidingLayers:m.kvSlidingLayers!=null?m.kvSlidingLayers:null,
+      slidingWindow:m.slidingWindow||null,
+      globalKvHeads:m.globalKvHeads||null, globalHeadDim:m.globalHeadDim||null,
+      kvLoraRank:m.kvLoraRank||null, qkRopeHeadDim:m.qkRopeHeadDim||null,
+      activeExperts:m.activeExperts||null, totalExperts:m.totalExperts||null
+    };
+  }
   updateCalPayload();
   renderCalSavedComparison();
 }
