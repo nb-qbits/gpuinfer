@@ -2078,7 +2078,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.53</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.55</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5656,6 +5656,8 @@ function calcCalGPUs(result){
 
   // D. Memory/KV fit — call compute() directly, exactly as Capacity does.
   //    Set S to calibrated inputs, call compute(), restore S. One formula, two callers.
+  // Arch priority: current CAL_STATE (chip/lookup) > result.modelArch (stored at estimate time)
+  // result.modelArch is only null for results cached before v5.4.49 or if lookup was skipped.
   var arch = CAL_STATE.modelArch || result.modelArch;
   if(!arch && typeof MODELS !== 'undefined'){
     var mMatch = MODELS.find(function(x){
@@ -5751,7 +5753,17 @@ var CAL_TIPS = [
 // Cache: key = JSON payload string → result
 var calCache = {};
 (function loadCalCache(){
-  try{var c=localStorage.getItem('cal_cache');if(c){calCache=JSON.parse(c)||{};}}catch(e){}
+  try{
+    var c=localStorage.getItem('cal_cache');
+    if(c){
+      var raw=JSON.parse(c)||{};
+      // Drop cached results that predate modelArch storage (v5.4.49+)
+      Object.keys(raw).forEach(function(k){
+        if(raw[k] && !raw[k].modelArch) delete raw[k];
+      });
+      calCache=raw;
+    }
+  }catch(e){}
 })();
 (function loadCalSaved(){
   try{var s=localStorage.getItem('cal_saved');if(s){CAL_STATE.savedRuns=JSON.parse(s)||{};}}catch(e){}
@@ -5827,7 +5839,7 @@ function calHFLookup(){
     CAL_STATE.modelPath = id;
     CAL_STATE.modelLabel = m.name;
     CAL_STATE.modelArch = {
-      params: m.params, prec: 'fp16',
+      params: m.params, prec: 'fp16', kvPrec: 'fp16',
       numLayers: m.layers, numKvHeads: m.kvHeads,
       numHeads: m.numHeads||m.kvHeads*4||32,
       headDim: m.headDim, attn: m.attn,
@@ -6389,20 +6401,29 @@ function calPullFromAdvanced(){
     'L40S':'l40s','B200':'b200_sxm','MI300X':'mi300x'};
   var fwMap={'vllm':'vllm','trtllm':'trtllm','trt-llm':'trtllm'};
 
-  // Model
-  if(S.modelLabel && S.modelLabel !== 'Llama 3.1 8B'){
-    // Try to find matching preset chip
-    var matched = false;
-    document.querySelectorAll('#cal-model-chips .chip').forEach(function(b){
-      if(b.textContent.trim() === S.modelLabel){ b.click(); matched=true; }
-    });
-    // If no preset match, update state directly
-    if(!matched && S.modelLabel){
-      CAL_STATE.modelLabel = S.modelLabel;
-      var disp = document.getElementById('cal-model-display');
-      if(disp) disp.textContent = S.modelLabel;
-    }
-  }
+  // Always copy full model arch from S — this is the definitive source
+  CAL_STATE.modelPath  = S.hfId || CAL_STATE.modelPath;
+  CAL_STATE.modelLabel = S.modelLabel;
+  CAL_STATE.modelArch  = {
+    params:S.params, prec:S.prec||'fp16', kvPrec:S.kvPrec||'fp16',
+    numLayers:S.numLayers, numKvHeads:S.numKvHeads, numHeads:S.numHeads,
+    headDim:S.headDim, attn:S.attn,
+    kvLayers:S.kvLayers||null, kvArchType:S.kvArchType||null,
+    kvGlobalLayers:S.kvGlobalLayers!=null?S.kvGlobalLayers:null,
+    kvSlidingLayers:S.kvSlidingLayers!=null?S.kvSlidingLayers:null,
+    slidingWindow:S.slidingWindow||null,
+    globalKvHeads:S.globalKvHeads||null, globalHeadDim:S.globalHeadDim||null,
+    kvLoraRank:S.kvLoraRank||null, qkRopeHeadDim:S.qkRopeHeadDim||null,
+    activeExperts:S.activeExperts||null, totalExperts:S.totalExperts||null
+  };
+
+  // Update model display
+  var disp = document.getElementById('cal-model-display');
+  if(disp) disp.textContent = S.modelLabel;
+  // Deselect preset chips (pulled model may not be a preset)
+  document.querySelectorAll('#cal-model-chips .chip').forEach(function(b){
+    b.classList.toggle('on', b.textContent.trim() === S.modelLabel);
+  });
 
   // GPU
   var gpuVal = gpuMap[S.gpuName] || 'h100_sxm';
