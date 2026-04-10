@@ -2052,7 +2052,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.43</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.44</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5598,67 +5598,54 @@ function calcCalGPUs(result){
   var isl       = result.isl  || 1024;
   var osl       = result.osl  || 256;
   var batch     = result.batch || 16;
-  var userTp    = result.tp   || 1;
-  var vram      = CAL_GPU_VRAM[result.gpu] || 80;
   var gpuLabel  = CAL_GPU_LABELS[result.gpu] || result.gpu;
-  // Context window for KV sizing — from left panel input or Advanced S.ctx
-  var ctxK = parseInt((document.getElementById('cal-ctx')||{}).value)||4;
-  if(S && S.ctx) ctxK = S.ctx;
+  var ctxK      = parseInt((document.getElementById('cal-ctx')||{}).value)||4;
 
   // A. Tokens per request
   var tokPerReq = isl + osl;
 
   // B. Request rate
   var latSec = latMs ? latMs / 1000 : null;
-  var rps = latSec ? (batch / latSec) : batch;
+  var rps    = latSec ? (batch / latSec) : batch;
 
   // C. Token demand
-  var demandTps = rps * tokPerReq;
-
-  // D. Throughput GPUs
+  var demandTps     = rps * tokPerReq;
   var gpusThroughput = tpsPerGpu ? Math.ceil(demandTps / tpsPerGpu) : null;
 
-  // E. Memory / KV fit — exact same logic as Advanced calc()
-  //    Step 1: compute weights GB using same weightsGB() function
-  var wGB = (typeof weightsGB === 'function') ? weightsGB() : (S.params||8) * 2;
+  // D. Memory/KV fit — call compute() directly, the same function Capacity uses.
+  //    Temporarily swap S fields to match the calibrated inputs, then restore.
+  var _saved = {
+    gpuVram: S.gpuVram, gpuName: S.gpuName,
+    users: S.users, ctx: S.ctx, tp: S.tp, fw: S.fw
+  };
+  // Map GPU system key → VRAM and name
+  S.gpuVram = CAL_GPU_VRAM[result.gpu] || 80;
+  S.gpuName = gpuLabel;
+  S.users   = batch;
+  S.ctx     = ctxK;
+  S.tp      = result.tp || 1;
+  S.fw      = result.backend === 'vllm' ? 'vllm' : 'trtllm';
 
-  //    Step 2: auto-TP — find minimum TP so model fits on one GPU (same as Advanced)
-  var ohPerGpu = Math.max(0.5, vram * 0.08);
-  var tpOptions = [1,2,4,8];
-  var minTp = 8;
-  for(var ti=0; ti<tpOptions.length; ti++){
-    var tpTry = tpOptions[ti];
-    if(wGB/tpTry + ohPerGpu < vram * 0.95){ minTp = tpTry; break; }
-  }
-  var autoTp = Math.max(userTp, minTp); // never less than what model requires
+  var C = compute(); // ← exact same Capacity formula
 
-  //    Step 3: KV bytes per user — temporarily set S.ctx for kvGBPerUser()
-  var _savedCtx = S.ctx;
-  S.ctx = ctxK;
-  var kvPU = (typeof kvGBPerUser === 'function') ? kvGBPerUser() : 0.5;
-  S.ctx = _savedCtx;
+  // Restore S
+  Object.assign(S, _saved);
 
-  //    Step 4: available VRAM for KV across the replica (autoTp GPUs)
-  var ohGB      = ohPerGpu * autoTp;
-  var totalVram = vram * autoTp;
-  var avail     = Math.max(0.1, (totalVram - wGB - ohGB) * 0.9); // 90% packing
-  var upr       = Math.max(1, Math.floor(avail / kvPU)); // users per replica
-
-  //    Step 5: replicas × gpus_per_replica
-  var replicas   = Math.ceil(batch / upr);
-  var gpusMemory = replicas * autoTp;
-
-  // F. Final
-  var gpusFinal = gpusThroughput
-    ? Math.max(gpusThroughput, gpusMemory)
-    : gpusMemory;
+  var gpusMemory = C.totalGPUs;
+  var gpusFinal  = gpusThroughput ? Math.max(gpusThroughput, gpusMemory) : gpusMemory;
 
   return {
     tokPerReq, rps, demandTps, tpsPerGpu,
     gpusThroughput, gpusMemory, gpusFinal,
-    wGB, kvPU, avail, upr, replicas,
-    autoTp, vram, gpuLabel, userTp,
-    latSec, batch, isl, osl, ctxK
+    // pass through compute() internals for the breakdown display
+    wGB:      C.wGB,
+    kvPU:     C.kvPU,
+    avail:    C.avail,
+    upr:      C.upr,
+    replicas: C.replicas,
+    autoTp:   C.autoTp,
+    vram:     CAL_GPU_VRAM[result.gpu] || 80,
+    gpuLabel, latSec, batch, isl, osl, ctxK
   };
 }
 
