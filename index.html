@@ -1871,8 +1871,34 @@ button{font-family:var(--sans);cursor:pointer}
         <div id="cal-proxy-note" style="display:none;font-size:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:14px"></div>
         <!-- KPI tiles (decision + estimator metrics) -->
         <div class="outcome-cards" id="cal-metrics-grid"></div>
-        <!-- GPU sizing breakdown — inline below tiles like Capacity -->
-        <div id="cal-breakdown" style="display:none;font-size:12px;color:var(--text2);margin-bottom:12px;padding:12px 2px"></div>
+        <!-- GPU sizing breakdown — collapsible, editable inputs -->
+        <details id="cal-breakdown-details" style="display:none;margin-bottom:12px">
+          <summary style="font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between;align-items:center;user-select:none">
+            <span>Sizing calculation</span><span style="font-size:10px;color:var(--text4)">▾ edit inputs to recalculate</span>
+          </summary>
+          <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:12px">
+            <!-- Editable sizing inputs -->
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+              <div>
+                <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:3px">INPUT TOKENS</div>
+                <input type="number" id="sz-isl" min="64" max="32768" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box" oninput="recomputeSizing()">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:3px">OUTPUT TOKENS</div>
+                <input type="number" id="sz-osl" min="16" max="8192" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box" oninput="recomputeSizing()">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:3px">BATCH SIZE</div>
+                <input type="number" id="sz-batch" min="1" max="512" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box" oninput="recomputeSizing()">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:3px">CONTEXT (K)</div>
+                <input type="number" id="sz-ctx" min="1" max="128" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box" oninput="recomputeSizing()">
+              </div>
+            </div>
+            <div id="cal-breakdown" style="font-size:12px;color:var(--text2)"></div>
+          </div>
+        </details>
         <!-- Add to comparison — near results -->
         <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
           <button class="btn btn-sm" onclick="saveCalResult()" id="cal-save-btn2" style="display:none">+ Add to comparison</button>
@@ -2052,7 +2078,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.44</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.46</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5565,6 +5591,7 @@ var CAL_API = 'https://aiconfig-api.onrender.com/estimate';
 var CAL_STATE = {
   modelPath: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
   modelLabel: 'Llama 3.1 8B',
+  modelArch: null,  // full arch fields — set on model select/lookup
   lastResult: null,
   savedRuns: [],
   payloadEdited: false
@@ -5613,22 +5640,58 @@ function calcCalGPUs(result){
   var gpusThroughput = tpsPerGpu ? Math.ceil(demandTps / tpsPerGpu) : null;
 
   // D. Memory/KV fit — call compute() directly, the same function Capacity uses.
-  //    Temporarily swap S fields to match the calibrated inputs, then restore.
+  //    Swap ALL S fields that weightsGB() and kvGBPerUser() depend on, then restore.
+  var arch = CAL_STATE.modelArch;  // stored on model select / HF lookup
   var _saved = {
     gpuVram: S.gpuVram, gpuName: S.gpuName,
-    users: S.users, ctx: S.ctx, tp: S.tp, fw: S.fw
+    users: S.users, ctx: S.ctx, tp: S.tp, fw: S.fw,
+    params: S.params, prec: S.prec, kvPrec: S.kvPrec,
+    numLayers: S.numLayers, numKvHeads: S.numKvHeads,
+    numHeads: S.numHeads, headDim: S.headDim, attn: S.attn,
+    kvLayers: S.kvLayers, kvArchType: S.kvArchType,
+    kvGlobalLayers: S.kvGlobalLayers, kvSlidingLayers: S.kvSlidingLayers,
+    slidingWindow: S.slidingWindow,
+    globalKvHeads: S.globalKvHeads, globalHeadDim: S.globalHeadDim,
+    kvLoraRank: S.kvLoraRank, qkRopeHeadDim: S.qkRopeHeadDim,
+    activeExperts: S.activeExperts, totalExperts: S.totalExperts,
+    mode: S.mode
   };
-  // Map GPU system key → VRAM and name
+
+  // GPU
   S.gpuVram = CAL_GPU_VRAM[result.gpu] || 80;
   S.gpuName = gpuLabel;
+  // Concurrency + context
   S.users   = batch;
   S.ctx     = ctxK;
   S.tp      = result.tp || 1;
   S.fw      = result.backend === 'vllm' ? 'vllm' : 'trtllm';
+  S.mode    = 'cloud'; // standard (not llm-d)
+  // Model arch — use CAL_STATE.modelArch if available, else leave S as-is
+  if(arch){
+    S.params       = arch.params;
+    S.prec         = arch.prec || 'fp16';
+    S.kvPrec       = arch.prec || 'fp16';
+    S.numLayers    = arch.numLayers;
+    S.numKvHeads   = arch.numKvHeads;
+    S.numHeads     = arch.numHeads;
+    S.headDim      = arch.headDim;
+    S.attn         = arch.attn;
+    S.kvLayers     = arch.kvLayers;
+    S.kvArchType   = arch.kvArchType;
+    S.kvGlobalLayers  = arch.kvGlobalLayers;
+    S.kvSlidingLayers = arch.kvSlidingLayers;
+    S.slidingWindow   = arch.slidingWindow;
+    S.globalKvHeads   = arch.globalKvHeads;
+    S.globalHeadDim   = arch.globalHeadDim;
+    S.kvLoraRank      = arch.kvLoraRank;
+    S.qkRopeHeadDim   = arch.qkRopeHeadDim;
+    S.activeExperts   = arch.activeExperts;
+    S.totalExperts    = arch.totalExperts;
+  }
 
-  var C = compute(); // ← exact same Capacity formula
+  var C = compute(); // ← exact same Capacity formula, same S state
 
-  // Restore S
+  // Restore S fully
   Object.assign(S, _saved);
 
   var gpusMemory = C.totalGPUs;
@@ -5681,16 +5744,29 @@ function initCalibratedPage(){
 function selectCalModel(hfId, label, btn){
   CAL_STATE.modelPath = hfId;
   CAL_STATE.modelLabel = label;
+  // Store arch from MODELS array so compute() uses correct weights/KV
+  var m = (typeof MODELS!=='undefined') && MODELS.find(function(x){ return x.hfId===hfId || x.name===label; });
+  CAL_STATE.modelArch = m ? {
+    params: m.params, prec: 'fp16',
+    numLayers: m.layers, numKvHeads: m.kvHeads,
+    numHeads: m.numHeads||m.kvHeads*4||32,
+    headDim: m.headDim, attn: m.attn,
+    kvLayers: m.kvLayers||null, kvArchType: m.kvArchType||null,
+    kvGlobalLayers: m.kvGlobalLayers!=null?m.kvGlobalLayers:null,
+    kvSlidingLayers: m.kvSlidingLayers!=null?m.kvSlidingLayers:null,
+    slidingWindow: m.slidingWindow||null,
+    globalKvHeads: m.globalKvHeads||null, globalHeadDim: m.globalHeadDim||null,
+    kvLoraRank: m.kvLoraRank||null, qkRopeHeadDim: m.qkRopeHeadDim||null,
+    activeExperts: m.activeExperts||null, totalExperts: m.totalExperts||null
+  } : null;
   document.querySelectorAll('#cal-model-chips .chip').forEach(function(b){b.classList.remove('on');});
   if(btn) btn.classList.add('on');
   var disp = document.getElementById('cal-model-display');
   if(disp) disp.textContent = label;
   var inp = document.getElementById('cal-hf-input');
   if(inp) inp.value = '';
-  // Context window
   var ctxEl = document.getElementById('cal-ctx');
   if(ctxEl && S.ctx) ctxEl.value = S.ctx;
-
   calPayloadEdited = false;
   updateCalPayload();
 }
@@ -5704,6 +5780,19 @@ function calHFLookup(){
   fetchHFModel(id, 'cal-hf-status', function(m){
     CAL_STATE.modelPath = id;
     CAL_STATE.modelLabel = m.name;
+    CAL_STATE.modelArch = {
+      params: m.params, prec: 'fp16',
+      numLayers: m.layers, numKvHeads: m.kvHeads,
+      numHeads: m.numHeads||m.kvHeads*4||32,
+      headDim: m.headDim, attn: m.attn,
+      kvLayers: m.kvLayers||null, kvArchType: m.kvArchType||null,
+      kvGlobalLayers: m.kvGlobalLayers!=null?m.kvGlobalLayers:null,
+      kvSlidingLayers: m.kvSlidingLayers!=null?m.kvSlidingLayers:null,
+      slidingWindow: m.slidingWindow||null,
+      globalKvHeads: m.globalKvHeads||null, globalHeadDim: m.globalHeadDim||null,
+      kvLoraRank: m.kvLoraRank||null, qkRopeHeadDim: m.qkRopeHeadDim||null,
+      activeExperts: m.activeExperts||null, totalExperts: m.totalExperts||null
+    };
     var disp = document.getElementById('cal-model-display');
     if(disp) disp.textContent = m.name + ' (' + m.params + 'B, ' + m.layers + 'L, ' + (m.attn==='gqa'?'GQA':'MHA') + ')';
     document.querySelectorAll('#cal-model-chips .chip').forEach(function(b){b.classList.remove('on');});
@@ -6048,10 +6137,19 @@ function showCalResult(result, fromCache){
   }
 
   // ── Calculation breakdown ──
+  var breakdownDetails = document.getElementById('cal-breakdown-details');
   var breakdown = document.getElementById('cal-breakdown');
   if(breakdown && sizing){
-    var fmt2 = function(v,dp){ return v!=null ? (dp!=null?parseFloat(v).toFixed(dp):Math.round(v).toLocaleString()) : '—'; };
-    breakdown.style.display = 'block';
+    if(breakdownDetails) breakdownDetails.style.display = 'block';
+    // Populate editable inputs with current values
+    var szIsl = document.getElementById('sz-isl');
+    var szOsl = document.getElementById('sz-osl');
+    var szBatch = document.getElementById('sz-batch');
+    var szCtx = document.getElementById('sz-ctx');
+    if(szIsl && !szIsl._edited) szIsl.value = sizing.isl;
+    if(szOsl && !szOsl._edited) szOsl.value = sizing.osl;
+    if(szBatch && !szBatch._edited) szBatch.value = sizing.batch;
+    if(szCtx && !szCtx._edited) szCtx.value = sizing.ctxK;
     var fmt2 = function(v,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v).toLocaleString()):'—'; };
     var line = function(label, val){
       return '<div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">'
@@ -6070,8 +6168,8 @@ function showCalResult(result, fromCache){
       + line('KV / user', fmt2(sizing.kvPU,2)+'GB · ctx='+sizing.ctxK+'K · avail='+fmt2(sizing.avail,1)+'GB → <b>'+fmt2(sizing.upr)+' users/replica</b>')
       + line('Memory GPUs', sizing.replicas+' replicas × '+sizing.autoTp+' GPU = <b>'+sizing.gpusMemory+'</b>')
       + line('Final required', 'max('+[sizing.gpusThroughput!=null?sizing.gpusThroughput:'—', sizing.gpusMemory].join(', ')+') = <b style="color:var(--blue)">'+sizing.gpusFinal+' '+sizing.gpuLabel+'</b>');
-  } else if(breakdown){
-    breakdown.style.display = 'none';
+  } else if(breakdownDetails){
+    breakdownDetails.style.display = 'none';
   }
 
   // ── Collapsible estimator details (raw metrics + debug) ──
@@ -6328,6 +6426,86 @@ function exportCalToSheets(){
   var a = document.createElement('a');
   a.href = url; a.download = 'calibrated-estimates.csv'; a.click();
   URL.revokeObjectURL(url);
+}
+
+
+function recomputeSizing(){
+  var result = CAL_STATE.lastResult;
+  if(!result) return;
+  // Read editable inputs — override result fields
+  var szIsl   = document.getElementById('sz-isl');
+  var szOsl   = document.getElementById('sz-osl');
+  var szBatch = document.getElementById('sz-batch');
+  var szCtx   = document.getElementById('sz-ctx');
+  // Build a modified result copy with overridden values
+  var r2 = Object.assign({}, result);
+  if(szIsl   && szIsl.value)   { r2.isl        = parseInt(szIsl.value);   szIsl._edited   = true; }
+  if(szOsl   && szOsl.value)   { r2.osl        = parseInt(szOsl.value);   szOsl._edited   = true; }
+  if(szBatch && szBatch.value) { r2.batch       = parseInt(szBatch.value); szBatch._edited = true; }
+  if(szCtx   && szCtx.value){
+    // Also update the main context input so calcCalGPUs picks it up
+    var calCtx = document.getElementById('cal-ctx');
+    if(calCtx) calCtx.value = szCtx.value;
+    szCtx._edited = true;
+  }
+  // Recompute sizing with modified inputs
+  var sizing = calcCalGPUs(r2);
+  CAL_STATE.lastSizing = sizing;
+  if(!sizing) return;
+
+  var fmt  = function(v,unit,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v))+unit:'—'; };
+  var fmtN = function(v){ return v!=null?Math.round(v).toLocaleString():'—'; };
+  var fmt2 = function(v,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v).toLocaleString()):'—'; };
+
+  // Update the outcome tiles grid (re-render just the .oc-val values without full re-render)
+  var grid = document.getElementById('cal-metrics-grid');
+  if(grid){
+    var oc = function(label,val,sub,badge,cls){
+      return '<div class="oc'+(cls?' '+cls:'')+'">'
+        +'<div class="oc-label">'+label+'</div>'
+        +'<div class="oc-val">'+val+'</div>'
+        +'<div class="oc-sub">'+sub+'</div>'
+        +(badge||'')+'</div>';
+    };
+    var supply  = result.tokens_per_sec_per_gpu!=null ? fmt(result.tokens_per_sec_per_gpu,' tok/s',0) : '—';
+    var tokReq  = (r2.isl+r2.osl).toLocaleString();
+    var rpsStr  = sizing ? fmt(sizing.rps,'/s',1) : '—';
+    var demStr  = sizing ? fmtN(sizing.demandTps)+' tok/s' : '—';
+    var tGPUs   = sizing && sizing.gpusThroughput!=null ? String(sizing.gpusThroughput) : '—';
+    var mGPUs   = sizing ? String(sizing.gpusMemory) : '—';
+    var fGPUs   = sizing ? String(sizing.gpusFinal) : '—';
+    var heroBadge = '<span class="oc-badge good">'+sizing.autoTp+'× tensor parallel</span>';
+    var heroSub   = sizing.gpuLabel+' · '+sizing.replicas+' replica'+(sizing.replicas>1?'s':'')+' × '+sizing.autoTp+' GPU';
+    grid.innerHTML =
+        oc('Required GPUs', fGPUs, heroSub, heroBadge, 'winner')
+      + oc('Tokens / request', tokReq,  'input + output per request')
+      + oc('Req / sec',        rpsStr,  'batch ÷ request latency')
+      + oc('Throughput demand',demStr,  'req/s × tokens/request')
+      + oc('Supply / GPU',     supply,  'tok/s per GPU · from estimator')
+      + oc('Throughput GPUs',  tGPUs,   'ceil(demand ÷ supply/GPU)')
+      + oc('Memory / KV GPUs', mGPUs,   sizing.replicas+' replica×'+sizing.autoTp+'GPU · '+fmtN(sizing.upr)+' users/replica');
+  }
+
+  // Update breakdown lines
+  var breakdown = document.getElementById('cal-breakdown');
+  if(breakdown){
+    var line = function(label,val){
+      return '<div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">'
+        +'<span style="font-size:11px;color:var(--text3);min-width:160px;flex-shrink:0">'+label+'</span>'
+        +'<span style="font-size:12px;font-family:var(--mono);color:var(--text2);flex:1">'+val+'</span>'
+        +'</div>';
+    };
+    breakdown.innerHTML =
+      line('Tokens / request', r2.isl+' + '+r2.osl+' = <b>'+fmt2(sizing.tokPerReq)+'</b> tokens')
+      + line('Req / sec', fmt2(sizing.batch)+' batch ÷ '+(sizing.latSec?fmt2(sizing.latSec,3)+'s lat':'est.')+' = <b>'+fmt2(sizing.rps,1)+'/s</b>')
+      + line('Throughput demand', fmt2(sizing.rps,1)+' × '+fmt2(sizing.tokPerReq)+' = <b>'+fmt2(sizing.demandTps)+' tok/s</b>')
+      +(sizing.tpsPerGpu ? line('Supply / GPU', 'estimator → <b>'+fmt2(sizing.tpsPerGpu,0)+' tok/s</b>') : '')
+      +(sizing.gpusThroughput!=null ? line('Throughput GPUs', 'ceil('+fmt2(sizing.demandTps)+' ÷ '+fmt2(sizing.tpsPerGpu,0)+') = <b>'+sizing.gpusThroughput+'</b>') : '')
+      + line('Auto TP', sizing.autoTp+'× (min to fit '+fmt2(sizing.wGB,1)+'GB weights on '+sizing.vram+'GB VRAM)')
+      + line('KV / user', fmt2(sizing.kvPU,2)+'GB · ctx='+sizing.ctxK+'K · avail='+fmt2(sizing.avail,1)+'GB → <b>'+fmt2(sizing.upr)+' users/replica</b>')
+      + line('Memory GPUs', sizing.replicas+' replicas × '+sizing.autoTp+' GPU = <b>'+sizing.gpusMemory+'</b>')
+      + line('Final required', 'max('+[sizing.gpusThroughput!=null?sizing.gpusThroughput:'—',sizing.gpusMemory].join(', ')+') = <b style="color:var(--blue)">'+sizing.gpusFinal+' '+sizing.gpuLabel+'</b>');
+  }
 }
 
 // ===== END CALIBRATED ESTIMATE PAGE =====
