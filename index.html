@@ -2078,7 +2078,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.52</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.53</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5654,45 +5654,70 @@ function calcCalGPUs(result){
   var demandTps     = rps * tokPerReq;
   var gpusThroughput = tpsPerGpu ? Math.ceil(demandTps / tpsPerGpu) : null;
 
-  // D. Memory/KV fit — resolve arch, then call weightsGB(arch) and kvGBPerUser(arch)
-  //    directly. No S mutation. Same functions Capacity uses, just passed arch explicitly.
-  var arch = CAL_STATE.modelArch || result.modelArch; // current chip selection wins over stale cached result
+  // D. Memory/KV fit — call compute() directly, exactly as Capacity does.
+  //    Set S to calibrated inputs, call compute(), restore S. One formula, two callers.
+  var arch = CAL_STATE.modelArch || result.modelArch;
   if(!arch && typeof MODELS !== 'undefined'){
-    var mLookup = MODELS.find(function(x){
-      return x.hfId===result.modelPath || x.name===result.modelLabel
-          || x.hfId===CAL_STATE.modelPath || x.name===CAL_STATE.modelLabel;
+    var mMatch = MODELS.find(function(x){
+      return x.hfId===CAL_STATE.modelPath || x.name===CAL_STATE.modelLabel
+          || x.hfId===result.modelPath    || x.name===result.modelLabel;
     });
-    if(mLookup){
-      arch = {
-        params:mLookup.params, prec:'fp16', kvPrec:'fp16',
-        numLayers:mLookup.layers, numKvHeads:mLookup.kvHeads,
-        numHeads:mLookup.numHeads||mLookup.kvHeads*4||32,
-        headDim:mLookup.headDim, attn:mLookup.attn,
-        kvLayers:mLookup.kvLayers||null, kvArchType:mLookup.kvArchType||null,
-        kvGlobalLayers:mLookup.kvGlobalLayers!=null?mLookup.kvGlobalLayers:null,
-        kvSlidingLayers:mLookup.kvSlidingLayers!=null?mLookup.kvSlidingLayers:null,
-        slidingWindow:mLookup.slidingWindow||null,
-        globalKvHeads:mLookup.globalKvHeads||null, globalHeadDim:mLookup.globalHeadDim||null,
-        kvLoraRank:mLookup.kvLoraRank||null, qkRopeHeadDim:mLookup.qkRopeHeadDim||null,
-        activeExperts:mLookup.activeExperts||null, totalExperts:mLookup.totalExperts||null
-      };
-      CAL_STATE.modelArch = arch;
-    }
+    if(mMatch) arch = {
+      params:mMatch.params, prec:'fp16', kvPrec:'fp16',
+      numLayers:mMatch.layers, numKvHeads:mMatch.kvHeads,
+      numHeads:mMatch.numHeads||mMatch.kvHeads*4||32,
+      headDim:mMatch.headDim, attn:mMatch.attn,
+      kvLayers:mMatch.kvLayers||null, kvArchType:mMatch.kvArchType||null,
+      kvGlobalLayers:mMatch.kvGlobalLayers!=null?mMatch.kvGlobalLayers:null,
+      kvSlidingLayers:mMatch.kvSlidingLayers!=null?mMatch.kvSlidingLayers:null,
+      slidingWindow:mMatch.slidingWindow||null,
+      globalKvHeads:mMatch.globalKvHeads||null, globalHeadDim:mMatch.globalHeadDim||null,
+      kvLoraRank:mMatch.kvLoraRank||null, qkRopeHeadDim:mMatch.qkRopeHeadDim||null,
+      activeExperts:mMatch.activeExperts||null, totalExperts:mMatch.totalExperts||null
+    };
+    if(arch) CAL_STATE.modelArch = arch;
   }
-  // Build the param object for weightsGB/kvGBPerUser — same fields S has
-  var ap = Object.assign({ ctx:ctxK, fw:result.backend==='vllm'?'vllm':'trtllm', hitrate:S.hitrate||0, kvPrec:'fp16', prec:'fp16' }, arch||{});
 
-  var wGB  = weightsGB(ap);    // same function as Capacity, param passed explicitly
-  var kvPU = kvGBPerUser(ap);  // same function as Capacity, param passed explicitly
+  // Save all S fields that compute() reads
+  var _s = {
+    params:S.params, prec:S.prec, kvPrec:S.kvPrec,
+    numLayers:S.numLayers, numKvHeads:S.numKvHeads, numHeads:S.numHeads,
+    headDim:S.headDim, attn:S.attn,
+    kvLayers:S.kvLayers, kvArchType:S.kvArchType,
+    kvGlobalLayers:S.kvGlobalLayers, kvSlidingLayers:S.kvSlidingLayers,
+    slidingWindow:S.slidingWindow, globalKvHeads:S.globalKvHeads,
+    globalHeadDim:S.globalHeadDim, kvLoraRank:S.kvLoraRank, qkRopeHeadDim:S.qkRopeHeadDim,
+    activeExperts:S.activeExperts, totalExperts:S.totalExperts,
+    gpuVram:S.gpuVram, gpuName:S.gpuName,
+    users:S.users, ctx:S.ctx, tp:S.tp, fw:S.fw,
+    hitrate:S.hitrate, mode:S.mode
+  };
 
-  var C = computeMemoryFit({
-    vramPerGpu: CAL_GPU_VRAM[result.gpu] || 80,
-    userTp:     result.tp || 1,
-    users:      batch,
-    fw:         ap.fw,
-    wGB:        wGB,
-    kvPU:       kvPU
-  });
+  // Set S to calibrated inputs
+  if(arch){
+    S.params=arch.params; S.prec=arch.prec||'fp16'; S.kvPrec=arch.kvPrec||arch.prec||'fp16';
+    S.numLayers=arch.numLayers; S.numKvHeads=arch.numKvHeads; S.numHeads=arch.numHeads;
+    S.headDim=arch.headDim; S.attn=arch.attn;
+    S.kvLayers=arch.kvLayers; S.kvArchType=arch.kvArchType;
+    S.kvGlobalLayers=arch.kvGlobalLayers; S.kvSlidingLayers=arch.kvSlidingLayers;
+    S.slidingWindow=arch.slidingWindow; S.globalKvHeads=arch.globalKvHeads;
+    S.globalHeadDim=arch.globalHeadDim; S.kvLoraRank=arch.kvLoraRank;
+    S.qkRopeHeadDim=arch.qkRopeHeadDim;
+    S.activeExperts=arch.activeExperts; S.totalExperts=arch.totalExperts;
+  }
+  S.gpuVram = CAL_GPU_VRAM[result.gpu] || 80;
+  S.gpuName = CAL_GPU_LABELS[result.gpu] || result.gpu;
+  S.users   = batch;
+  S.ctx     = ctxK;
+  S.tp      = result.tp || 1;
+  S.fw      = result.backend === 'vllm' ? 'vllm' : 'trtllm';
+  S.hitrate = _s.hitrate; // keep user's prefix cache setting
+  S.mode    = 'std';      // not llm-d
+
+  var C = compute(); // ← exact same function Capacity calls
+
+  // Restore S
+  Object.assign(S, _s);
 
   var gpusMemory = C.totalGPUs;
   var gpusFinal  = gpusThroughput ? Math.max(gpusThroughput, gpusMemory) : gpusMemory;
@@ -5700,7 +5725,8 @@ function calcCalGPUs(result){
   return {
     tokPerReq, rps, demandTps, tpsPerGpu,
     gpusThroughput, gpusMemory, gpusFinal,
-    wGB,  kvPU,
+    wGB:      C.wGB,
+    kvPU:     C.kvPU,
     avail:    C.avail,
     upr:      C.upr,
     replicas: C.replicas,
