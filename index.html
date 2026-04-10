@@ -1074,6 +1074,7 @@ button{font-family:var(--sans);cursor:pointer}
           <button class="chip" onclick="filterOrg('mistral',this)">Mistral</button>
           <button class="chip" onclick="filterOrg('nvidia',this)">NVIDIA</button>
           <button class="chip" onclick="filterOrg('redhat',this)">RedHatAI</button>
+          <button class="chip" onclick="filterOrg('openai',this)">OpenAI</button>
           <button class="chip" onclick="filterOrg('other',this)">Other</button>
         </div>
           <div id="model-chips" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px"></div>
@@ -1781,7 +1782,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.32</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.33</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -1857,7 +1858,7 @@ var T=(function(){
 var S = {
   // Model
   params:8, modelLabel:'Llama 3.1 8B', attn:'gqa', prec:'fp16',
-  numKvHeads:8, headDim:128, numLayers:32, hfId:null,
+  numKvHeads:8, numHeads:32, headDim:128, numLayers:32, hfId:null,
   kvLayers:null,        // effective unique KV layers (Gemma 4 / SSM hybrid) — null = use numLayers
   activeExperts:null,   // MoE active experts per token — null = not MoE
   totalExperts:null,    // MoE total experts
@@ -1952,6 +1953,15 @@ var MODELS = [
   // Red Hat
   {name:'RH Llama 8B W8A8', org:'redhat',params:8, layers:32,kvHeads:8,headDim:128,attn:'gqa'},
   {name:'RH Llama 70B W8A8',org:'redhat',params:70,layers:80,kvHeads:8,headDim:128,attn:'gqa'},
+  // ── LLM-d reference stack models ──
+  // Llama Guard 4 12B: dense, pruned from Llama 4 Scout MoE, GQA, 48L
+  {name:'Llama Guard 4 12B',org:'meta',params:12,layers:48,kvHeads:8,numHeads:32,headDim:128,attn:'gqa',hfId:'meta-llama/Llama-Guard-4-12B'},
+  // Gemma 3 12B: hybrid sliding window (5:1 local/global), only 8 global layers need full KV
+  {name:'Gemma 3 12B',org:'google',params:12,layers:48,kvHeads:4,numHeads:16,headDim:256,attn:'gqa',kvLayers:8,hfId:'google/gemma-3-12b-it'},
+  // Phi-4-reasoning: same arch as Phi-4 14B, finetuned for reasoning
+  {name:'Phi-4 reasoning',org:'other',params:14,layers:40,kvHeads:8,numHeads:40,headDim:96,attn:'gqa',hfId:'microsoft/Phi-4-reasoning'},
+  // gpt-oss-20b: MoE, 4 active / 128 total experts, GQA, sliding window 128
+  {name:'gpt-oss-20b',org:'openai',params:21,layers:36,kvHeads:8,numHeads:64,headDim:64,attn:'gqa',activeExperts:4,totalExperts:128,hfId:'openai/gpt-oss-20b'},
 ];
 
 var GPU_DATA = [
@@ -2717,7 +2727,7 @@ function selectQSModel(idx,btn){
   var m=_qsFilteredModels[idx];
   if(m){
     S.params=m.params;S.modelLabel=m.name;S.attn=m.attn;
-    S.numLayers=m.layers;S.numKvHeads=m.kvHeads;S.headDim=m.headDim;
+    S.numLayers=m.layers;S.numKvHeads=m.kvHeads;S.numHeads=m.numHeads||m.kvHeads*4||32;S.headDim=m.headDim;
     S.kvArchType=m.kvArchType||null;S.kvLayers=m.kvLayers||null;
     S.kvGlobalLayers=m.kvGlobalLayers!=null?m.kvGlobalLayers:null;
     S.kvSlidingLayers=m.kvSlidingLayers!=null?m.kvSlidingLayers:null;
@@ -2812,7 +2822,7 @@ function hfLookup(){
   if(!id)return;
   fetchHFModel(id,'hf-status',function(m){
     S.params=m.params;S.modelLabel=m.name;S.attn=m.attn;
-    S.numLayers=m.layers;S.numKvHeads=m.kvHeads;S.headDim=m.headDim;
+    S.numLayers=m.layers;S.numKvHeads=m.kvHeads;S.numHeads=m.numHeads||m.kvHeads*4||32;S.headDim=m.headDim;
     // Architecture-specific KV fields
     S.kvArchType=m.kvArchType||null;
     S.kvLayers=m.kvLayers||null;
@@ -2870,9 +2880,10 @@ function fetchHFModel(id,statusId,cb){
 
     // Base fields (every model has these)
     var layers = cfg.num_hidden_layers||32;
-    var kvHeads = cfg.num_key_value_heads||cfg.num_attention_heads||32;
-    var headDim = cfg.head_dim||(Math.round((cfg.hidden_size||4096)/(cfg.num_attention_heads||32)));
-    var attn = (cfg.num_key_value_heads&&cfg.num_key_value_heads<(cfg.num_attention_heads||32))?'gqa':'mha';
+    var numHeads = cfg.num_attention_heads||32;
+    var kvHeads = cfg.num_key_value_heads||numHeads;
+    var headDim = cfg.head_dim||(Math.round((cfg.hidden_size||4096)/numHeads));
+    var attn = (cfg.num_key_value_heads&&cfg.num_key_value_heads<numHeads)?'gqa':'mha';
 
     // ===== ARCHITECTURE DETECTION (6 categories) =====
     var kvArchType='standard', kvLayers=null, kvGlobalLayers=null, kvSlidingLayers=null;
@@ -2991,6 +3002,7 @@ function fetchHFModel(id,statusId,cb){
       params:params,
       layers:layers,
       kvHeads:kvHeads,
+      numHeads:numHeads,
       headDim:headDim,
       attn:attn,
       // Architecture-specific
@@ -3054,7 +3066,7 @@ function selectModel(idx,btn){
   var m=_filteredModels[idx];
   if(!m)return;
   S.params=m.params;S.modelLabel=m.name;S.attn=m.attn;
-  S.numLayers=m.layers;S.numKvHeads=m.kvHeads;S.headDim=m.headDim;
+  S.numLayers=m.layers;S.numKvHeads=m.kvHeads;S.numHeads=m.numHeads||m.kvHeads*4||32;S.headDim=m.headDim;
   // Architecture-specific KV modifiers
   S.kvLayers=m.kvLayers||null;
   S.activeExperts=m.activeExperts||null;
@@ -3085,7 +3097,21 @@ function filterOrg(org,btn){
 }
 
 // ===== SETTERS =====
-function setAttn(a,btn){S.attn=a;document.querySelectorAll('#ps-model .chip').forEach(b=>{if(b.id&&b.id.startsWith('attn'))b.classList.remove('on')});if(btn)btn.classList.add('on');calc();}
+function setAttn(a,btn){
+  S.attn=a;
+  // Update KV heads when switching attn type manually
+  if(a==='mha'){
+    // MHA: all query heads become KV heads
+    S.numKvHeads=S.numHeads;
+  } else if(a==='gqa'){
+    // GQA: reasonable default — 1/4 of query heads, min 1
+    // User should re-select model to get exact ratio
+    S.numKvHeads=Math.max(1,Math.round(S.numHeads/4));
+  }
+  document.querySelectorAll('#ps-model .chip').forEach(b=>{if(b.id&&b.id.startsWith('attn'))b.classList.remove('on')});
+  if(btn)btn.classList.add('on');
+  calc();
+}
 function setPrec(p,btn){
   S.prec=p;
   ['fp16','fp8','int4'].forEach(function(pp){
@@ -4187,6 +4213,10 @@ var FLEET_MODELS = [
   {label:'Gemma 2 27B',params:27,layers:46,kvHeads:16,headDim:256,attn:'gqa'},
   {label:'Phi-4 14B',params:14,layers:40,kvHeads:8,headDim:96,attn:'gqa'},
   {label:'Custom',params:8,layers:32,kvHeads:8,headDim:128,attn:'gqa'},
+  {label:'Llama Guard 4 12B',params:12,layers:48,kvHeads:8,headDim:128,attn:'gqa'},
+  {label:'Gemma 3 12B',params:12,layers:48,kvHeads:4,headDim:256,attn:'gqa',kvLayers:8},
+  {label:'Phi-4 reasoning',params:14,layers:40,kvHeads:8,headDim:96,attn:'gqa'},
+  {label:'gpt-oss-20b',params:21,layers:36,kvHeads:8,headDim:64,attn:'gqa',activeExperts:4,totalExperts:128},
 ];
 
 var appMode='single';
