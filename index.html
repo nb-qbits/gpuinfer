@@ -2078,7 +2078,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.51</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.52</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5656,7 +5656,7 @@ function calcCalGPUs(result){
 
   // D. Memory/KV fit — resolve arch, then call weightsGB(arch) and kvGBPerUser(arch)
   //    directly. No S mutation. Same functions Capacity uses, just passed arch explicitly.
-  var arch = result.modelArch || CAL_STATE.modelArch;
+  var arch = CAL_STATE.modelArch || result.modelArch; // current chip selection wins over stale cached result
   if(!arch && typeof MODELS !== 'undefined'){
     var mLookup = MODELS.find(function(x){
       return x.hfId===result.modelPath || x.name===result.modelLabel
@@ -6051,7 +6051,8 @@ function showCalResult(result, fromCache){
   badge.style.color = modeColors[result.mode] || 'var(--text3)';
   badge.style.borderColor = result.mode==='proxy' ? '#dc2626' : 'var(--border)';
 
-  document.getElementById('cal-result-model').textContent = result.modelLabel;
+  // Always show current chip selection label, not stale result label
+  document.getElementById('cal-result-model').textContent = CAL_STATE.modelLabel || result.modelLabel;
   document.getElementById('cal-result-gpu-badge').textContent =
     (CAL_GPU_LABELS[result.gpu]||result.gpu) + ' · ' + (result.backend||'').toUpperCase() + ' · TP=' + result.tp;
 
@@ -6473,7 +6474,10 @@ function recomputeSizing(){
     if(calCtx) calCtx.value = szCtx.value;
     szCtx._edited = true;
   }
-  // Recompute sizing with modified inputs
+  // Always use current model arch from CAL_STATE, not stale result arch
+  r2.modelArch = CAL_STATE.modelArch;
+  r2.modelPath  = CAL_STATE.modelPath;
+  r2.modelLabel = CAL_STATE.modelLabel;
   var sizing = calcCalGPUs(r2);
   CAL_STATE.lastSizing = sizing;
   if(!sizing) return;
