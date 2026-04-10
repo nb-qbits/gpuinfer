@@ -2078,7 +2078,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.50</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.51</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5680,7 +5680,7 @@ function calcCalGPUs(result){
     }
   }
   // Build the param object for weightsGB/kvGBPerUser — same fields S has
-  var ap = Object.assign({ ctx:ctxK, fw:result.backend==='vllm'?'vllm':'trtllm', hitrate:0 }, arch||{});
+  var ap = Object.assign({ ctx:ctxK, fw:result.backend==='vllm'?'vllm':'trtllm', hitrate:S.hitrate||0, kvPrec:'fp16', prec:'fp16' }, arch||{});
 
   var wGB  = weightsGB(ap);    // same function as Capacity, param passed explicitly
   var kvPU = kvGBPerUser(ap);  // same function as Capacity, param passed explicitly
@@ -6397,6 +6397,10 @@ function calPullFromAdvanced(){
   // Batch size from concurrent users
   var batchEl = document.getElementById('cal-batch');
   if(batchEl && S.users) batchEl.value = S.users;
+
+  // Context window
+  var ctxEl = document.getElementById('cal-ctx');
+  if(ctxEl && S.ctx) ctxEl.value = S.ctx;
 
   calPayloadEdited = false;
   updateCalPayload();
