@@ -1870,9 +1870,9 @@ button{font-family:var(--sans);cursor:pointer}
         <!-- Proxy note -->
         <div id="cal-proxy-note" style="display:none;font-size:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:14px"></div>
         <!-- KPI tiles (decision + estimator metrics) -->
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px" id="cal-metrics-grid"></div>
-        <!-- GPU sizing breakdown -->
-        <div id="cal-breakdown" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:12px;font-size:12px;line-height:1.8"></div>
+        <div class="outcome-cards" id="cal-metrics-grid"></div>
+        <!-- GPU sizing breakdown — inline below tiles like Capacity -->
+        <div id="cal-breakdown" style="display:none;font-size:12px;color:var(--text2);margin-bottom:12px;padding:12px 2px"></div>
         <!-- Add to comparison — near results -->
         <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
           <button class="btn btn-sm" onclick="saveCalResult()" id="cal-save-btn2" style="display:none">+ Add to comparison</button>
@@ -2052,7 +2052,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.42</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.43</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5594,24 +5594,23 @@ var CAL_GPU_VRAM = {
 function calcCalGPUs(result){
   if(!result) return null;
   var tpsPerGpu = result.tokens_per_sec_per_gpu;
-  var latMs     = result.latency_ms || result.ttft_ms;  // best latency proxy
+  var latMs     = result.latency_ms || result.ttft_ms;
   var isl       = result.isl  || 1024;
   var osl       = result.osl  || 256;
   var batch     = result.batch || 16;
-  var tp        = result.tp   || 1;
+  var userTp    = result.tp   || 1;
   var vram      = CAL_GPU_VRAM[result.gpu] || 80;
-  // Context window in K tokens (for KV sizing) — from input field or Advanced
-  var ctxK = parseInt((document.getElementById('cal-ctx')||{}).value)||4;
-  if(S && S.ctx) ctxK = S.ctx; // prefer Advanced ctx if available
   var gpuLabel  = CAL_GPU_LABELS[result.gpu] || result.gpu;
+  // Context window for KV sizing — from left panel input or Advanced S.ctx
+  var ctxK = parseInt((document.getElementById('cal-ctx')||{}).value)||4;
+  if(S && S.ctx) ctxK = S.ctx;
 
   // A. Tokens per request
   var tokPerReq = isl + osl;
 
-  // B. Request rate — use latency if available, else model from batch
+  // B. Request rate
   var latSec = latMs ? latMs / 1000 : null;
-  var rps = latSec ? (batch / latSec) : null;
-  if(!rps) rps = batch; // treat batch as concurrent requests if no latency
+  var rps = latSec ? (batch / latSec) : batch;
 
   // C. Token demand
   var demandTps = rps * tokPerReq;
@@ -5619,45 +5618,47 @@ function calcCalGPUs(result){
   // D. Throughput GPUs
   var gpusThroughput = tpsPerGpu ? Math.ceil(demandTps / tpsPerGpu) : null;
 
-  // E. Memory fit — reuse same logic as Advanced (weightsGB / kvGBPerUser approach)
-  var wGB  = (typeof weightsGB === 'function') ? weightsGB() : (S.params||8) * 2;
-  // Temporarily override S.ctx with the calibrated context window for KV calc
+  // E. Memory / KV fit — exact same logic as Advanced calc()
+  //    Step 1: compute weights GB using same weightsGB() function
+  var wGB = (typeof weightsGB === 'function') ? weightsGB() : (S.params||8) * 2;
+
+  //    Step 2: auto-TP — find minimum TP so model fits on one GPU (same as Advanced)
+  var ohPerGpu = Math.max(0.5, vram * 0.08);
+  var tpOptions = [1,2,4,8];
+  var minTp = 8;
+  for(var ti=0; ti<tpOptions.length; ti++){
+    var tpTry = tpOptions[ti];
+    if(wGB/tpTry + ohPerGpu < vram * 0.95){ minTp = tpTry; break; }
+  }
+  var autoTp = Math.max(userTp, minTp); // never less than what model requires
+
+  //    Step 3: KV bytes per user — temporarily set S.ctx for kvGBPerUser()
   var _savedCtx = S.ctx;
   S.ctx = ctxK;
   var kvPU = (typeof kvGBPerUser === 'function') ? kvGBPerUser() : 0.5;
-  S.ctx = _savedCtx; // restore
-  var ohGB = Math.max(0.5, vram * 0.08) * tp;
-  var totalVram = vram * tp;
-  var avail = Math.max(0.1, (totalVram - wGB - ohGB) * 0.9);
-  var uprPerReplica = Math.max(1, Math.floor(avail / kvPU));
-  var gpusMemory = Math.max(tp, Math.ceil(batch / uprPerReplica) * tp);
+  S.ctx = _savedCtx;
 
-  // F. KV capacity GPUs — same formula, but for demand at rps level
-  var gpusKV = gpusMemory; // already encodes KV capacity
+  //    Step 4: available VRAM for KV across the replica (autoTp GPUs)
+  var ohGB      = ohPerGpu * autoTp;
+  var totalVram = vram * autoTp;
+  var avail     = Math.max(0.1, (totalVram - wGB - ohGB) * 0.9); // 90% packing
+  var upr       = Math.max(1, Math.floor(avail / kvPU)); // users per replica
 
-  // G. Final
+  //    Step 5: replicas × gpus_per_replica
+  var replicas   = Math.ceil(batch / upr);
+  var gpusMemory = replicas * autoTp;
+
+  // F. Final
   var gpusFinal = gpusThroughput
     ? Math.max(gpusThroughput, gpusMemory)
     : gpusMemory;
 
   return {
-    tokPerReq:      tokPerReq,
-    rps:            rps,
-    demandTps:      demandTps,
-    tpsPerGpu:      tpsPerGpu,
-    gpusThroughput: gpusThroughput,
-    gpusMemory:     gpusMemory,
-    gpusKV:         gpusKV,
-    gpusFinal:      gpusFinal,
-    wGB:            wGB,
-    kvPU:           kvPU,
-    vram:           vram,
-    gpuLabel:       gpuLabel,
-    tp:             tp,
-    latSec:         latSec,
-    batch:          batch,
-    isl:            isl,
-    osl:            osl
+    tokPerReq, rps, demandTps, tpsPerGpu,
+    gpusThroughput, gpusMemory, gpusFinal,
+    wGB, kvPU, avail, upr, replicas,
+    autoTp, vram, gpuLabel, userTp,
+    latSec, batch, isl, osl, ctxK
   };
 }
 
@@ -6020,42 +6021,43 @@ function showCalResult(result, fromCache){
   var fmt = function(v,unit,dp){ return v!=null ? (dp!=null?parseFloat(v).toFixed(dp):Math.round(v))+unit : '—'; };
   var fmtN = function(v){ return v!=null ? Math.round(v).toLocaleString() : '—'; };
 
-  // ── Planning outcome tiles — decision outputs only, Capacity-style typography ──
+  // ── Outcome tiles — use exact Capacity .oc / .oc-val / .oc-label classes ──
   var grid = document.getElementById('cal-metrics-grid');
   if(grid){
-    var tile = function(label, val, sub){
-      var empty = val === '—';
-      return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px 12px">'
-        +'<div style="font-size:10px;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:6px">'+label+'</div>'
-        +'<div style="font-size:24px;font-weight:700;line-height:1;color:'+(empty?'var(--text4)':'var(--text1)')+'">'+val+'</div>'
-        +'<div style="font-size:11px;color:var(--text3);margin-top:5px">'+sub+'</div>'
+    var oc = function(label, val, sub, badge, cls){
+      return '<div class="oc'+(cls?' '+cls:'')+'">'
+        +'<div class="oc-label">'+label+'</div>'
+        +'<div class="oc-val">'+val+'</div>'
+        +'<div class="oc-sub">'+sub+'</div>'
+        +(badge||'')
         +'</div>';
     };
-    var gpuVal = sizing ? String(sizing.gpusFinal) : '—';
-    var gpuSub = sizing
-      ? sizing.gpuLabel+' · max(throughput, memory/KV)'
-      : 'run estimate first';
-    var gpuHero = '<div style="background:var(--blue);border-radius:var(--r);padding:14px 12px;color:#fff">'
-      +'<div style="font-size:10px;opacity:.75;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:6px">Required GPUs</div>'
-      +'<div style="font-size:32px;font-weight:700;line-height:1">'+gpuVal+'</div>'
-      +'<div style="font-size:11px;opacity:.85;margin-top:5px">'+gpuSub+'</div>'
-      +'</div>';
+    var supply  = result.tokens_per_sec_per_gpu!=null ? fmt(result.tokens_per_sec_per_gpu,' tok/s',0) : '—';
+    var tokReq  = sizing ? (sizing.isl+sizing.osl).toLocaleString() : '—';
+    var rpsStr  = sizing ? fmt(sizing.rps,'/s',1) : '—';
+    var demStr  = sizing ? fmtN(sizing.demandTps)+' tok/s' : '—';
+    var tGPUs   = sizing && sizing.gpusThroughput!=null ? String(sizing.gpusThroughput) : '—';
+    var mGPUs   = sizing ? String(sizing.gpusMemory) : '—';
+    var fGPUs   = sizing ? String(sizing.gpusFinal)  : '—';
 
-    var tokReq = sizing ? (sizing.isl+sizing.osl).toLocaleString() : '—';
-    var rps    = sizing ? fmt(sizing.rps,'/s',1) : '—';
-    var demand = sizing ? fmtN(sizing.demandTps)+' tok/s' : '—';
-    var supply = result.tokens_per_sec_per_gpu!=null ? fmt(result.tokens_per_sec_per_gpu,' tok/s',0) : '—';
-    var tGPUs  = sizing && sizing.gpusThroughput!=null ? String(sizing.gpusThroughput) : '—';
-    var mGPUs  = sizing ? String(sizing.gpusMemory) : '—';
+    // GPU hero — same style as Capacity winner card
+    var heroBadge = sizing
+      ? '<span class="oc-badge good">'+sizing.autoTp+'× tensor parallel</span>'
+      : '';
+    var heroSub = sizing
+      ? sizing.gpuLabel+' · '+sizing.replicas+' replica'+(sizing.replicas>1?'s':'')+' × '+sizing.autoTp+' GPU'
+      : 'run estimate first';
 
     grid.innerHTML =
-        gpuHero
-      + tile('Tokens / request', tokReq,  'input + output tokens per request')
-      + tile('Req / sec',        rps,     'batch ÷ request latency')
-      + tile('Throughput demand',demand,  'req/s × tokens/request')
-      + tile('Supply / GPU',     supply,  'tok/s per GPU · from estimator')
-      + tile('Throughput GPUs',  tGPUs,   'ceil(demand ÷ supply/GPU)')
-      + tile('Memory / KV GPUs', mGPUs,   'weights + KV cache + overhead');
+        oc('Required GPUs', fGPUs, heroSub, heroBadge, 'winner')
+      + oc('Tokens / request', tokReq,  'input + output per request')
+      + oc('Req / sec',        rpsStr,  'batch ÷ request latency')
+      + oc('Throughput demand',demStr,  'req/s × tokens/request')
+      + oc('Supply / GPU',     supply,  'tok/s per GPU · from estimator')
+      + oc('Throughput GPUs',  tGPUs,   'ceil(demand ÷ supply/GPU)')
+      + oc('Memory / KV GPUs', mGPUs,   sizing
+          ? sizing.replicas+' replica×'+sizing.autoTp+'GPU · '+fmtN(sizing.upr)+' users/replica'
+          : 'weights + KV cache');
   }
 
   // ── Calculation breakdown ──
@@ -6063,24 +6065,24 @@ function showCalResult(result, fromCache){
   if(breakdown && sizing){
     var fmt2 = function(v,dp){ return v!=null ? (dp!=null?parseFloat(v).toFixed(dp):Math.round(v).toLocaleString()) : '—'; };
     breakdown.style.display = 'block';
-    var row = function(label, expr, result){
-      return '<tr>'
-        +'<td style="padding:4px 12px 4px 0;color:var(--text3);white-space:nowrap;font-size:12px">'+label+'</td>'
-        +'<td style="padding:4px 12px;color:var(--text2);font-family:var(--mono);font-size:12px">'+expr+'</td>'
-        +'<td style="padding:4px 0;font-weight:700;font-family:var(--mono);font-size:12px;color:var(--text1)">'+result+'</td>'
-        +'</tr>';
+    var fmt2 = function(v,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v).toLocaleString()):'—'; };
+    var line = function(label, val){
+      return '<div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">'
+        +'<span style="font-size:11px;color:var(--text3);min-width:160px;flex-shrink:0">'+label+'</span>'
+        +'<span style="font-size:12px;font-family:var(--mono);color:var(--text2);flex:1">'+val+'</span>'
+        +'</div>';
     };
     breakdown.innerHTML =
-      '<div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">How many GPUs are needed and why</div>'
-      +'<table style="border-collapse:collapse;width:100%">'
-      + row('Tokens / request', sizing.isl+' + '+sizing.osl, fmt2(sizing.tokPerReq)+' tokens')
-      + row('Req / sec', fmt2(sizing.batch)+' ÷ '+(sizing.latSec?fmt2(sizing.latSec,3)+'s':'batch size'), fmt2(sizing.rps,1)+' req/s')
-      + row('Throughput demand', fmt2(sizing.rps,1)+' × '+fmt2(sizing.tokPerReq), fmt2(sizing.demandTps)+' tok/s')
-      +(sizing.tpsPerGpu ? row('Supply / GPU', 'from estimator', fmt2(sizing.tpsPerGpu,0)+' tok/s') : '')
-      +(sizing.gpusThroughput!=null ? row('Throughput GPUs', 'ceil('+fmt2(sizing.demandTps)+' ÷ '+fmt2(sizing.tpsPerGpu,0)+')', sizing.gpusThroughput+' GPUs') : '')
-      + row('Memory / KV GPUs', fmt2(sizing.wGB,1)+'GB weights + '+fmt2(sizing.kvPU,2)+'GB KV/user, '+sizing.vram+'GB VRAM', sizing.gpusMemory+' GPUs')
-      + row('Final required', 'max('+[sizing.gpusThroughput!=null?sizing.gpusThroughput:'—', sizing.gpusMemory].join(', ')+')', '<span style="color:var(--blue)">'+sizing.gpusFinal+' '+sizing.gpuLabel+'</span>')
-      +'</table>';
+      '<div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Sizing calculation</div>'
+      + line('Tokens / request', sizing.isl+' + '+sizing.osl+' = <b>'+fmt2(sizing.tokPerReq)+'</b> tokens')
+      + line('Req / sec', fmt2(sizing.batch)+' batch ÷ '+(sizing.latSec?fmt2(sizing.latSec,3)+'s lat':'est.')+' = <b>'+fmt2(sizing.rps,1)+'/s</b>')
+      + line('Throughput demand', fmt2(sizing.rps,1)+' × '+fmt2(sizing.tokPerReq)+' = <b>'+fmt2(sizing.demandTps)+' tok/s</b>')
+      +(sizing.tpsPerGpu ? line('Supply / GPU', 'estimator → <b>'+fmt2(sizing.tpsPerGpu,0)+' tok/s</b>') : '')
+      +(sizing.gpusThroughput!=null ? line('Throughput GPUs', 'ceil('+fmt2(sizing.demandTps)+' ÷ '+fmt2(sizing.tpsPerGpu,0)+') = <b>'+sizing.gpusThroughput+'</b>') : '')
+      + line('Auto TP', sizing.autoTp+'× (min to fit '+fmt2(sizing.wGB,1)+'GB weights on '+sizing.vram+'GB VRAM)')
+      + line('KV / user', fmt2(sizing.kvPU,2)+'GB · ctx='+sizing.ctxK+'K · avail='+fmt2(sizing.avail,1)+'GB → <b>'+fmt2(sizing.upr)+' users/replica</b>')
+      + line('Memory GPUs', sizing.replicas+' replicas × '+sizing.autoTp+' GPU = <b>'+sizing.gpusMemory+'</b>')
+      + line('Final required', 'max('+[sizing.gpusThroughput!=null?sizing.gpusThroughput:'—', sizing.gpusMemory].join(', ')+') = <b style="color:var(--blue)">'+sizing.gpusFinal+' '+sizing.gpuLabel+'</b>');
   } else if(breakdown){
     breakdown.style.display = 'none';
   }
