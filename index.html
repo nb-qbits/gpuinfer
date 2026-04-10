@@ -1709,55 +1709,60 @@ button{font-family:var(--sans);cursor:pointer}
 <!-- ===== CALIBRATED PAGE ===== -->
 <div id="page-calibrated" class="page">
   <div style="display:flex;gap:0;align-items:flex-start;min-height:calc(100vh - 88px)">
-    <!-- LEFT PANEL -->
-    <div style="width:320px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);padding:20px;min-height:calc(100vh - 88px)">
-      <div style="font-size:18px;font-weight:700;margin-bottom:4px">⚡ Calibrated estimate</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:16px">Modeled using benchmark-calibrated inference profiles</div>
 
-      <!-- MODEL SECTION -->
+    <!-- ===== LEFT PANEL ===== -->
+    <div style="width:320px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);padding:20px;min-height:calc(100vh - 88px);overflow-y:auto">
+
+      <!-- Title + action bar (top, always visible) -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:16px;font-weight:700;margin-bottom:2px">⚡ Calibrated estimate</div>
+        <div style="font-size:11px;color:var(--text3)">Modeled using benchmark-calibrated inference profiles</div>
+      </div>
+
+      <!-- Action bar: Pull + Run at top -->
+      <div style="display:flex;gap:6px;margin-bottom:14px">
+        <button class="btn btn-sm" style="flex:1;color:var(--blue)" onclick="calPullFromAdvanced()">&#8593; Pull from Advanced</button>
+        <button id="cal-run-btn" class="btn btn-primary" style="flex:2;font-weight:600" onclick="runCalibratedEstimate()">&#9889; Run estimate</button>
+      </div>
+
+      <!-- MODEL -->
       <div class="section-title">MODEL</div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:14px">
-        <!-- Preset chips -->
-        <div style="font-size:10px;color:var(--text4);margin-bottom:6px;font-weight:600">PRESET MODELS</div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:12px">
+        <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:6px">PRESET MODELS</div>
         <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px" id="cal-model-chips">
           <button class="chip on" onclick="selectCalModel('meta-llama/Meta-Llama-3.1-8B-Instruct','Llama 3.1 8B',this)">Llama 3.1 8B</button>
           <button class="chip" onclick="selectCalModel('openai/gpt-oss-20b','gpt-oss-20b',this)">gpt-oss-20b</button>
           <button class="chip" onclick="selectCalModel('Qwen/Qwen2.5-7B-Instruct','Qwen 2.5 7B',this)">Qwen 2.5 7B</button>
         </div>
-        <!-- HF Lookup -->
-        <div style="font-size:10px;color:var(--text4);margin-bottom:4px;font-weight:600">OR LOOKUP BY HF ID</div>
-        <div style="display:flex;gap:6px">
+        <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:4px">OR LOOKUP BY HF ID</div>
+        <div style="display:flex;gap:6px;margin-bottom:4px">
           <input id="cal-hf-input" type="text" placeholder="e.g. meta-llama/Llama-3.1-8B" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text1);font-size:12px">
-          <button class="btn btn-sm" onclick="calHFLookup()" style="white-space:nowrap">Lookup</button>
+          <button class="btn btn-primary btn-sm" onclick="calHFLookup()" style="white-space:nowrap">Lookup</button>
         </div>
-        <div id="cal-hf-status" style="font-size:11px;margin-top:4px;color:var(--text3)"></div>
-        <div id="cal-model-display" style="margin-top:8px;font-size:12px;font-weight:600;color:var(--blue)">Llama 3.1 8B</div>
+        <div id="cal-hf-status" style="font-size:11px;color:var(--text3);min-height:16px"></div>
+        <div id="cal-model-display" style="margin-top:6px;font-size:12px;font-weight:600;color:var(--blue)">Llama 3.1 8B</div>
       </div>
 
-      <!-- INPUTS SECTION -->
+      <!-- INPUTS -->
       <div class="section-title">INFERENCE INPUTS</div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:14px">
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:12px">
         <div class="slider-row" style="margin-bottom:8px">
-          <label style="font-size:12px">Input tokens
-            <span class="tooltip-icon" title="Approximate prompt length sent to the model (maps to ISL — input sequence length)" style="cursor:help;color:var(--text4);font-size:10px"> (?)</span>
-          </label>
+          <label style="font-size:12px">Input tokens <span title="Approximate prompt length sent to the model" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></label>
           <input type="number" id="cal-isl" value="1024" min="64" max="32768" oninput="calPayloadEdited=false;updateCalPayload()" style="width:80px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
         </div>
         <div class="slider-row" style="margin-bottom:8px">
-          <label style="font-size:12px">Output tokens
-            <span class="tooltip-icon" title="Approximate response length generated by the model (maps to OSL — output sequence length)" style="cursor:help;color:var(--text4);font-size:10px"> (?)</span>
-          </label>
+          <label style="font-size:12px">Output tokens <span title="Approximate response length generated by the model" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></label>
           <input type="number" id="cal-osl" value="256" min="16" max="8192" oninput="calPayloadEdited=false;updateCalPayload()" style="width:80px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
         </div>
-        <div class="slider-row" style="margin-bottom:8px">
+        <div class="slider-row" style="margin-bottom:0">
           <label style="font-size:12px">Batch size</label>
           <input type="number" id="cal-batch" value="16" min="1" max="512" oninput="calPayloadEdited=false;updateCalPayload()" style="width:80px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
         </div>
       </div>
 
-      <!-- HARDWARE SECTION -->
+      <!-- HARDWARE & BACKEND -->
       <div class="section-title">HARDWARE &amp; BACKEND</div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:14px">
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:12px">
         <div class="slider-row" style="margin-bottom:8px">
           <label style="font-size:12px">GPU</label>
           <select id="cal-gpu" onchange="updateCalPayload()" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
@@ -1776,76 +1781,103 @@ button{font-family:var(--sans);cursor:pointer}
             <option value="vllm">vLLM</option>
           </select>
         </div>
-        <div style="display:flex;gap:12px">
-          <div class="slider-row" style="margin-bottom:0;flex:1">
-            <label style="font-size:12px">TP
-              <span class="tooltip-icon" title="Tensor Parallel — splits model across GPUs within a node" style="cursor:help;color:var(--text4);font-size:10px"> (?)</span>
-            </label>
-            <input type="number" id="cal-tp" value="1" min="1" max="8" style="width:50px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)" onchange="updateCalPayload()">
+        <!-- TP / PP — fixed alignment -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:3px">Tensor parallel <span title="Splits model across GPUs within a node" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></div>
+            <input type="number" id="cal-tp" value="1" min="1" max="8" onchange="updateCalPayload()" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box">
           </div>
-          <div class="slider-row" style="margin-bottom:0;flex:1">
-            <label style="font-size:12px">PP
-              <span class="tooltip-icon" title="Pipeline Parallel — splits model across nodes in sequence" style="cursor:help;color:var(--text4);font-size:10px"> (?)</span>
-            </label>
-            <input type="number" id="cal-pp" value="1" min="1" max="8" style="width:50px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)" onchange="updateCalPayload()">
+          <div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:3px">Pipeline parallel <span title="Splits model across nodes in sequence" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></div>
+            <input type="number" id="cal-pp" value="1" min="1" max="8" onchange="updateCalPayload()" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box">
           </div>
         </div>
       </div>
 
-      <!-- ADVANCED ESTIMATOR SETTINGS (collapsed) -->
-      <details id="cal-advanced-details" style="margin-bottom:14px">
-        <summary style="font-size:11px;font-weight:600;color:var(--text3);cursor:pointer;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r)">Advanced estimator settings</summary>
+      <!-- REQUEST PAYLOAD (collapsed) -->
+      <details style="margin-bottom:8px">
+        <summary style="font-size:11px;font-weight:600;color:var(--text3);cursor:pointer;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between">
+          <span>&#128196; Estimator request payload</span><span style="color:var(--text4)">▾</span>
+        </summary>
         <div style="background:var(--bg);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:10px">
-          <div style="font-size:10px;color:var(--text4);margin-bottom:6px">Exact request payload sent to the estimator API. Edit before running.</div>
-          <textarea id="cal-payload-editor" style="width:100%;height:180px;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono);resize:vertical" onchange="calPayloadEdited=true" oninput="calPayloadEdited=true"></textarea>
-          <div style="font-size:10px;color:var(--text4);margin-top:4px">database_mode defaults to HYBRID. Changes here override the form above.</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:10px;color:var(--text4)">Sent to estimator API. Edit before running.</span>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('cal-payload-editor').value)" style="font-size:10px;padding:1px 6px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3)">Copy</button>
+          </div>
+          <textarea id="cal-payload-editor" style="width:100%;height:160px;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono);resize:vertical;box-sizing:border-box" onchange="calPayloadEdited=true" oninput="calPayloadEdited=true"></textarea>
+          <div style="font-size:10px;color:var(--text4);margin-top:3px">database_mode defaults to HYBRID. Edits here override the form.</div>
         </div>
       </details>
 
-      <!-- RUN BUTTON -->
-      <button class="btn btn-sm" style="width:100%;margin-bottom:6px;color:var(--blue)" onclick="calPullFromAdvanced()">&#8593; Pull from Advanced</button>
-      <button id="cal-run-btn" class="btn pri" style="width:100%;padding:10px;font-size:14px;font-weight:600" onclick="runCalibratedEstimate()">&#9889; Run calibrated estimate</button>
-      <div style="font-size:10px;color:var(--text4);margin-top:8px;line-height:1.4">Calibrated estimates are modeled using benchmark-calibrated inference profiles and should be validated with workload-specific benchmarking before procurement.</div>
+      <!-- RAW RESPONSE (collapsed, filled after run) -->
+      <details id="cal-response-details" style="margin-bottom:8px">
+        <summary style="font-size:11px;font-weight:600;color:var(--text3);cursor:pointer;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between">
+          <span>&#128269; Estimator response &amp; debug</span><span style="color:var(--text4)">▾</span>
+        </summary>
+        <div style="background:var(--bg);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:10px">
+          <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:4px">RAW JSON RESPONSE</div>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:4px">
+            <button onclick="navigator.clipboard.writeText(document.getElementById('cal-raw-response').textContent)" style="font-size:10px;padding:1px 6px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3)">Copy</button>
+          </div>
+          <pre id="cal-raw-response" style="font-size:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;overflow:auto;max-height:200px;margin:0;color:var(--text2)">— not run yet —</pre>
+          <div style="font-size:10px;color:var(--text4);font-weight:600;margin:10px 0 4px">PARSED FIELDS</div>
+          <pre id="cal-parsed-fields" style="font-size:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;overflow:auto;max-height:140px;margin:0;color:var(--text2)">— not run yet —</pre>
+        </div>
+      </details>
+
+      <div style="font-size:10px;color:var(--text4);line-height:1.4;margin-top:8px">Calibrated estimates are modeled using benchmark-calibrated inference profiles and should be validated with workload-specific benchmarking before procurement.</div>
     </div>
 
-    <!-- RIGHT PANEL -->
-    <div style="flex:1;padding:20px 24px;min-width:0" id="cal-right">
-      <!-- Empty state -->
-      <div id="cal-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;color:var(--text4)">
-        <div style="font-size:48px;margin-bottom:16px">⚡</div>
-        <div style="font-size:16px;font-weight:600;margin-bottom:8px">No estimate yet</div>
-        <div style="font-size:13px;text-align:center;max-width:300px">Configure your model and hardware on the left, then click Run calibrated estimate</div>
-      </div>
-      <!-- Results (hidden until run) -->
-      <div id="cal-results" style="display:none">
-        <!-- Mode badge + model info -->
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-          <span id="cal-mode-badge" style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:12px;background:var(--bg2);border:1px solid var(--border)">—</span>
-          <span id="cal-result-model" style="font-size:13px;color:var(--text2)">—</span>
-          <span id="cal-result-gpu-badge" style="font-size:11px;color:var(--text3)">—</span>
+    <!-- ===== RIGHT PANEL ===== -->
+    <div style="flex:1;padding:20px 24px;min-width:0;overflow-x:hidden" id="cal-right">
+
+      <!-- Top action bar (matches other pages) -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <div>
+          <h1 style="font-size:20px;font-weight:700;margin-bottom:2px">Calibrated estimate</h1>
+          <p style="font-size:12px;color:var(--text3)">All numbers editable · results update on re-run</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap" id="cal-action-bar">
           <span id="cal-cache-badge" style="font-size:10px;padding:2px 8px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);display:none"></span>
-          <button id="cal-refresh-btn" style="font-size:11px;padding:2px 8px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--blue);cursor:pointer;display:none" onclick="runCalibratedEstimate(true)">↻ Refresh</button>
+          <button id="cal-refresh-btn" style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--blue);cursor:pointer;display:none" onclick="runCalibratedEstimate(true)">↻ Refresh</button>
+          <button class="btn btn-sm" onclick="saveCalResult()" style="display:none" id="cal-save-btn">+ Add to comparison</button>
+          <button class="btn btn-sm" onclick="exportCalToSheets()" style="color:var(--green);display:none" id="cal-export-btn">&#128202; Sheets</button>
         </div>
-        <!-- Metrics grid -->
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px" id="cal-metrics-grid">
-          <!-- filled by JS -->
-        </div>
-        <!-- Full metrics table -->
-        <div id="cal-metrics-table-wrap" style="margin-bottom:20px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
-          <table style="width:100%;border-collapse:collapse" id="cal-metrics-table"></table>
+      </div>
+
+      <!-- Empty state -->
+      <div id="cal-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:360px;color:var(--text4)">
+        <div style="font-size:40px;margin-bottom:12px">⚡</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px">No estimate yet</div>
+        <div style="font-size:13px;text-align:center;max-width:280px;color:var(--text3)">Configure model and hardware on the left, then click Run estimate</div>
+      </div>
+
+      <!-- Results -->
+      <div id="cal-results" style="display:none">
+        <!-- Mode + model header -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+          <span id="cal-mode-badge" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;background:var(--bg2);border:1px solid var(--border)">—</span>
+          <span id="cal-result-model" style="font-size:13px;font-weight:600;color:var(--text1)">—</span>
+          <span id="cal-result-gpu-badge" style="font-size:11px;color:var(--text3)">—</span>
+          <span id="cal-cache-ts" style="font-size:10px;color:var(--text4)"></span>
         </div>
         <!-- Proxy note -->
-        <div id="cal-proxy-note" style="display:none;font-size:12px;color:var(--text3);background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:16px"></div>
-        <!-- Save button -->
-        <div style="display:flex;gap:8px;margin-bottom:20px"><button class="btn btn-sm" onclick="saveCalResult()">+ Add to comparison</button><button class="btn btn-sm" onclick="exportCalToSheets()" style="color:var(--green)">&#128202; Export to Sheets</button></div>
+        <div id="cal-proxy-note" style="display:none;font-size:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:14px"></div>
+        <!-- KPI tiles -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px" id="cal-metrics-grid"></div>
+        <!-- Full metrics table -->
+        <div style="margin-bottom:16px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+          <table style="width:100%;border-collapse:collapse" id="cal-metrics-table"></table>
+        </div>
         <!-- Comparison section -->
         <div id="cal-comparison" style="display:none">
-          <div style="font-size:13px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
             <span>Saved runs</span>
-            <div style="display:flex;align-items:center;gap:8px">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
               <label style="font-size:11px;color:var(--text3)">Compare by</label>
               <select id="cal-compare-metric" onchange="renderCalChart()" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1)">
                 <option value="tokens_per_sec">Tokens/sec</option>
+                <option value="tokens_per_sec_per_gpu">Tokens/sec/GPU</option>
                 <option value="latency_ms">Latency (ms)</option>
                 <option value="ttft_ms">TTFT (ms)</option>
                 <option value="tpot_ms">TPOT (ms)</option>
@@ -1854,19 +1886,18 @@ button{font-family:var(--sans);cursor:pointer}
               <button class="btn btn-sm" onclick="clearCalSaved()" style="font-size:10px;padding:2px 6px;color:var(--red)">Clear all</button>
             </div>
           </div>
-          <!-- Chart -->
-          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:16px">
-            <div style="position:relative;height:280px;max-height:320px"><canvas id="cal-chart"></canvas></div>
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:12px">
+            <div style="position:relative;height:300px;max-height:340px"><canvas id="cal-chart"></canvas></div>
           </div>
-          <!-- Comparison table -->
           <div style="overflow-x:auto">
             <table style="width:100%;border-collapse:collapse;font-size:12px" id="cal-compare-table">
               <thead>
-                <tr style="border-bottom:1px solid var(--border)">
+                <tr style="border-bottom:2px solid var(--border)">
                   <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:500">Model</th>
                   <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:500">GPU</th>
                   <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:500">Backend</th>
                   <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">Tok/s</th>
+                  <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">Tok/s/GPU</th>
                   <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">Latency</th>
                   <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">TTFT</th>
                   <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">Mode</th>
@@ -2003,7 +2034,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.39</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.40</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5561,20 +5592,7 @@ var calCache = {};
 })();
 
 function initCalibratedPage(){
-  // Pre-fill from Advanced tab if available
-  if(S && S.gpuVram){
-    // Map S.gpuName to cal GPU system
-    var gpuMap={'H100':['H100 SXM','h100_sxm'],'H200':['H200 SXM','h200_sxm'],
-      'A100':['A100 80GB','a100_sxm'],'L40S':['L40S','l40s'],
-      'B200':['B200 SXM','b200_sxm'],'MI300X':['MI300X','mi300x']};
-    var entry=gpuMap[S.gpuName];
-    if(entry){
-      var sel=document.getElementById('cal-gpu');
-      if(sel) sel.value=entry[1];
-    }
-    var tp=document.getElementById('cal-tp');
-    if(tp && S.tp) tp.value=S.tp;
-  }
+  // Always update payload and restore comparison — safe to call multiple times
   updateCalPayload();
   renderCalSavedComparison();
 }
@@ -5730,15 +5748,37 @@ function parseCalResult(data, mode, proxyReason, payload, cacheKey){
     } else { d[k] = src[k]; }
   });
 
-  var tps  = d.throughput_token_per_s || d.tokens_per_second || d.throughput || d.token_throughput || d.output_token_throughput || null;
-  var ttft = d.ttft_ms || d.ttft || d.time_to_first_token_ms || d.time_to_first_token || null;
-  var tpot = d.tpot_ms || d.tpot || d.time_per_output_token_ms || d.time_per_output_token || d.inter_token_latency_ms || null;
-  var lat  = d.latency_ms || d.latency || d.end_to_end_latency_ms || d.e2e_latency_ms || null;
-  var mem  = d.gpu_memory_gb || d.memory_gb || d.gpu_memory || d.vram_used_gb || null;
+  // Primary field names the API is documented to return
+  var tps     = d.tokens_per_sec      || d.throughput_token_per_s || d.tokens_per_second  || d.throughput            || d.output_token_throughput || null;
+  var tpsGpu  = d.tokens_per_sec_per_gpu || (tps != null && payload.tp_size ? tps / payload.tp_size : null);
+  var ttft    = d.ttft_ms             || d.ttft                   || d.time_to_first_token_ms || d.time_to_first_token || null;
+  var tpot    = d.tpot_ms             || d.tpot                   || d.time_per_output_token_ms || d.time_per_output_token || d.inter_token_latency_ms || null;
+  var lat     = d.request_latency_ms  || d.latency_ms             || d.latency             || d.end_to_end_latency_ms  || d.e2e_latency_ms          || null;
+  var mem     = d.gpu_memory_gb       || d.memory_gb              || d.gpu_memory          || d.vram_used_gb           || null;
 
   // Derive latency if missing: TTFT + TPOT * osl
   if(lat == null && ttft != null && tpot != null){
     lat = ttft + tpot * (payload.osl || 256);
+  }
+
+  var parsed = {
+    tokens_per_sec:         tps,
+    tokens_per_sec_per_gpu: tpsGpu,
+    ttft_ms:                ttft,
+    tpot_ms:                tpot,
+    request_latency_ms:     lat,
+    gpu_memory_gb:          mem
+  };
+
+  // Update debug panels
+  var rawEl = document.getElementById('cal-raw-response');
+  var parsedEl = document.getElementById('cal-parsed-fields');
+  if(rawEl){
+    try{ rawEl.textContent = JSON.stringify(data, null, 2); }
+    catch(e){ rawEl.textContent = String(data); }
+  }
+  if(parsedEl){
+    parsedEl.textContent = JSON.stringify(parsed, null, 2);
   }
 
   return {
@@ -5754,11 +5794,12 @@ function parseCalResult(data, mode, proxyReason, payload, cacheKey){
     batch: payload.batch_size,
     tp: payload.tp_size,
     pp: payload.pp_size,
-    tokens_per_sec: tps,
-    latency_ms:     lat,
-    ttft_ms:        ttft,
-    tpot_ms:        tpot,
-    gpu_memory_gb:  mem,
+    tokens_per_sec:         tps,
+    tokens_per_sec_per_gpu: tpsGpu,
+    ttft_ms:                ttft,
+    tpot_ms:                tpot,
+    latency_ms:             lat,
+    gpu_memory_gb:          mem,
     raw: data,
     cacheKey: cacheKey,
     ts: Date.now(),
@@ -5809,86 +5850,114 @@ function showCalResult(result, fromCache){
 
   // Mode badge
   var badge = document.getElementById('cal-mode-badge');
-  var modeColors = {exact:'var(--green)',proxy:'var(--orange,#f59e0b)',heuristic:'var(--text3)'};
-  var modeLabels = {exact:'Exact',proxy:'Proxy',heuristic:'Heuristic'};
+  var modeColors = {exact:'var(--green)',proxy:'#dc2626',heuristic:'var(--text3)'};
+  var modeLabels = {exact:'✓ Exact',proxy:'⚠ Proxy',heuristic:'~ Heuristic'};
   badge.textContent = modeLabels[result.mode] || result.mode;
   badge.style.color = modeColors[result.mode] || 'var(--text3)';
+  badge.style.borderColor = result.mode==='proxy' ? '#dc2626' : 'var(--border)';
 
   document.getElementById('cal-result-model').textContent = result.modelLabel;
-  document.getElementById('cal-result-gpu-badge').textContent = (CAL_GPU_LABELS[result.gpu]||result.gpu) + ' · ' + result.backend.toUpperCase() + ' · TP=' + result.tp;
+  document.getElementById('cal-result-gpu-badge').textContent =
+    (CAL_GPU_LABELS[result.gpu]||result.gpu) + ' · ' + (result.backend||'').toUpperCase() + ' · TP=' + result.tp;
 
-  // Cache badge
+  // Cache badge + refresh in action bar
   var cb = document.getElementById('cal-cache-badge');
   var rb = document.getElementById('cal-refresh-btn');
-  if(fromCache){
-    cb.textContent = '📦 Cached'; cb.title = 'Result loaded from cache. Click Refresh to fetch fresh.';
-    cb.style.display = 'inline';
-    rb.style.display = 'inline';
-  } else {
-    cb.textContent = '✨ Fresh'; cb.title = 'Live result just fetched from estimator API.';
-    cb.style.display = 'inline';
-    rb.style.display = 'none';
+  var ts = document.getElementById('cal-cache-ts');
+  if(cb){
+    if(fromCache){
+      cb.textContent = '📦 Cached'; cb.title = 'Loaded from cache. Click Refresh for a fresh call.';
+      cb.style.display='inline'; if(rb) rb.style.display='inline';
+    } else {
+      cb.textContent = '✨ Fresh'; cb.title = 'Live result from estimator API.';
+      cb.style.display='inline'; if(rb) rb.style.display='none';
+    }
   }
+  if(ts){ ts.textContent = new Date(result.ts).toLocaleTimeString(); }
 
-  // Proxy/heuristic note
+  // Show action buttons
+  var saveBtn = document.getElementById('cal-save-btn');
+  var expBtn  = document.getElementById('cal-export-btn');
+  if(saveBtn) saveBtn.style.display='inline';
+  if(expBtn)  expBtn.style.display='inline';
+
+  // Proxy / heuristic note
   var note = document.getElementById('cal-proxy-note');
   if(result.mode !== 'exact'){
     note.style.display = 'block';
     if(result.mode === 'proxy'){
-      note.style.borderColor = 'var(--red)';
-      note.innerHTML = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span style="background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px">PROXY</span><b style="font-size:12px">Proxy model used</b></div>'
+      note.style.borderColor = '#dc2626';
+      note.style.borderWidth = '1px';
+      // Find proxy label
+      var fb = MODEL_FALLBACKS[result.modelPath] || {};
+      note.innerHTML =
+        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
+        +'<span style="background:#dc2626;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px">PROXY</span>'
+        +'<strong style="font-size:12px">Proxy model used for this estimate</strong></div>'
         +'<table style="font-size:11px;border-collapse:collapse;width:100%">'
-        +'<tr><td style="color:var(--text4);padding:2px 8px 2px 0;width:80px">Using proxy</td><td style="font-family:var(--mono)">' + result.proxyModel + '</td></tr>'
-        +'<tr><td style="color:var(--text4);padding:2px 8px 2px 0">Reason</td><td>' + result.proxyReason + '</td></tr>'
-        +'<tr><td style="color:var(--text4);padding:2px 8px 2px 0">Impact</td><td>Throughput and latency are approximate. Validate with workload-specific benchmarking.</td></tr>'
+        +'<tr><td style="color:var(--text4);padding:3px 10px 3px 0;white-space:nowrap;font-weight:600">Using proxy</td>'
+        +'<td style="font-family:var(--mono);color:var(--text1)">'+result.proxyModel+'</td></tr>'
+        +'<tr><td style="color:var(--text4);padding:3px 10px 3px 0;font-weight:600">Reason</td>'
+        +'<td>'+result.proxyReason+'</td></tr>'
+        +'<tr><td style="color:var(--text4);padding:3px 10px 3px 0;font-weight:600">Why this proxy</td>'
+        +'<td>'+(fb.reason||'Closest supported model for throughput estimation')+'</td></tr>'
+        +'<tr><td style="color:var(--text4);padding:3px 10px 3px 0;font-weight:600">Impact</td>'
+        +'<td>Throughput and latency are approximate. Validate with workload-specific benchmarking before procurement.</td></tr>'
         +'</table>';
     } else {
-      note.innerHTML = '<b>Heuristic estimate:</b> Estimator API unavailable. Showing rough bandwidth-based projection only.<br><span style="color:var(--text4)">' + (result.proxyReason||'') + '</span>';
+      note.style.borderColor = 'var(--border)';
+      note.innerHTML = '<strong>Heuristic estimate</strong> — Estimator API unavailable. '
+        +'Showing bandwidth-based projection only.<br>'
+        +'<span style="font-size:11px;color:var(--text4)">'+(result.proxyReason||'')+'</span>';
     }
   } else {
     note.style.display = 'none';
   }
 
-  // Metrics grid
-  var fmt = function(v,unit,dp){ return v!=null ? (dp!=null?v.toFixed(dp):Math.round(v))+unit : '—'; };
+  // KPI tiles — all 6 documented fields
+  var fmt = function(v,unit,dp){ return v!=null ? (dp!=null?parseFloat(v).toFixed(dp):Math.round(v))+unit : '—'; };
   var metrics = [
-    {label:'Tokens / sec',  value:fmt(result.tokens_per_sec,' tok/s'),  note:'per GPU'},
-    {label:'Latency',       value:fmt(result.latency_ms,' ms'),          note:'end-to-end'},
-    {label:'TTFT',          value:fmt(result.ttft_ms,' ms',1),           note:'time to first token'},
-    {label:'TPOT',          value:fmt(result.tpot_ms,' ms',2),           note:'per output token'},
-    {label:'GPU memory',    value:fmt(result.gpu_memory_gb,' GB',1),     note:'estimated'},
-    {label:'Backend',       value:result.backend.toUpperCase(),           note:result.gpu?CAL_GPU_LABELS[result.gpu]:''},
+    {label:'Tokens / sec',     value:fmt(result.tokens_per_sec,' tok/s'),         note:'total throughput'},
+    {label:'Tokens / sec / GPU',value:fmt(result.tokens_per_sec_per_gpu,' tok/s'),note:'per GPU'},
+    {label:'TTFT',             value:fmt(result.ttft_ms,' ms',1),                  note:'time to first token'},
+    {label:'TPOT',             value:fmt(result.tpot_ms,' ms',2),                  note:'per output token'},
+    {label:'Request latency',  value:fmt(result.latency_ms,' ms',1),               note:'end-to-end'},
+    {label:'GPU memory',       value:fmt(result.gpu_memory_gb,' GB',1),            note:'estimated'},
   ];
   var grid = document.getElementById('cal-metrics-grid');
-  grid.innerHTML = metrics.map(function(m){
+  if(grid) grid.innerHTML = metrics.map(function(m){
+    var isEmpty = m.value === '—';
     return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px">'
       +'<div style="font-size:10px;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">'+m.label+'</div>'
-      +'<div style="font-size:22px;font-weight:700;color:var(--text1)">'+m.value+'</div>'
+      +'<div style="font-size:'+(isEmpty?'18':'22')+'px;font-weight:700;color:'+(isEmpty?'var(--text4)':'var(--text1)')+'">'+m.value+'</div>'
       +'<div style="font-size:10px;color:var(--text3);margin-top:2px">'+m.note+'</div>'
       +'</div>';
   }).join('');
 
   // Full metrics table
-  var allMetrics = [
-    ['Tokens / sec', result.tokens_per_sec != null ? Math.round(result.tokens_per_sec) + ' tok/s' : '—'],
-    ['Latency', result.latency_ms != null ? result.latency_ms.toFixed(1) + ' ms' : '—'],
-    ['TTFT', result.ttft_ms != null ? result.ttft_ms.toFixed(2) + ' ms' : '—'],
-    ['TPOT', result.tpot_ms != null ? result.tpot_ms.toFixed(2) + ' ms' : '—'],
-    ['GPU memory', result.gpu_memory_gb != null ? result.gpu_memory_gb.toFixed(1) + ' GB' : '—'],
-    ['ISL / OSL', result.isl + ' / ' + result.osl + ' tokens'],
-    ['Batch size', result.batch],
-    ['TP / PP', result.tp + ' / ' + result.pp],
-    ['Mode', result.mode.charAt(0).toUpperCase()+result.mode.slice(1)],
+  var rows = [
+    ['Tokens / sec',      result.tokens_per_sec!=null         ? Math.round(result.tokens_per_sec)+' tok/s'           : '—'],
+    ['Tokens / sec / GPU',result.tokens_per_sec_per_gpu!=null ? parseFloat(result.tokens_per_sec_per_gpu).toFixed(1)+' tok/s' : '—'],
+    ['TTFT',              result.ttft_ms!=null                ? parseFloat(result.ttft_ms).toFixed(2)+' ms'           : '—'],
+    ['TPOT',              result.tpot_ms!=null                ? parseFloat(result.tpot_ms).toFixed(2)+' ms'           : '—'],
+    ['Request latency',   result.latency_ms!=null             ? parseFloat(result.latency_ms).toFixed(1)+' ms'        : '—'],
+    ['GPU memory',        result.gpu_memory_gb!=null          ? parseFloat(result.gpu_memory_gb).toFixed(1)+' GB'     : '—'],
+    ['Input / Output tokens', result.isl+' / '+result.osl+' tokens'],
+    ['Batch size',        result.batch],
+    ['Tensor parallel',   result.tp],
+    ['Pipeline parallel', result.pp],
+    ['Mode',              result.mode ? result.mode.charAt(0).toUpperCase()+result.mode.slice(1) : '—'],
   ];
   var tbl = document.getElementById('cal-metrics-table');
   if(tbl){
-    tbl.innerHTML = '<tr style="border-bottom:1px solid var(--border)">'
-      +'<th style="text-align:left;padding:5px 10px;font-size:10px;color:var(--text4);font-weight:500;text-transform:uppercase">Metric</th>'
-      +'<th style="text-align:right;padding:5px 10px;font-size:10px;color:var(--text4);font-weight:500;text-transform:uppercase">Value</th></tr>'
-      + allMetrics.map(function(row){
+    tbl.innerHTML =
+      '<tr style="background:var(--bg2);border-bottom:1px solid var(--border)">'
+      +'<th style="text-align:left;padding:6px 10px;font-size:10px;color:var(--text4);font-weight:600;text-transform:uppercase">Metric</th>'
+      +'<th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--text4);font-weight:600;text-transform:uppercase">Value</th></tr>'
+      + rows.map(function(row){
         return '<tr style="border-bottom:1px solid var(--border)">'
           +'<td style="padding:5px 10px;font-size:12px;color:var(--text3)">'+row[0]+'</td>'
-          +'<td style="padding:5px 10px;font-size:12px;font-family:var(--mono);text-align:right">'+row[1]+'</td>'
+          +'<td style="padding:5px 10px;font-size:12px;font-family:var(--mono);text-align:right;color:var(--text1)">'+row[1]+'</td>'
           +'</tr>';
       }).join('');
   }
@@ -5929,16 +5998,18 @@ function renderCalSavedComparison(){
   var tbody = document.getElementById('cal-compare-tbody');
   if(tbody){
     tbody.innerHTML = CAL_STATE.savedRuns.map(function(r){
-      var modeColor = r.mode==='exact'?'var(--green)':r.mode==='proxy'?'#f59e0b':'var(--text3)';
+      var modeColor = r.mode==='exact'?'var(--green)':r.mode==='proxy'?'#dc2626':'var(--text3)';
+      var fn = function(v,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v)):'—'; };
       return '<tr style="border-bottom:1px solid var(--border)">'
-        +'<td style="padding:6px 8px;font-weight:500">'+r.modelLabel+'</td>'
-        +'<td style="padding:6px 8px;color:var(--text2)">'+(CAL_GPU_LABELS[r.gpu]||r.gpu)+'</td>'
-        +'<td style="padding:6px 8px;color:var(--text2)">'+(r.backend||'').toUpperCase()+'</td>'
-        +'<td style="padding:6px 8px;text-align:right;font-family:var(--mono)">'+(r.tokens_per_sec!=null?Math.round(r.tokens_per_sec):'—')+'</td>'
-        +'<td style="padding:6px 8px;text-align:right;font-family:var(--mono)">'+(r.latency_ms!=null?Math.round(r.latency_ms)+'ms':'—')+'</td>'
-        +'<td style="padding:6px 8px;text-align:right;font-family:var(--mono)">'+(r.ttft_ms!=null?r.ttft_ms.toFixed(1)+'ms':'—')+'</td>'
-        +'<td style="padding:6px 8px"><span style="font-size:10px;color:'+modeColor+'">'+r.mode+'</span></td>'
-        +'<td style="padding:6px 8px"><button onclick="deleteCalRun('+r.id+')" style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3)">✕</button></td>'
+        +'<td style="padding:5px 8px;font-weight:500;font-size:12px">'+r.modelLabel+'</td>'
+        +'<td style="padding:5px 8px;color:var(--text2);font-size:12px">'+(CAL_GPU_LABELS[r.gpu]||r.gpu)+'</td>'
+        +'<td style="padding:5px 8px;color:var(--text2);font-size:12px">'+(r.backend||'').toUpperCase()+'</td>'
+        +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px">'+fn(r.tokens_per_sec)+'</td>'
+        +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px">'+fn(r.tokens_per_sec_per_gpu,1)+'</td>'
+        +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px">'+(r.latency_ms!=null?fn(r.latency_ms,1)+'ms':'—')+'</td>'
+        +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px">'+(r.ttft_ms!=null?fn(r.ttft_ms,1)+'ms':'—')+'</td>'
+        +'<td style="padding:5px 8px"><span style="font-size:10px;font-weight:600;color:'+modeColor+'">'+r.mode+'</span></td>'
+        +'<td style="padding:5px 8px"><button onclick="deleteCalRun('+r.id+')" style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3)">✕</button></td>'
         +'</tr>';
     }).join('');
   }
@@ -5970,8 +6041,9 @@ function renderCalChart(){
     var cfg;
     if(useScatter){
       var points = CAL_STATE.savedRuns.map(function(r,i){
-        return {x: r.latency_ms||0, y: r[metric]||0, label: r.modelLabel};
-      });
+        var xv = r.latency_ms; var yv = r[metric];
+        return {x: xv!=null?xv:0, y: yv!=null?yv:0, label: r.modelLabel, missing: xv==null||yv==null};
+      }).filter(function(p){ return !p.missing; }); // skip runs with missing values
       cfg = {
         type:'scatter',
         data:{datasets:[{
@@ -6027,21 +6099,43 @@ function renderCalChart(){
 }
 
 function calPullFromAdvanced(){
-  // Pull GPU
-  var gpuMap={'H100':'h100_sxm','H200':'h200_sxm','A100':'a100_sxm','L40S':'l40s','B200':'b200_sxm','MI300X':'mi300x'};
+  var gpuMap={'H100':'h100_sxm','H200':'h200_sxm','A100':'a100_sxm','A100 80GB':'a100_sxm',
+    'L40S':'l40s','B200':'b200_sxm','MI300X':'mi300x'};
+  var fwMap={'vllm':'vllm','trtllm':'trtllm','trt-llm':'trtllm'};
+
+  // Model
+  if(S.modelLabel && S.modelLabel !== 'Llama 3.1 8B'){
+    // Try to find matching preset chip
+    var matched = false;
+    document.querySelectorAll('#cal-model-chips .chip').forEach(function(b){
+      if(b.textContent.trim() === S.modelLabel){ b.click(); matched=true; }
+    });
+    // If no preset match, update state directly
+    if(!matched && S.modelLabel){
+      CAL_STATE.modelLabel = S.modelLabel;
+      var disp = document.getElementById('cal-model-display');
+      if(disp) disp.textContent = S.modelLabel;
+    }
+  }
+
+  // GPU
   var gpuVal = gpuMap[S.gpuName] || 'h100_sxm';
   var gpuSel = document.getElementById('cal-gpu');
   if(gpuSel) gpuSel.value = gpuVal;
 
-  // Pull TP
+  // Backend
+  var backEl = document.getElementById('cal-backend');
+  if(backEl && S.fw) backEl.value = fwMap[S.fw] || backEl.value;
+
+  // TP
   var tpEl = document.getElementById('cal-tp');
   if(tpEl && S.tp) tpEl.value = S.tp;
 
-  // Pull ctx → isl (ctx is in K tokens)
+  // Input tokens ≈ 75% of context window (ctx is in K tokens)
   var islEl = document.getElementById('cal-isl');
-  if(islEl && S.ctx) islEl.value = Math.round(S.ctx * 1000 * 0.75); // ~75% of ctx window as ISL
+  if(islEl && S.ctx) islEl.value = Math.round(S.ctx * 1000 * 0.75);
 
-  // Pull users → batch
+  // Batch size from concurrent users
   var batchEl = document.getElementById('cal-batch');
   if(batchEl && S.users) batchEl.value = S.users;
 
