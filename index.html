@@ -52,11 +52,13 @@ button{font-family:var(--sans);cursor:pointer}
 .nav-identity{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text3);margin-right:16px;font-family:var(--mono)}
 .nav-tabs{display:flex;gap:2px;flex:1;overflow-x:auto}
 .nav-tab{
-  padding:0 14px;height:48px;display:flex;align-items:center;
+  padding:0 12px;height:48px;display:flex;align-items:center;flex-direction:column;justify-content:center;gap:1px;
   font-size:13px;color:var(--text2);background:none;border:none;
   border-bottom:2px solid transparent;white-space:nowrap;
   transition:color .15s,border-color .15s;
 }
+.nav-tab .nav-sub{font-size:9px;color:var(--text4);font-weight:400;display:none;white-space:nowrap}
+@media(min-width:1100px){.nav-tab .nav-sub{display:block}}
 .nav-tab:hover{color:var(--text1)}
 .nav-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
 .nav-right{display:flex;align-items:center;gap:10px;margin-left:auto}
@@ -823,14 +825,14 @@ button{font-family:var(--sans);cursor:pointer}
     vgrover1515
   </span>
   <div class="nav-tabs">
-    <button class="nav-tab active" onclick="nav('home')">Home</button>
-    <button class="nav-tab" onclick="nav('advanced')">&#9654; Quick size</button>
-    <button class="nav-tab" onclick="nav('advanced')">Advanced</button>
-    <button class="nav-tab" onclick="nav('calibrated')">&#9889; Calibrated</button>
-    <button class="nav-tab" onclick="nav('explorer')">GPU Explorer</button>
-    <button class="nav-tab" onclick="nav('saved')">&#128204; Saved</button>
-    <button class="nav-tab" onclick="nav('hybrid')">&#128200; Hybrid savings</button>
-    <button class="nav-tab" id="nav-fleet" onclick="nav('fleet')">&#9776; Fleet routing</button>
+    <button class="nav-tab active" onclick="nav('home')">Overview</button>
+    <button class="nav-tab" onclick="nav('advanced')">&#9654; Quick Estimate</button>
+    <button class="nav-tab" onclick="nav('advanced')">Capacity<span class="nav-sub">Memory fit, KV cache, concurrency</span></button>
+    <button class="nav-tab" onclick="nav('calibrated')">&#9889; Performance<span class="nav-sub">Throughput, latency, and GPU sizing</span></button>
+    <button class="nav-tab" onclick="nav('explorer')">GPU Compare<span class="nav-sub">Compare GPUs by cost &amp; performance</span></button>
+    <button class="nav-tab" onclick="nav('saved')">&#128204; Scenarios<span class="nav-sub">Saved configurations</span></button>
+    <button class="nav-tab" onclick="nav('hybrid')">&#128200; Cost<span class="nav-sub">Cloud vs on-prem modeling</span></button>
+    <button class="nav-tab" id="nav-fleet" onclick="nav('fleet')">&#9776; Routing<span class="nav-sub">Model/API routing economics</span></button>
   </div>
   <div class="nav-right">
     <button class="dark-btn" onclick="toggleDark()">
@@ -1863,12 +1865,24 @@ button{font-family:var(--sans);cursor:pointer}
         </div>
         <!-- Proxy note -->
         <div id="cal-proxy-note" style="display:none;font-size:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:14px"></div>
-        <!-- KPI tiles -->
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px" id="cal-metrics-grid"></div>
-        <!-- Full metrics table -->
-        <div style="margin-bottom:16px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
-          <table style="width:100%;border-collapse:collapse" id="cal-metrics-table"></table>
+        <!-- KPI tiles (decision + estimator metrics) -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px" id="cal-metrics-grid"></div>
+        <!-- GPU sizing breakdown -->
+        <div id="cal-breakdown" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:12px;font-size:12px;line-height:1.8"></div>
+        <!-- Add to comparison — near results -->
+        <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
+          <button class="btn btn-sm" onclick="saveCalResult()" id="cal-save-btn2" style="display:none">+ Add to comparison</button>
+          <button class="btn btn-sm" onclick="exportCalToSheets()" id="cal-export-btn2" style="color:var(--green);display:none">&#128202; Sheets</button>
         </div>
+        <!-- Collapsible estimator details -->
+        <details style="margin-bottom:16px">
+          <summary style="font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between;align-items:center">
+            <span>Estimator details</span><span style="color:var(--text4);font-size:10px">▾ expand</span>
+          </summary>
+          <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);overflow:hidden">
+            <table style="width:100%;border-collapse:collapse" id="cal-metrics-table"></table>
+          </div>
+        </details>
         <!-- Comparison section -->
         <div id="cal-comparison" style="display:none">
           <div style="font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
@@ -2034,7 +2048,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.40</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.41</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5567,6 +5581,75 @@ var CAL_GPU_LABELS = {
   h100_sxm:'H100 SXM', h200_sxm:'H200 SXM', a100_sxm:'A100 80GB',
   l40s:'L40S', b200_sxm:'B200 SXM', mi300x:'MI300X'
 };
+// VRAM (GB) for each system key — reuses GPU_DATA where possible
+var CAL_GPU_VRAM = {
+  h100_sxm:80, h200_sxm:141, a100_sxm:80, l40s:48, b200_sxm:180, mi300x:192
+};
+
+// Compute GPU sizing from calibrated result
+function calcCalGPUs(result){
+  if(!result) return null;
+  var tpsPerGpu = result.tokens_per_sec_per_gpu;
+  var latMs     = result.latency_ms || result.ttft_ms;  // best latency proxy
+  var isl       = result.isl  || 1024;
+  var osl       = result.osl  || 256;
+  var batch     = result.batch || 16;
+  var tp        = result.tp   || 1;
+  var vram      = CAL_GPU_VRAM[result.gpu] || 80;
+  var gpuLabel  = CAL_GPU_LABELS[result.gpu] || result.gpu;
+
+  // A. Tokens per request
+  var tokPerReq = isl + osl;
+
+  // B. Request rate — use latency if available, else model from batch
+  var latSec = latMs ? latMs / 1000 : null;
+  var rps = latSec ? (batch / latSec) : null;
+  if(!rps) rps = batch; // treat batch as concurrent requests if no latency
+
+  // C. Token demand
+  var demandTps = rps * tokPerReq;
+
+  // D. Throughput GPUs
+  var gpusThroughput = tpsPerGpu ? Math.ceil(demandTps / tpsPerGpu) : null;
+
+  // E. Memory fit — reuse same logic as Advanced (weightsGB / kvGBPerUser approach)
+  // Use S state if available (user may have looked up model), else estimate from params
+  var wGB  = (typeof weightsGB === 'function') ? weightsGB() : (S.params||8) * 2;
+  var kvPU = (typeof kvGBPerUser === 'function') ? kvGBPerUser() : 0.5; // fallback 0.5GB/user
+  var ohGB = Math.max(0.5, vram * 0.08) * tp;
+  var totalVram = vram * tp;
+  var avail = Math.max(0.1, (totalVram - wGB - ohGB) * 0.9);
+  var uprPerReplica = Math.max(1, Math.floor(avail / kvPU));
+  var gpusMemory = Math.max(tp, Math.ceil(batch / uprPerReplica) * tp);
+
+  // F. KV capacity GPUs — same formula, but for demand at rps level
+  var gpusKV = gpusMemory; // already encodes KV capacity
+
+  // G. Final
+  var gpusFinal = gpusThroughput
+    ? Math.max(gpusThroughput, gpusMemory)
+    : gpusMemory;
+
+  return {
+    tokPerReq:      tokPerReq,
+    rps:            rps,
+    demandTps:      demandTps,
+    tpsPerGpu:      tpsPerGpu,
+    gpusThroughput: gpusThroughput,
+    gpusMemory:     gpusMemory,
+    gpusKV:         gpusKV,
+    gpusFinal:      gpusFinal,
+    wGB:            wGB,
+    kvPU:           kvPU,
+    vram:           vram,
+    gpuLabel:       gpuLabel,
+    tp:             tp,
+    latSec:         latSec,
+    batch:          batch,
+    isl:            isl,
+    osl:            osl
+  };
+}
 
 // Loading tips
 var CAL_TIPS = [
@@ -5875,11 +5958,13 @@ function showCalResult(result, fromCache){
   }
   if(ts){ ts.textContent = new Date(result.ts).toLocaleTimeString(); }
 
-  // Show action buttons
-  var saveBtn = document.getElementById('cal-save-btn');
-  var expBtn  = document.getElementById('cal-export-btn');
-  if(saveBtn) saveBtn.style.display='inline';
-  if(expBtn)  expBtn.style.display='inline';
+  // Show action buttons (both top bar and near-results)
+  ['cal-save-btn','cal-save-btn2'].forEach(function(id){
+    var b=document.getElementById(id); if(b) b.style.display='inline';
+  });
+  ['cal-export-btn','cal-export-btn2'].forEach(function(id){
+    var b=document.getElementById(id); if(b) b.style.display='inline';
+  });
 
   // Proxy / heuristic note
   var note = document.getElementById('cal-proxy-note');
@@ -5914,50 +5999,94 @@ function showCalResult(result, fromCache){
     note.style.display = 'none';
   }
 
-  // KPI tiles — all 6 documented fields
-  var fmt = function(v,unit,dp){ return v!=null ? (dp!=null?parseFloat(v).toFixed(dp):Math.round(v))+unit : '—'; };
-  var metrics = [
-    {label:'Tokens / sec',     value:fmt(result.tokens_per_sec,' tok/s'),         note:'total throughput'},
-    {label:'Tokens / sec / GPU',value:fmt(result.tokens_per_sec_per_gpu,' tok/s'),note:'per GPU'},
-    {label:'TTFT',             value:fmt(result.ttft_ms,' ms',1),                  note:'time to first token'},
-    {label:'TPOT',             value:fmt(result.tpot_ms,' ms',2),                  note:'per output token'},
-    {label:'Request latency',  value:fmt(result.latency_ms,' ms',1),               note:'end-to-end'},
-    {label:'GPU memory',       value:fmt(result.gpu_memory_gb,' GB',1),            note:'estimated'},
-  ];
-  var grid = document.getElementById('cal-metrics-grid');
-  if(grid) grid.innerHTML = metrics.map(function(m){
-    var isEmpty = m.value === '—';
-    return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px">'
-      +'<div style="font-size:10px;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">'+m.label+'</div>'
-      +'<div style="font-size:'+(isEmpty?'18':'22')+'px;font-weight:700;color:'+(isEmpty?'var(--text4)':'var(--text1)')+'">'+m.value+'</div>'
-      +'<div style="font-size:10px;color:var(--text3);margin-top:2px">'+m.note+'</div>'
-      +'</div>';
-  }).join('');
+  // ── Compute GPU sizing ──
+  var sizing = calcCalGPUs(result);
+  CAL_STATE.lastSizing = sizing;
 
-  // Full metrics table
+  var fmt = function(v,unit,dp){ return v!=null ? (dp!=null?parseFloat(v).toFixed(dp):Math.round(v))+unit : '—'; };
+  var fmtN = function(v){ return v!=null ? Math.round(v).toLocaleString() : '—'; };
+
+  // ── Decision tiles (top row) ──
+  var grid = document.getElementById('cal-metrics-grid');
+  if(grid){
+    var gpuTile = sizing
+      ? '<div style="background:var(--blue);border-radius:var(--r);padding:14px;color:#fff">'
+        +'<div style="font-size:10px;opacity:.8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Required GPUs</div>'
+        +'<div style="font-size:28px;font-weight:700;line-height:1">'+sizing.gpusFinal+'</div>'
+        +'<div style="font-size:11px;opacity:.85;margin-top:4px">'+sizing.gpuLabel+' needed</div>'
+        +'</div>'
+      : '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px">'
+        +'<div style="font-size:10px;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Required GPUs</div>'
+        +'<div style="font-size:24px;font-weight:700;color:var(--text4)">—</div>'
+        +'<div style="font-size:11px;color:var(--text3);margin-top:4px">Run estimate first</div>'
+        +'</div>';
+
+    var tile = function(label,val,note,accent){
+      var empty = val==='—';
+      return '<div style="background:var(--bg2);border:1px solid '+(accent||'var(--border)')+';border-radius:var(--r);padding:12px">'
+        +'<div style="font-size:10px;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">'+label+'</div>'
+        +'<div style="font-size:'+(empty?'18':'22')+'px;font-weight:700;color:'+(empty?'var(--text4)':'var(--text1)')+'">'+val+'</div>'
+        +'<div style="font-size:10px;color:var(--text3);margin-top:2px">'+note+'</div>'
+        +'</div>';
+    };
+
+    grid.innerHTML =
+      gpuTile
+      + tile('Req / sec',       sizing ? fmt(sizing.rps,'/s',1) : '—',                 'inferred from batch + latency')
+      + tile('Throughput demand',sizing ? fmtN(sizing.demandTps)+' tok/s' : '—',       'req/s × tokens/request')
+      + tile('Supply / GPU',    fmt(result.tokens_per_sec_per_gpu,' tok/s',0),          'from estimator')
+      + tile('TTFT',            fmt(result.ttft_ms,' ms',1),                            'time to first token')
+      + tile('TPOT',            fmt(result.tpot_ms,' ms',2),                            'per output token')
+      + tile('Request latency', fmt(result.latency_ms,' ms',1),                         'end-to-end')
+      + tile('GPU memory',      fmt(result.gpu_memory_gb,' GB',1),                      'estimated by estimator')
+      + tile('Tokens / sec',    fmt(result.tokens_per_sec,' tok/s'),                    'total throughput')
+      + tile('Tokens / sec/GPU',fmt(result.tokens_per_sec_per_gpu,' tok/s',1),          'per GPU');
+  }
+
+  // ── Calculation breakdown ──
+  var breakdown = document.getElementById('cal-breakdown');
+  if(breakdown && sizing){
+    var fmt2 = function(v,dp){ return v!=null ? (dp!=null?parseFloat(v).toFixed(dp):Math.round(v).toLocaleString()) : '—'; };
+    breakdown.style.display = 'block';
+    breakdown.innerHTML =
+      '<div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">GPU sizing calculation</div>'
+      +'<div style="font-size:12px;font-family:var(--mono);color:var(--text2);line-height:2">'
+      +'Tokens/request = '+sizing.isl+' + '+sizing.osl+' = <b>'+fmt2(sizing.tokPerReq)+'</b><br>'
+      +'Req/s = '+fmt2(sizing.batch)+' / '+(sizing.latSec?fmt2(sizing.latSec,3)+'s':'est.')+' = <b>'+fmt2(sizing.rps,1)+'</b><br>'
+      +'Demand = '+fmt2(sizing.rps,1)+' × '+fmt2(sizing.tokPerReq)+' = <b>'+fmt2(sizing.demandTps)+' tok/s</b><br>'
+      +(sizing.tpsPerGpu ? 'Supply/GPU = <b>'+fmt2(sizing.tpsPerGpu,0)+' tok/s</b><br>' : '')
+      +(sizing.gpusThroughput ? 'Throughput GPUs = ceil('+fmt2(sizing.demandTps)+' / '+fmt2(sizing.tpsPerGpu,0)+') = <b>'+sizing.gpusThroughput+'</b><br>' : '')
+      +'Memory GPUs = <b>'+sizing.gpusMemory+'</b> (weights '+fmt2(sizing.wGB,1)+'GB + KV '+fmt2(sizing.kvPU,2)+'GB/user, '+sizing.vram+'GB VRAM)<br>'
+      +'Final = max('+[sizing.gpusThroughput||'—',sizing.gpusMemory].join(', ')+') = <b>'+sizing.gpusFinal+' '+sizing.gpuLabel+'</b>'
+      +'</div>';
+  } else if(breakdown){
+    breakdown.style.display = 'none';
+  }
+
+  // ── Collapsible estimator details (raw metrics + debug) ──
   var rows = [
-    ['Tokens / sec',      result.tokens_per_sec!=null         ? Math.round(result.tokens_per_sec)+' tok/s'           : '—'],
-    ['Tokens / sec / GPU',result.tokens_per_sec_per_gpu!=null ? parseFloat(result.tokens_per_sec_per_gpu).toFixed(1)+' tok/s' : '—'],
-    ['TTFT',              result.ttft_ms!=null                ? parseFloat(result.ttft_ms).toFixed(2)+' ms'           : '—'],
-    ['TPOT',              result.tpot_ms!=null                ? parseFloat(result.tpot_ms).toFixed(2)+' ms'           : '—'],
-    ['Request latency',   result.latency_ms!=null             ? parseFloat(result.latency_ms).toFixed(1)+' ms'        : '—'],
-    ['GPU memory',        result.gpu_memory_gb!=null          ? parseFloat(result.gpu_memory_gb).toFixed(1)+' GB'     : '—'],
+    ['Tokens / sec',      result.tokens_per_sec!=null?Math.round(result.tokens_per_sec)+' tok/s':'—'],
+    ['Tokens / sec / GPU',result.tokens_per_sec_per_gpu!=null?parseFloat(result.tokens_per_sec_per_gpu).toFixed(1)+' tok/s':'—'],
+    ['TTFT',              result.ttft_ms!=null?parseFloat(result.ttft_ms).toFixed(2)+' ms':'—'],
+    ['TPOT',              result.tpot_ms!=null?parseFloat(result.tpot_ms).toFixed(2)+' ms':'—'],
+    ['Request latency',   result.latency_ms!=null?parseFloat(result.latency_ms).toFixed(1)+' ms':'—'],
+    ['GPU memory',        result.gpu_memory_gb!=null?parseFloat(result.gpu_memory_gb).toFixed(1)+' GB':'—'],
     ['Input / Output tokens', result.isl+' / '+result.osl+' tokens'],
     ['Batch size',        result.batch],
     ['Tensor parallel',   result.tp],
     ['Pipeline parallel', result.pp],
-    ['Mode',              result.mode ? result.mode.charAt(0).toUpperCase()+result.mode.slice(1) : '—'],
+    ['Mode',              result.mode?result.mode.charAt(0).toUpperCase()+result.mode.slice(1):'—'],
   ];
   var tbl = document.getElementById('cal-metrics-table');
   if(tbl){
     tbl.innerHTML =
       '<tr style="background:var(--bg2);border-bottom:1px solid var(--border)">'
-      +'<th style="text-align:left;padding:6px 10px;font-size:10px;color:var(--text4);font-weight:600;text-transform:uppercase">Metric</th>'
-      +'<th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--text4);font-weight:600;text-transform:uppercase">Value</th></tr>'
+      +'<th style="text-align:left;padding:5px 10px;font-size:10px;color:var(--text4);font-weight:600;text-transform:uppercase">Metric</th>'
+      +'<th style="text-align:right;padding:5px 10px;font-size:10px;color:var(--text4);font-weight:600;text-transform:uppercase">Value</th></tr>'
       + rows.map(function(row){
         return '<tr style="border-bottom:1px solid var(--border)">'
-          +'<td style="padding:5px 10px;font-size:12px;color:var(--text3)">'+row[0]+'</td>'
-          +'<td style="padding:5px 10px;font-size:12px;font-family:var(--mono);text-align:right;color:var(--text1)">'+row[1]+'</td>'
+          +'<td style="padding:4px 10px;font-size:12px;color:var(--text3)">'+row[0]+'</td>'
+          +'<td style="padding:4px 10px;font-size:12px;font-family:var(--mono);text-align:right;color:var(--text1)">'+row[1]+'</td>'
           +'</tr>';
       }).join('');
   }
@@ -6148,20 +6277,22 @@ function exportCalToSheets(){
   if(!r){ alert('Run an estimate first before exporting.'); return; }
 
   // Build a simple CSV and open as data URI
+  var sz = CAL_STATE.lastSizing;
   var rows = [
-    ['Model','GPU','Backend','Input tokens (ISL)','Output tokens (OSL)','Batch size','TTFT (ms)','TPOT (ms)','Latency (ms)','Tokens/sec','GPU memory (GB)','Mode'],
+    ['Model','GPU','Backend','Input tokens','Output tokens','Batch size','TTFT (ms)','TPOT (ms)','Latency (ms)','Tokens/sec','Tokens/sec/GPU','GPU memory (GB)','Req/s','Tokens/request','Throughput demand (tok/s)','GPUs for throughput','GPUs for memory fit','Final GPUs','Mode'],
     [
       r.modelLabel,
       CAL_GPU_LABELS[r.gpu]||r.gpu,
       (r.backend||'').toUpperCase(),
-      r.isl,
-      r.osl,
-      r.batch,
-      r.ttft_ms!=null ? r.ttft_ms.toFixed(2) : '',
-      r.tpot_ms!=null ? r.tpot_ms.toFixed(2) : '',
-      r.latency_ms!=null ? r.latency_ms.toFixed(1) : '',
-      r.tokens_per_sec!=null ? Math.round(r.tokens_per_sec) : '',
-      r.gpu_memory_gb!=null ? r.gpu_memory_gb.toFixed(1) : '',
+      r.isl, r.osl, r.batch,
+      r.ttft_ms!=null?r.ttft_ms.toFixed(2):'',
+      r.tpot_ms!=null?r.tpot_ms.toFixed(2):'',
+      r.latency_ms!=null?r.latency_ms.toFixed(1):'',
+      r.tokens_per_sec!=null?Math.round(r.tokens_per_sec):'',
+      r.tokens_per_sec_per_gpu!=null?parseFloat(r.tokens_per_sec_per_gpu).toFixed(1):'',
+      r.gpu_memory_gb!=null?r.gpu_memory_gb.toFixed(1):'',
+      sz?sz.rps.toFixed(1):'', sz?sz.tokPerReq:'', sz?Math.round(sz.demandTps):'',
+      sz?sz.gpusThroughput||'—':'', sz?sz.gpusMemory:'', sz?sz.gpusFinal:'',
       r.mode.charAt(0).toUpperCase()+r.mode.slice(1)
     ]
   ];
