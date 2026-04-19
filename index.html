@@ -2276,7 +2276,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.70</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.71</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5841,6 +5841,17 @@ function initPerfPage(){
   syncQuantDefaults();
   updatePerfSummaries();
   renderPerfSaved();
+  // Warm up Render so first call doesn't get cold-start HTML
+  warmUpAIC();
+}
+
+function warmUpAIC(){
+  // Silent ping to wake Render from sleep — doesn't need to succeed
+  fetch(AIC_WORKER, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ endpoint: 'systems', payload: {} })
+  }).catch(function(){}); // ignore errors — this is just a wake-up
 }
 
 function setPerfMode(mode, btn){
@@ -6083,6 +6094,11 @@ function showPerfLoading(show, title, isSweep){
   if(show){
     var t = document.getElementById('perf-loading-title');
     if(t) t.textContent = title || 'Running estimate...';
+    // Update tip if retrying after cold start
+    if(title && title.indexOf('Retrying') >= 0){
+      var tipEl = document.getElementById('perf-loading-tip');
+      if(tipEl) tipEl.textContent = 'AIC API woke up — running your estimate now...';
+    }
     var sp = document.getElementById('perf-sweep-progress');
     if(sp) sp.style.display = isSweep ? 'block' : 'none';
   }
@@ -7088,8 +7104,31 @@ function showPerfError(msg){
       '<div style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text1)">Estimate failed</div>' +
       '<div style="font-size:12px;color:var(--red);background:rgba(239,68,68,0.08);border:1px solid var(--red);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;text-align:left">' + msg + '</div>' +
       '<div style="font-size:12px;color:var(--text3);line-height:1.6;text-align:left">' + tips + '</div>' +
-      '<button class="btn btn-primary" style="margin-top:12px" onclick="runPerfEstimate(true)">↻ Retry with current settings</button>' +
+      '<div id="perf-retry-wrap" style="margin-top:12px"></div>' +
       '</div>';
+    // If cold-start, add auto-countdown retry button
+    var isCold = msg && (msg.indexOf('starting up') >= 0 || msg.indexOf('Unexpected token') >= 0);
+    var wrapEl = document.getElementById('perf-retry-wrap');
+    if(wrapEl){
+      if(isCold){
+        var secs = 35;
+        wrapEl.innerHTML = '<button class="btn btn-primary" id="perf-retry-countdown" onclick="runPerfEstimate(true)" disabled>↻ Retrying in '+secs+'s...</button>';
+        var btn = document.getElementById('perf-retry-countdown');
+        var iv = setInterval(function(){
+          secs--;
+          if(btn && secs > 0){
+            btn.textContent = '↻ Retrying in '+secs+'s...';
+          } else {
+            clearInterval(iv);
+            if(btn){ btn.textContent = '↻ Retry now'; btn.disabled = false; }
+            // Auto-click retry
+            runPerfEstimate(true);
+          }
+        }, 1000);
+      } else {
+        wrapEl.innerHTML = '<button class="btn btn-primary" onclick="runPerfEstimate(true)">↻ Retry with current settings</button>';
+      }
+    }
   }
 }
 
