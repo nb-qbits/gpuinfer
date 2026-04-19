@@ -1808,7 +1808,7 @@ button{font-family:var(--sans);cursor:pointer}
           <input type="number" id="perf-prefix-pct" value="0" min="0" max="99" oninput="updateEffectiveISL()" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
         </div>
         <div id="perf-effective-isl-row" style="display:none;font-size:11px;color:var(--text3);margin-bottom:8px;padding:4px 8px;background:var(--bg2);border-radius:4px">
-          Effective ISL: <span id="perf-effective-isl" style="font-family:var(--mono);color:var(--blue)">—</span> tokens
+          ↳ Effective ISL after prefix cache: <strong id="perf-effective-isl" style="font-family:var(--mono);color:var(--blue);font-size:13px">—</strong> tokens
         </div>
         <div class="slider-row" style="margin-bottom:0">
           <label style="font-size:12px">Batch / concurrency</label>
@@ -1912,11 +1912,11 @@ button{font-family:var(--sans);cursor:pointer}
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px" id="perf-hero-cards"></div>
 
         <!-- ── PERFORMANCE tiles ── -->
-        <div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Performance</div>
+        <div id="perf-perf-label" style="display:none;font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Performance</div>
         <div class="outcome-cards" id="perf-perf-cards" style="margin-bottom:14px"></div>
 
         <!-- ── THROUGHPUT tiles ── -->
-        <div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Throughput &amp; capacity</div>
+        <div id="perf-tp-label" style="display:none;font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Throughput &amp; capacity</div>
         <div class="outcome-cards" id="perf-throughput-cards" style="margin-bottom:14px"></div>
 
         <!-- ── COST card (cloud + on-prem) ── -->
@@ -2161,7 +2161,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.56</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.58</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5771,7 +5771,7 @@ function updateEffectiveISL(){
   var span = document.getElementById('perf-effective-isl');
   if(pct > 0){
     var eff = Math.round(isl * (1 - pct/100));
-    if(row) row.style.display = 'block';
+    if(row) row.style.display = 'flex';
     if(span) span.textContent = eff.toLocaleString();
   } else {
     if(row) row.style.display = 'none';
@@ -5842,11 +5842,11 @@ function buildPerfPayload(){
       endpoint: 'query',
       payload: {
         model_path:    PERF_STATE.modelPath,
-        total_gpus:    tp * 8,
+        total_gpus:    tp * 4,   // 4 units of tp GPUs — reasonable search space
         system:        gpu,
         backend:       backend,
-        database_mode: dbmode,
-        isl:           effIsl,
+        database_mode: 'HYBRID', // always HYBRID for query — broader support
+        isl:           isl,      // pass original ISL — AIC handles prefix internally
         osl:           osl,
         prefix:        Math.round(isl * pct/100)
       },
@@ -5906,8 +5906,10 @@ function callAICEndpoint(endpoint, payload, cb, errCb){
     body: JSON.stringify({ endpoint: endpoint, payload: payload })
   })
   .then(function(r){
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    return r.json();
+    return r.json().then(function(d){
+      if(!r.ok) throw new Error(d.error || d.detail || ('HTTP '+r.status));
+      return d;
+    });
   })
   .then(cb)
   .catch(errCb || function(e){ console.error('AIC error:', e); });
@@ -5928,7 +5930,7 @@ function runSinglePerfEstimate(cfg, cacheKey){
     },
     function(err){
       showPerfLoading(false);
-      showPerfError('API error: '+err.message+'. Check model+GPU combo is supported. Try HYBRID database mode.');
+      showPerfError(err.message || 'API error. Check model+GPU combo — try HYBRID mode or a different backend.');
     }
   );
 }
@@ -6046,6 +6048,10 @@ function renderPerfResult(result, fromCache){
   document.getElementById('perf-empty').style.display   = 'none';
   document.getElementById('perf-results').style.display = 'block';
 
+  // Clear any previous error banner on fresh result
+  var prevWarn = document.getElementById('perf-warn-banner');
+  if(prevWarn && !fromCache) prevWarn.style.display = 'none';
+
   // Status bar
   var badge = document.getElementById('perf-mode-badge');
   if(badge){
@@ -6136,6 +6142,10 @@ function renderPerfResult(result, fromCache){
         'per '+PERF_GPU_LABELS[gpuKey]+' unit at this batch',
         'var(--border)');
   }
+
+  // Show section labels
+  var ppL=document.getElementById('perf-perf-label'); if(ppL) ppL.style.display='block';
+  var tpL=document.getElementById('perf-tp-label');   if(tpL) tpL.style.display='block';
 
   // PERFORMANCE tiles
   var perfCards = document.getElementById('perf-perf-cards');
