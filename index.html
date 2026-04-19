@@ -2276,7 +2276,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.69</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.70</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -6127,8 +6127,15 @@ function callAICEndpoint(endpoint, payload, cb, errCb){
     body: JSON.stringify({ endpoint: endpoint, payload: payload })
   })
   .then(function(r){
-    return r.json().then(function(d){
-      if(!r.ok) throw new Error(d.error || d.detail || ('HTTP '+r.status));
+    return r.text().then(function(text){
+      // Detect Render cold-start HTML page or Cloudflare error
+      if(text.trim().startsWith('<')){
+        throw new Error('AIC API is starting up (Render cold start). Wait 30s and retry.');
+      }
+      var d;
+      try{ d = JSON.parse(text); }
+      catch(e){ throw new Error('Invalid response from AIC API: '+text.slice(0,100)); }
+      if(!r.ok) throw new Error(d.error || d.detail || ('HTTP '+r.status+': '+text.slice(0,120)));
       return d;
     });
   })
@@ -6233,52 +6240,70 @@ function runPerfSweep(cfg, cacheKey){
 }
 
 function parsePerfQueryBoth(merged, cfg, cacheKey){
-  // Parse combined agg + disagg results
-  var agg    = merged.agg    || {};
-  var disagg = merged.disagg || {};
+  // Response shape from /query/agg and /query/disagg (serialize_cli_result):
+  // { summary, all_best_throughputs, all_best_latencies, configs, pareto, debug_log, request }
+  // configs = { "agg": [...rows] } or { "disagg": [...rows] }
+  var aggResp    = merged.agg    || {};
+  var disaggResp = merged.disagg || {};
 
-  // Extract best configs from each
-  var aggConfigs    = agg.best_configs    || agg.configs    || [];
-  var disaggConfigs = disagg.best_configs || disagg.configs || [];
+  // Extract config rows — key is "agg" or "disagg" (first key in configs object)
+  var aggConfigs    = (aggResp.configs    && (aggResp.configs['agg']    || Object.values(aggResp.configs)[0]))    || [];
+  var disaggConfigs = (disaggResp.configs && (disaggResp.configs['disagg'] || Object.values(disaggResp.configs)[0])) || [];
 
-  // Get best throughput numbers
-  var aggBest    = Array.isArray(aggConfigs)    ? aggConfigs[0]    : {};
-  var disaggBest = Array.isArray(disaggConfigs) ? disaggConfigs[0] : {};
+  // Best configs (top row = best throughput)
+  var aggBest    = aggConfigs[0]    || {};
+  var disaggBest = disaggConfigs[0] || {};
 
-  // Use disagg as primary if available (higher throughput usually)
-  var primary = disaggBest.seq_s_gpu ? disaggBest : aggBest;
+  // Get metrics from summary (most reliable source)
+  var aggSum    = aggResp.summary    || {};
+  var disaggSum = disaggResp.summary || {};
 
-  // For GPU sizing use best seq/s/gpu
-  var seqSGpu  = parseFloat(primary['seq/s/gpu']  || primary.seq_s_gpu  || 0) || null;
-  var tpsGpu   = parseFloat(primary['tokens/s/gpu']|| primary.tokens_s_gpu || 0) || null;
-  var ttft     = parseFloat(primary.ttft || primary['ttft'] || 0) || null;
-  var tpot     = parseFloat(primary.tpot || primary['tpot'] || 0) || null;
-  var lat      = parseFloat(primary.request_latency || primary['request_latency'] || 0) || null;
-  var numGpus  = parseInt(primary.num_total_gpus || cfg.agg_payload.total_gpus || 16);
+  // Use best_throughput_tokens_s_gpu from summary
+  var aggTpsGpu    = parseFloat(aggSum.best_throughput_tokens_s_gpu    || aggBest['tokens/s/gpu']    || 0) || null;
+  var disaggTpsGpu = parseFloat(disaggSum.best_throughput_tokens_s_gpu || disaggBest['tokens/s/gpu'] || 0) || null;
 
-  // seq_s for the whole config = seqSGpu × numGpus
-  var seqS = seqSGpu ? seqSGpu * numGpus : null;
+  // Determine which is better
+  var useDisagg = disaggTpsGpu != null && (aggTpsGpu == null || disaggTpsGpu >= aggTpsGpu);
+  var bestSum   = useDisagg ? disaggSum : aggSum;
+  var bestCfg   = useDisagg ? disaggBest : aggBest;
+
+  var tpsGpu = useDisagg ? disaggTpsGpu : aggTpsGpu;
+  var ttft   = parseFloat(bestSum.best_ttft_ms             || bestCfg.ttft             || 0) || null;
+  var tpot   = parseFloat(bestSum.best_tpot_ms             || bestCfg.tpot             || 0) || null;
+  var lat    = parseFloat(bestSum.best_request_latency_ms  || bestCfg.request_latency  || 0) || null;
+
+  // seq/s/gpu from best config row
+  var seqSGpu = parseFloat(bestCfg['seq/s/gpu'] || bestCfg.seq_s_gpu || 0) || null;
+  var numGpus = parseInt(bestCfg.num_total_gpus || cfg.agg_payload.total_gpus || 16);
+  var seqS    = seqSGpu ? seqSGpu * numGpus : null;
+
+  // all_best_throughputs for comparison table
+  var allTp  = {};
+  var allLat = {};
+  if(aggResp.all_best_throughputs)    allTp['agg']    = parseFloat(aggResp.all_best_throughputs['agg']    || 0) || null;
+  if(disaggResp.all_best_throughputs) allTp['disagg'] = parseFloat(disaggResp.all_best_throughputs['disagg'] || 0) || null;
+  if(aggResp.all_best_latencies)    allLat['agg']    = aggResp.all_best_latencies['agg']    || {};
+  if(disaggResp.all_best_latencies) allLat['disagg'] = disaggResp.all_best_latencies['disagg'] || {};
 
   return {
     type:         'query_both',
+    mode:         useDisagg ? 'disagg' : 'agg',
     ttft:         ttft,
     tpot:         tpot,
     latency:      lat,
     seq_s:        seqS,
     tokens_s_gpu: tpsGpu,
     num_gpus:     numGpus,
-    tp_size:      cfg.agg_payload.total_gpus / 4,
-    agg_configs:    Array.isArray(aggConfigs)    ? aggConfigs.slice(0,5)    : [],
-    disagg_configs: Array.isArray(disaggConfigs) ? disaggConfigs.slice(0,5) : [],
-    all_tp:  { agg: aggBest['tokens/s/gpu']||null, disagg: disaggBest['tokens/s/gpu']||null },
-    all_lat: {
-      agg:    { ttft: aggBest.ttft,    tpot: aggBest.tpot,    request_latency: aggBest.request_latency },
-      disagg: { ttft: disaggBest.ttft, tpot: disaggBest.tpot, request_latency: disaggBest.request_latency }
-    },
-    cfg:      cfg,
-    cacheKey: cacheKey,
-    ts:       Date.now(),
-    raw:      merged
+    tp_size:      numGpus / 2,
+    agg_configs:    aggConfigs.slice(0,5),
+    disagg_configs: disaggConfigs.slice(0,5),
+    all_tp:         allTp,
+    all_lat:        allLat,
+    speedup:        aggSum.speedup_over_other || disaggSum.speedup_over_other || null,
+    cfg:            cfg,
+    cacheKey:       cacheKey,
+    ts:             Date.now(),
+    raw:            merged
   };
 }
 
@@ -7014,24 +7039,55 @@ function recalcPerfTargets(){
   renderSizingMath(r, reqDay, tokSec, bufPct, gpuKey);
 }
 
+function getPerfErrorTips(msg){
+  var mode    = PERF_STATE.mode;
+  var gpu     = (document.getElementById('perf-gpu')||{}).value||'';
+  var backend = (document.getElementById('perf-backend')||{}).value||'';
+  var tp      = (document.getElementById('perf-tp')||{}).value||'4';
+  var tips = [];
+  var m = (msg||'').toLowerCase();
+
+  if(m.indexOf('cold start') >= 0 || m.indexOf('starting up') >= 0){
+    tips.push('⏳ AIC API woke from sleep — wait 30 seconds and click Retry');
+  }
+  if(m.indexOf('moe quant') >= 0 || m.indexOf('w4a16') >= 0){
+    tips.push('MoE quant error: scroll down in Hardware section → set MoE quant = <strong>float16</strong>, backend ver = <strong>0.14.0</strong>');
+  }
+  if(m.indexOf('no valid experiment') >= 0 || m.indexOf('no valid') >= 0){
+    if(mode === 'query'){
+      tips.push('Disagg mode needs ≥16 GPUs — switch to <strong>TP=8</strong> (currently TP='+tp+')');
+      tips.push('Or use <strong>Static estimate</strong> mode which works with TP=4');
+    }
+    tips.push('Try <strong>H200 SXM</strong> GPU (more pareto data available than H100)');
+  }
+  if(m.indexOf('unexpected token') >= 0 || m.indexOf('invalid response') >= 0){
+    tips.push('⏳ AIC API may be starting up — wait 30 seconds and click Retry');
+    tips.push('If it persists, check the Render dashboard at aic-api-8hmb.onrender.com');
+  }
+  if(!tips.length){
+    if(mode === 'query'){
+      tips.push('Try switching to <strong>Static estimate</strong> mode first to verify the combo works');
+      tips.push('For Agg vs Disagg: use <strong>TP=8</strong> and <strong>H200 SXM</strong>');
+    }
+    tips.push('Try switching to <strong>HYBRID</strong> database mode');
+    tips.push('Try <strong>TRT-LLM</strong> backend (broader hardware support)');
+  }
+  return tips.map(function(t){ return '• '+t; }).join('<br>');
+}
+
 function showPerfError(msg){
   // Show empty state with error — don't show stale results
   document.getElementById('perf-empty').style.display   = 'flex';
   document.getElementById('perf-results').style.display = 'none';
   var emptyEl = document.getElementById('perf-empty');
   if(emptyEl){
+    var tips = getPerfErrorTips(msg);
     emptyEl.innerHTML = 
       '<div style="text-align:center;max-width:480px">' +
       '<div style="font-size:32px;margin-bottom:12px">⚠️</div>' +
       '<div style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text1)">Estimate failed</div>' +
       '<div style="font-size:12px;color:var(--red);background:rgba(239,68,68,0.08);border:1px solid var(--red);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;text-align:left">' + msg + '</div>' +
-      '<div style="font-size:12px;color:var(--text3);line-height:1.6">' +
-      '<strong>Common fixes for Agg vs Disagg mode:</strong><br>' +
-      '• Switch TP to <strong>TP=8</strong> (disagg needs ≥16 GPUs total)<br>' +
-      '• Switch GPU to <strong>H200 SXM</strong> (more silicon data available)<br>' +
-      '• "No valid experiments" = increase total_gpus — try TP=8<br>' +
-      '• Try <strong>Static estimate</strong> mode instead (works with TP=4)' +
-      '</div>' +
+      '<div style="font-size:12px;color:var(--text3);line-height:1.6;text-align:left">' + tips + '</div>' +
       '<button class="btn btn-primary" style="margin-top:12px" onclick="runPerfEstimate(true)">↻ Retry with current settings</button>' +
       '</div>';
   }
