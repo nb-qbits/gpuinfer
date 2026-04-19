@@ -2276,7 +2276,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.67</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.68</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -6039,35 +6039,38 @@ function buildPerfPayload(){
       meta: { isl_original: isl, prefix_pct: pct, eff_isl: effIsl }
     };
   } else {
+    // Use /query/agg + /query/disagg in parallel — they correctly handle moe_quant_mode
+    var moeQ2  = (document.getElementById('perf-moe-quant')||{}).value  || '';
+    var bVer2  = (document.getElementById('perf-backend-ver')||{}).value || '';
+    var baseP = {
+      model_path:    PERF_STATE.modelPath,
+      total_gpus:    tp * 4,
+      system:        gpu,
+      backend:       backend,
+      database_mode: 'HYBRID',
+      isl:           isl,
+      osl:           osl,
+      prefix:        Math.round(isl * pct/100)
+    };
+    if(gpu === 'h100_sxm' && backend === 'vllm'){
+      baseP.moe_quant_mode  = moeQ2 || 'float16';
+      baseP.backend_version = bVer2 || '0.14.0';
+    } else {
+      if(moeQ2) baseP.moe_quant_mode  = moeQ2;
+      if(bVer2) baseP.backend_version = bVer2;
+    }
+    var disaggP = Object.assign({}, baseP, {
+      prefill_system:          gpu,
+      prefill_backend:         backend,
+      prefill_moe_quant:       baseP.moe_quant_mode  || null,
+      prefill_backend_version: baseP.backend_version || null,
+      decode_moe_quant:        baseP.moe_quant_mode  || null,
+      decode_backend_version:  baseP.backend_version || null
+    });
     return {
-      endpoint: 'query',
-      payload: (function(){
-        var p = {
-          model_path:    PERF_STATE.modelPath,
-          total_gpus:    tp * 4,
-          system:        gpu,
-          backend:       backend,
-          database_mode: 'HYBRID',
-          isl:           isl,
-          osl:           osl,
-          prefix:        Math.round(isl * pct/100)
-        };
-        // Apply user quant overrides
-        var moeQ2  = (document.getElementById('perf-moe-quant')||{}).value  || '';
-        var bVer2  = (document.getElementById('perf-backend-ver')||{}).value || '';
-        // H100+vLLM: ALWAYS force float16
-        // Note: /query endpoint uses backend_version differently — pass as prefill/decode versions
-        if(gpu === 'h100_sxm' && backend === 'vllm'){
-          p.moe_quant_mode           = moeQ2 || 'float16';
-          p.prefill_backend_version  = bVer2 || '0.14.0';
-          p.decode_backend_version   = bVer2 || '0.14.0';
-          p.backend_version          = bVer2 || '0.14.0';
-        } else {
-          if(moeQ2) p.moe_quant_mode  = moeQ2;
-          if(bVer2) p.backend_version = bVer2;
-        }
-        return p;
-      })(),
+      endpoint:       'query_both',
+      agg_payload:    baseP,
+      disagg_payload: disaggP,
       meta: { isl_original: isl, prefix_pct: pct, eff_isl: effIsl }
     };
   }
@@ -6136,6 +6139,37 @@ function callAICEndpoint(endpoint, payload, cb, errCb){
 function runSinglePerfEstimate(cfg, cacheKey){
   showPerfLoading(true, 'Running estimate...');
 
+  if(cfg.endpoint === 'query_both'){
+    // Call /query/agg and /query/disagg in parallel
+    var aggDone = false, disaggDone = false;
+    var aggData = null, disaggData = null;
+    var errMsg = null;
+
+    function tryMerge(){
+      if(!aggDone || !disaggDone) return;
+      showPerfLoading(false);
+      if(errMsg && !aggData && !disaggData){ showPerfError(errMsg); return; }
+      // Merge both results
+      var merged = { agg: aggData, disagg: disaggData };
+      var raw = document.getElementById('perf-raw-response');
+      if(raw) raw.textContent = JSON.stringify(merged, null, 2);
+      var result = parsePerfQueryBoth(merged, cfg, cacheKey);
+      perfCache[cacheKey] = result;
+      try{ localStorage.setItem('perf_cache', JSON.stringify(perfCache)); }catch(e){}
+      renderPerfResult(result, false);
+    }
+
+    callAICEndpoint('query/agg', cfg.agg_payload,
+      function(data){ aggData = data; aggDone = true; tryMerge(); },
+      function(err){  errMsg = err.message; aggDone = true; tryMerge(); }
+    );
+    callAICEndpoint('query/disagg', cfg.disagg_payload,
+      function(data){ disaggData = data; disaggDone = true; tryMerge(); },
+      function(err){  errMsg = errMsg || err.message; disaggDone = true; tryMerge(); }
+    );
+    return;
+  }
+
   callAICEndpoint(cfg.endpoint, cfg.payload,
     function(data){
       showPerfLoading(false);
@@ -6196,6 +6230,56 @@ function runPerfSweep(cfg, cacheKey){
     );
   }
   runNext(0);
+}
+
+function parsePerfQueryBoth(merged, cfg, cacheKey){
+  // Parse combined agg + disagg results
+  var agg    = merged.agg    || {};
+  var disagg = merged.disagg || {};
+
+  // Extract best configs from each
+  var aggConfigs    = agg.best_configs    || agg.configs    || [];
+  var disaggConfigs = disagg.best_configs || disagg.configs || [];
+
+  // Get best throughput numbers
+  var aggBest    = Array.isArray(aggConfigs)    ? aggConfigs[0]    : {};
+  var disaggBest = Array.isArray(disaggConfigs) ? disaggConfigs[0] : {};
+
+  // Use disagg as primary if available (higher throughput usually)
+  var primary = disaggBest.seq_s_gpu ? disaggBest : aggBest;
+
+  // For GPU sizing use best seq/s/gpu
+  var seqSGpu  = parseFloat(primary['seq/s/gpu']  || primary.seq_s_gpu  || 0) || null;
+  var tpsGpu   = parseFloat(primary['tokens/s/gpu']|| primary.tokens_s_gpu || 0) || null;
+  var ttft     = parseFloat(primary.ttft || primary['ttft'] || 0) || null;
+  var tpot     = parseFloat(primary.tpot || primary['tpot'] || 0) || null;
+  var lat      = parseFloat(primary.request_latency || primary['request_latency'] || 0) || null;
+  var numGpus  = parseInt(primary.num_total_gpus || cfg.agg_payload.total_gpus || 16);
+
+  // seq_s for the whole config = seqSGpu × numGpus
+  var seqS = seqSGpu ? seqSGpu * numGpus : null;
+
+  return {
+    type:         'query_both',
+    ttft:         ttft,
+    tpot:         tpot,
+    latency:      lat,
+    seq_s:        seqS,
+    tokens_s_gpu: tpsGpu,
+    num_gpus:     numGpus,
+    tp_size:      cfg.agg_payload.total_gpus / 4,
+    agg_configs:    Array.isArray(aggConfigs)    ? aggConfigs.slice(0,5)    : [],
+    disagg_configs: Array.isArray(disaggConfigs) ? disaggConfigs.slice(0,5) : [],
+    all_tp:  { agg: aggBest['tokens/s/gpu']||null, disagg: disaggBest['tokens/s/gpu']||null },
+    all_lat: {
+      agg:    { ttft: aggBest.ttft,    tpot: aggBest.tpot,    request_latency: aggBest.request_latency },
+      disagg: { ttft: disaggBest.ttft, tpot: disaggBest.tpot, request_latency: disaggBest.request_latency }
+    },
+    cfg:      cfg,
+    cacheKey: cacheKey,
+    ts:       Date.now(),
+    raw:      merged
+  };
 }
 
 function parsePerfResult(data, cfg, cacheKey){
@@ -6438,7 +6522,7 @@ function renderPerfResult(result, fromCache){
   if(aggSec)    aggSec.style.display    = 'none';
   if(compSec)   compSec.style.display   = 'none';
 
-  if(result.type === 'query'){
+  if(result.type === 'query' || result.type === 'query_both'){
     renderDisaggSection(result);
     renderAggSection(result);
     renderCompareSection(result);
