@@ -1713,218 +1713,265 @@ button{font-family:var(--sans);cursor:pointer}
   <div style="display:flex;gap:0;align-items:flex-start;min-height:calc(100vh - 88px)">
 
     <!-- ===== LEFT PANEL ===== -->
-    <div style="width:300px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);padding:16px;min-height:calc(100vh - 88px);overflow-y:auto">
+    <div style="width:260px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);min-height:calc(100vh - 88px);overflow-y:auto">
 
-      <div style="font-size:15px;font-weight:700;margin-bottom:2px">⚡ Performance</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:12px">AIC-powered GPU sizing · real silicon data</div>
-
-      <!-- Pull + Run -->
-      <div style="display:flex;gap:6px;margin-bottom:14px">
-        <button class="btn btn-sm" style="flex:1;color:var(--blue)" onclick="perfPullFromAdvanced()">↑ Pull from Advanced</button>
-        <button id="perf-run-btn" class="btn btn-primary" style="flex:2;font-weight:600" onclick="runPerfEstimate()">⚡ Run estimate</button>
-      </div>
-
-      <!-- ── MODEL ── -->
-      <div class="section-title">MODEL</div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
-        <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:6px">PRESET MODELS</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px" id="perf-model-chips">
-          <button class="chip on" onclick="selectPerfModel('openai/gpt-oss-20b','gpt-oss-20b',this)">gpt-oss-20b</button>
-          <button class="chip" onclick="selectPerfModel('meta-llama/Meta-Llama-3.1-8B-Instruct','Llama 3.1 8B',this)">Llama 3.1 8B</button>
-          <button class="chip" onclick="selectPerfModel('Qwen/Qwen3-32B-FP8','Qwen3 32B',this)">Qwen3 32B</button>
-        </div>
-        <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:4px">OR LOOKUP BY HF ID</div>
-        <div style="display:flex;gap:6px;margin-bottom:4px">
-          <input id="perf-hf-input" type="text" placeholder="e.g. openai/gpt-oss-20b" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text1);font-size:12px">
-          <button class="btn btn-primary btn-sm" onclick="perfHFLookup()" style="white-space:nowrap">Lookup</button>
-        </div>
-        <div id="perf-hf-status" style="font-size:11px;color:var(--text3);min-height:14px"></div>
-        <div id="perf-model-display" style="margin-top:4px;font-size:12px;font-weight:600;color:var(--blue)">gpt-oss-20b</div>
-      </div>
-
-      <!-- ── SERVING MODE ── -->
-      <div class="section-title">SERVING MODE</div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
+      <!-- Header + run button -->
+      <div style="padding:12px 16px 10px;border-bottom:1px solid var(--border)">
+        <div style="font-size:14px;font-weight:700;margin-bottom:1px">⚡ Performance</div>
+        <div style="font-size:10px;color:var(--text4);margin-bottom:10px">AIC silicon data · GPU sizing</div>
         <div style="display:flex;gap:6px">
-          <button id="perf-mode-estimate" class="chip on" style="flex:1;text-align:center" onclick="setPerfMode('estimate',this)">Static estimate</button>
-          <button id="perf-mode-query" class="chip" style="flex:1;text-align:center" onclick="setPerfMode('query',this)">Agg vs Disagg</button>
+          <button class="btn btn-sm" style="flex:1;color:var(--blue);font-size:11px" onclick="perfPullFromAdvanced()">↑ Advanced</button>
+          <button id="perf-run-btn" class="btn btn-primary" style="flex:2;font-weight:600;font-size:12px" onclick="runPerfEstimate()">⚡ Run estimate</button>
         </div>
-        <div style="font-size:10px;color:var(--text4);margin-top:6px" id="perf-mode-hint">Single config · fast · per-op breakdown</div>
       </div>
 
-      <!-- ── HARDWARE & BACKEND ── -->
-      <div class="section-title">HARDWARE &amp; BACKEND</div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
-        <div class="slider-row" style="margin-bottom:8px">
-          <label style="font-size:12px">GPU</label>
-          <select id="perf-gpu" onchange="syncQuantDefaults()" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
-            <option value="h100_sxm">H100 SXM</option>
-            <option value="h200_sxm">H200 SXM</option>
-            <option value="a100_sxm">A100 80GB</option>
-            <option value="l40s">L40S</option>
-            <option value="b200_sxm">B200 SXM</option>
-          </select>
-        </div>
-        <div class="slider-row" style="margin-bottom:8px">
-          <label style="font-size:12px">Backend</label>
-          <select id="perf-backend" onchange="syncQuantDefaults()" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
-            <option value="vllm">vLLM</option>
-            <option value="trtllm">TRT-LLM</option>
-            <option value="sglang">SGLang</option>
-          </select>
-        </div>
-        <div class="slider-row" style="margin-bottom:8px">
-          <label style="font-size:12px">DB mode <span title="SILICON=exact, HYBRID=best-effort for unsupported combos" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></label>
-          <select id="perf-dbmode" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
-            <option value="HYBRID">HYBRID</option>
-            <option value="SILICON">SILICON</option>
-          </select>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div>
-            <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:3px">TP SIZE</div>
-            <input type="number" id="perf-tp" value="4" min="1" max="8" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box">
-          </div>
-          <div>
-            <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:3px">PP SIZE</div>
-            <input type="number" id="perf-pp" value="1" min="1" max="8" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box">
-          </div>
-        </div>
-        <!-- Quant override — inline, not hidden in sub-accordion -->
-        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-          <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:6px">QUANT OVERRIDE <span title="Leave auto unless you get an unsupported quant mode error" style="cursor:help;font-weight:400">(?)</span></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
-            <div>
-              <div style="font-size:10px;color:var(--text4);margin-bottom:2px">MoE quant</div>
-              <select id="perf-moe-quant" style="width:100%;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px">
-                <option value="">auto</option>
-                <option value="float16">float16</option>
-                <option value="fp8">fp8</option>
-                <option value="fp8_block">fp8_block</option>
-                <option value="w4afp8">w4afp8</option>
-              </select>
+      <!-- ① MODEL -->
+      <div class="panel-section open" id="pps-model">
+        <div class="panel-head" onclick="togglePanel('pps-model')">
+          <div class="panel-head-left">
+            <div class="panel-head-icon">🤖</div>
+            <div class="panel-head-text">
+              <div class="panel-head-title">Model</div>
+              <div class="panel-head-summary" id="pps-model-sum">gpt-oss-20b</div>
             </div>
-            <div>
-              <div style="font-size:10px;color:var(--text4);margin-bottom:2px">GEMM quant</div>
-              <select id="perf-gemm-quant" style="width:100%;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px">
-                <option value="">auto</option>
-                <option value="float16">float16</option>
-                <option value="fp8">fp8</option>
-                <option value="fp8_block">fp8_block</option>
-              </select>
+          </div>
+          <span class="panel-arrow">&#9658;</span>
+        </div>
+        <div class="panel-body">
+          <div class="panel-label">Preset models</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px" id="perf-model-chips">
+            <button class="chip on" onclick="selectPerfModel('openai/gpt-oss-20b','gpt-oss-20b',this)">gpt-oss-20b</button>
+            <button class="chip" onclick="selectPerfModel('meta-llama/Meta-Llama-3.1-8B-Instruct','Llama 3.1 8B',this)">Llama 3.1 8B</button>
+            <button class="chip" onclick="selectPerfModel('Qwen/Qwen3-32B-FP8','Qwen3 32B',this)">Qwen3 32B</button>
+          </div>
+          <div class="panel-label">Lookup by HF ID</div>
+          <div style="display:flex;gap:6px;margin-bottom:4px">
+            <input id="perf-hf-input" type="text" placeholder="e.g. openai/gpt-oss-20b" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text1);font-size:11px">
+            <button class="btn btn-primary btn-sm" onclick="perfHFLookup()">Lookup</button>
+          </div>
+          <div id="perf-hf-status" style="font-size:11px;color:var(--text3);min-height:14px"></div>
+          <div id="perf-model-display" style="font-size:12px;font-weight:600;color:var(--blue);margin-top:4px">gpt-oss-20b</div>
+        </div>
+      </div>
+
+      <!-- ② HARDWARE & BACKEND -->
+      <div class="panel-section open" id="pps-hw">
+        <div class="panel-head" onclick="togglePanel('pps-hw')">
+          <div class="panel-head-left">
+            <div class="panel-head-icon">⚙️</div>
+            <div class="panel-head-text">
+              <div class="panel-head-title">Hardware &amp; backend</div>
+              <div class="panel-head-summary" id="pps-hw-sum">H100 SXM · vLLM · TP=4</div>
             </div>
+          </div>
+          <span class="panel-arrow">&#9658;</span>
+        </div>
+        <div class="panel-body">
+          <div class="panel-label">Serving mode</div>
+          <div class="chips-wrap" style="margin-bottom:10px">
+            <button id="perf-mode-estimate" class="chip on" onclick="setPerfMode('estimate',this)">Static estimate</button>
+            <button id="perf-mode-query" class="chip" onclick="setPerfMode('query',this)">Agg vs Disagg</button>
+          </div>
+          <div style="font-size:10px;color:var(--text4);margin-bottom:8px" id="perf-mode-hint">Single config · fast · per-op breakdown</div>
+
+          <div class="panel-label">GPU</div>
+          <div class="chips-wrap" style="margin-bottom:10px">
+            <button class="chip on" id="pgpu-h100" onclick="setPerfGPU('h100_sxm','H100 SXM',this)">H100 SXM</button>
+            <button class="chip" id="pgpu-h200" onclick="setPerfGPU('h200_sxm','H200 SXM',this)">H200 SXM</button>
+            <button class="chip" id="pgpu-a100" onclick="setPerfGPU('a100_sxm','A100 80GB',this)">A100</button>
+            <button class="chip" id="pgpu-l40s" onclick="setPerfGPU('l40s','L40S',this)">L40S</button>
+            <button class="chip" id="pgpu-b200" onclick="setPerfGPU('b200_sxm','B200 SXM',this)">B200</button>
+          </div>
+          <input type="hidden" id="perf-gpu" value="h100_sxm">
+
+          <div class="panel-label">Backend</div>
+          <div class="chips-wrap" style="margin-bottom:10px">
+            <button class="chip on" id="pback-vllm"   onclick="setPerfBackend('vllm','vLLM',this)">vLLM</button>
+            <button class="chip" id="pback-trtllm" onclick="setPerfBackend('trtllm','TRT-LLM',this)">TRT-LLM</button>
+            <button class="chip" id="pback-sglang" onclick="setPerfBackend('sglang','SGLang',this)">SGLang</button>
+          </div>
+          <input type="hidden" id="perf-backend" value="vllm">
+
+          <div class="panel-label">Database mode</div>
+          <div class="chips-wrap" style="margin-bottom:10px">
+            <button class="chip on" id="pdb-hybrid"  onclick="setPerfDBMode('HYBRID',this)">HYBRID</button>
+            <button class="chip" id="pdb-silicon" onclick="setPerfDBMode('SILICON',this)">SILICON</button>
+          </div>
+          <input type="hidden" id="perf-dbmode" value="HYBRID">
+
+          <div class="panel-label">Tensor parallel</div>
+          <div class="chips-wrap" style="margin-bottom:10px">
+            <button class="chip" id="ptp-1" onclick="setPerfTP(1,this)">TP=1</button>
+            <button class="chip" id="ptp-2" onclick="setPerfTP(2,this)">TP=2</button>
+            <button class="chip on" id="ptp-4" onclick="setPerfTP(4,this)">TP=4</button>
+            <button class="chip" id="ptp-8" onclick="setPerfTP(8,this)">TP=8</button>
+          </div>
+          <input type="hidden" id="perf-tp" value="4">
+          <input type="hidden" id="perf-pp" value="1">
+
+          <!-- Quant override — visible but compact -->
+          <div style="padding:8px;background:var(--bg2);border-radius:var(--r);border:1px solid var(--border)">
+            <div style="font-size:10px;font-weight:600;color:var(--text4);margin-bottom:6px">QUANT OVERRIDE <span style="font-weight:400;color:var(--text4)" title="Auto-set for known combos. Change only if you see an unsupported quant error.">(?)</span></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+              <div>
+                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">MoE quant</div>
+                <select id="perf-moe-quant" style="width:100%;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px">
+                  <option value="">auto</option>
+                  <option value="float16">float16</option>
+                  <option value="fp8">fp8</option>
+                  <option value="fp8_block">fp8_block</option>
+                  <option value="w4afp8">w4afp8</option>
+                </select>
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">GEMM quant</div>
+                <select id="perf-gemm-quant" style="width:100%;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px">
+                  <option value="">auto</option>
+                  <option value="float16">float16</option>
+                  <option value="fp8">fp8</option>
+                  <option value="fp8_block">fp8_block</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="font-size:10px;color:var(--text4);white-space:nowrap">Backend ver.</div>
+              <input type="text" id="perf-backend-ver" placeholder="e.g. 0.14.0" style="flex:1;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ③ WORKLOAD -->
+      <div class="panel-section open" id="pps-workload">
+        <div class="panel-head" onclick="togglePanel('pps-workload')">
+          <div class="panel-head-left">
+            <div class="panel-head-icon">📊</div>
+            <div class="panel-head-text">
+              <div class="panel-head-title">Workload</div>
+              <div class="panel-head-summary" id="pps-workload-sum">ISL=4000 · OSL=500 · 0% prefix</div>
+            </div>
+          </div>
+          <span class="panel-arrow">&#9658;</span>
+        </div>
+        <div class="panel-body">
+          <div class="slider-row" style="margin-bottom:8px">
+            <label>Input tokens (ISL)</label>
+            <input type="number" id="perf-isl" value="4000" min="64" max="32768" oninput="updateEffectiveISL();updatePerfSummaries()" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+          </div>
+          <div class="slider-row" style="margin-bottom:8px">
+            <label>Output tokens (OSL)</label>
+            <input type="number" id="perf-osl" value="500" min="8" max="8192" oninput="updatePerfSummaries()" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+          </div>
+          <div class="slider-row" style="margin-bottom:6px">
+            <label>Prefix reuse % <span title="% of input tokens from KV cache" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></label>
+            <input type="number" id="perf-prefix-pct" value="0" min="0" max="99" oninput="updateEffectiveISL();updatePerfSummaries()" style="width:60px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+          </div>
+          <div id="perf-effective-isl-row" style="display:none;font-size:11px;color:var(--text3);padding:4px 8px;background:var(--bg2);border-radius:4px;margin-bottom:8px">
+            ↳ Effective ISL: <strong id="perf-effective-isl" style="font-family:var(--mono);color:var(--blue)">—</strong> tokens
+          </div>
+          <div class="slider-row" style="margin-bottom:8px">
+            <label>Batch / concurrency</label>
+            <input type="number" id="perf-batch" value="64" min="1" max="512" style="width:60px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+          </div>
+          <!-- Batch sweep toggle -->
+          <div id="perf-sweep-section" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <label style="font-size:12px;color:var(--text2)">Auto-sweep batch sizes <span style="font-size:10px;color:var(--text4)">(32,64,128,180,256)</span></label>
+              <input type="checkbox" id="perf-auto-sweep" style="cursor:pointer">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ④ SCALING TARGETS -->
+      <div class="panel-section open" id="pps-targets">
+        <div class="panel-head" onclick="togglePanel('pps-targets')">
+          <div class="panel-head-left">
+            <div class="panel-head-icon">🎯</div>
+            <div class="panel-head-text">
+              <div class="panel-head-title">Scaling targets</div>
+              <div class="panel-head-summary" id="pps-targets-sum">100M req/day · 30% buffer</div>
+            </div>
+          </div>
+          <span class="panel-arrow">&#9658;</span>
+        </div>
+        <div class="panel-body">
+          <div class="slider-row" style="margin-bottom:8px">
+            <label>Requests / day</label>
+            <input type="number" id="perf-req-day" value="100000000" min="1000" oninput="recalcPerfTargets();updatePerfSummaries()" style="width:100px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+          </div>
+          <div class="slider-row" style="margin-bottom:8px">
+            <label>Tokens / sec target</label>
+            <input type="number" id="perf-tok-sec" value="5000" min="100" oninput="recalcPerfTargets()" style="width:100px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
           </div>
           <div class="slider-row">
-            <label style="font-size:11px;color:var(--text3)">Backend ver.</label>
-            <input type="text" id="perf-backend-ver" placeholder="e.g. 0.14.0" style="width:80px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+            <label>Infra buffer %</label>
+            <input type="number" id="perf-buffer" value="30" min="0" max="100" oninput="recalcPerfTargets();updatePerfSummaries()" style="width:60px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
           </div>
         </div>
       </div>
 
-      <!-- ── WORKLOAD ── -->
-      <div class="section-title">WORKLOAD</div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
-        <div class="slider-row" style="margin-bottom:8px">
-          <label style="font-size:12px">Input tokens (ISL)</label>
-          <input type="number" id="perf-isl" value="4000" min="64" max="32768" oninput="updateEffectiveISL()" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+      <!-- ⑤ COST INPUTS — exact same pattern as Advanced tab -->
+      <div class="panel-section" id="pps-cost">
+        <div class="panel-head" onclick="togglePanel('pps-cost')">
+          <div class="panel-head-left">
+            <div class="panel-head-icon">💰</div>
+            <div class="panel-head-text">
+              <div class="panel-head-title">Cost inputs</div>
+              <div class="panel-head-summary" id="pps-cost-sum">Cloud · GCP $3.20/hr · no discount</div>
+            </div>
+          </div>
+          <span class="panel-arrow">&#9658;</span>
         </div>
-        <div class="slider-row" style="margin-bottom:8px">
-          <label style="font-size:12px">Output tokens (OSL)</label>
-          <input type="number" id="perf-osl" value="500" min="8" max="8192" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
-        </div>
-        <div class="slider-row" style="margin-bottom:6px">
-          <label style="font-size:12px">Prefix reuse % <span title="% of input tokens served from KV cache" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></label>
-          <input type="number" id="perf-prefix-pct" value="0" min="0" max="99" oninput="updateEffectiveISL()" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
-        </div>
-        <div id="perf-effective-isl-row" style="display:none;font-size:11px;color:var(--text3);margin-bottom:8px;padding:4px 8px;background:var(--bg2);border-radius:4px">
-          ↳ Effective ISL after prefix cache: <strong id="perf-effective-isl" style="font-family:var(--mono);color:var(--blue);font-size:13px">—</strong> tokens
-        </div>
-        <div class="slider-row">
-          <label style="font-size:12px">Batch / concurrency</label>
-          <input type="number" id="perf-batch" value="64" min="1" max="512" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
-        </div>
-      </div>
-
-      <!-- ── SCALING TARGETS ── -->
-      <div class="section-title">SCALING TARGETS</div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
-        <div class="slider-row" style="margin-bottom:8px">
-          <label style="font-size:12px">Requests / day</label>
-          <input type="number" id="perf-req-day" value="100000000" min="1000" oninput="recalcPerfTargets()" style="width:100px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
-        </div>
-        <div class="slider-row" style="margin-bottom:8px">
-          <label style="font-size:12px">Tokens / sec target</label>
-          <input type="number" id="perf-tok-sec" value="5000" min="100" oninput="recalcPerfTargets()" style="width:100px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
-        </div>
-        <div class="slider-row">
-          <label style="font-size:12px">Infra buffer %</label>
-          <input type="number" id="perf-buffer" value="30" min="0" max="100" oninput="recalcPerfTargets()" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
-        </div>
-      </div>
-
-      <!-- ── COST INPUTS — same style as Advanced tab ── -->
-      <div class="section-title">COST INPUTS</div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
-        <div class="panel-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          Cloud provider <span id="perf-live-badge" style="font-size:9px;color:var(--text4)"></span>
-        </div>
-        <table class="provider-table" id="perf-prov-table"></table>
-        <div class="panel-label" style="margin-top:10px;margin-bottom:6px">Reserved discount</div>
-        <div class="chips-wrap">
-          <button class="chip on" id="perf-disc-0"  onclick="setPerfDisc(0,this)">None</button>
-          <button class="chip"   id="perf-disc-30" onclick="setPerfDisc(0.3,this)">1-yr −30%</button>
-          <button class="chip"   id="perf-disc-50" onclick="setPerfDisc(0.5,this)">3-yr −50%</button>
-        </div>
-        <div class="panel-label" style="margin-top:10px;margin-bottom:4px">On-prem GPU price ($K)</div>
-        <div class="slider-row">
-          <label style="font-size:12px">Per GPU</label>
-          <div style="display:flex;align-items:center;gap:6px">
+        <div class="panel-body">
+          <div class="panel-label" style="display:flex;align-items:center;justify-content:space-between">
+            Cloud provider <span id="perf-live-badge" style="font-size:9px;color:var(--text4)"></span>
+          </div>
+          <table class="provider-table" id="perf-prov-table"></table>
+          <div class="panel-label" style="margin-top:10px">Reserved discount</div>
+          <div class="chips-wrap">
+            <button class="chip on" id="perf-disc-0"  onclick="setPerfDisc(0,this)">None</button>
+            <button class="chip"   id="perf-disc-30" onclick="setPerfDisc(0.3,this)">1-yr −30%</button>
+            <button class="chip"   id="perf-disc-50" onclick="setPerfDisc(0.5,this)">3-yr −50%</button>
+          </div>
+          <div class="panel-label" style="margin-top:10px">GPU purchase price ($K)</div>
+          <div class="slider-row">
+            <label>Per GPU</label>
             <input type="range" min="5" max="60" step="1" value="30" id="perf-hw-slider" oninput="document.getElementById('perf-hw-val').textContent='$'+this.value+'K';recalcPerfTargets()">
             <span class="slider-val mono" id="perf-hw-val">$30K</span>
           </div>
-        </div>
-        <div class="slider-row" style="margin-top:6px">
-          <label style="font-size:12px">Amortisation</label>
-          <select id="perf-amort" onchange="recalcPerfTargets()" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
-            <option value="60">5 years</option>
-            <option value="36">3 years</option>
-            <option value="48">4 years</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- ── BATCH SWEEP (estimate mode only) ── -->
-      <div id="perf-sweep-section">
-        <div class="section-title">BATCH SWEEP</div>
-        <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <label style="font-size:12px">Auto-sweep batch sizes</label>
-            <input type="checkbox" id="perf-auto-sweep" style="cursor:pointer">
+          <div class="panel-label" style="margin-top:8px">Amortisation</div>
+          <div class="slider-row">
+            <label>Years</label>
+            <input type="range" min="1" max="7" step="1" value="5" id="perf-amort-slider" oninput="document.getElementById('perf-amort-val').textContent=this.value+' yrs';recalcPerfTargets()">
+            <span class="slider-val mono" id="perf-amort-val">5 yrs</span>
           </div>
-          <div style="font-size:10px;color:var(--text4)">Runs 32, 64, 128, 180, 256 — finds optimal. ~5× longer.</div>
         </div>
       </div>
 
-      <!-- ── PAYLOAD / RESPONSE (collapsed) ── -->
-      <details style="margin-bottom:8px">
-        <summary style="font-size:11px;font-weight:600;color:var(--text3);cursor:pointer;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between">
-          <span>📄 Request payload</span><span style="color:var(--text4)">▾</span>
-        </summary>
-        <div style="background:var(--bg);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:8px">
-          <pre id="perf-req-payload" style="font-size:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;overflow:auto;max-height:180px;margin:0;color:var(--text2)">— configure and run —</pre>
-          <button onclick="navigator.clipboard.writeText(document.getElementById('perf-req-payload').textContent)" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3);margin-top:4px">Copy</button>
+      <!-- ⑥ PAYLOAD / RESPONSE -->
+      <div class="panel-section" id="pps-payload">
+        <div class="panel-head" onclick="togglePanel('pps-payload')">
+          <div class="panel-head-left">
+            <div class="panel-head-icon">📄</div>
+            <div class="panel-head-text">
+              <div class="panel-head-title">Request &amp; response</div>
+              <div class="panel-head-summary">View API payload and raw response</div>
+            </div>
+          </div>
+          <span class="panel-arrow">&#9658;</span>
         </div>
-      </details>
-      <details style="margin-bottom:8px">
-        <summary style="font-size:11px;font-weight:600;color:var(--text3);cursor:pointer;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between">
-          <span>🔍 Raw API response</span><span style="color:var(--text4)">▾</span>
-        </summary>
-        <div style="background:var(--bg);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:8px">
-          <pre id="perf-raw-response" style="font-size:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;overflow:auto;max-height:200px;margin:0;color:var(--text2)">— not run yet —</pre>
-          <button onclick="navigator.clipboard.writeText(document.getElementById('perf-raw-response').textContent)" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3);margin-top:4px">Copy JSON</button>
+        <div class="panel-body">
+          <div style="font-size:10px;font-weight:600;color:var(--text4);margin-bottom:4px">REQUEST PAYLOAD</div>
+          <pre id="perf-req-payload" style="font-size:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;overflow:auto;max-height:150px;margin:0 0 6px;color:var(--text2)">— configure and run —</pre>
+          <button onclick="navigator.clipboard.writeText(document.getElementById('perf-req-payload').textContent)" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3);margin-bottom:10px">Copy</button>
+          <div style="font-size:10px;font-weight:600;color:var(--text4);margin-bottom:4px">RAW API RESPONSE</div>
+          <pre id="perf-raw-response" style="font-size:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;overflow:auto;max-height:180px;margin:0 0 6px;color:var(--text2)">— not run yet —</pre>
+          <button onclick="navigator.clipboard.writeText(document.getElementById('perf-raw-response').textContent)" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3)">Copy JSON</button>
         </div>
-      </details>
-      <div style="font-size:10px;color:var(--text4);line-height:1.4;margin-top:8px">Powered by NVIDIA AIConfigurator. Estimates — validate with benchmarking before procurement.</div>
+      </div>
+
+      <div style="padding:10px 16px;font-size:10px;color:var(--text4);line-height:1.5">Powered by NVIDIA AIConfigurator. Estimates — validate with benchmarking before procurement.</div>
     </div>
 
         <!-- ===== RIGHT PANEL ===== -->
@@ -2218,7 +2265,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.62</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.63</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5780,6 +5827,7 @@ function initPerfPage(){
   renderPerfProviderTable();
   updateEffectiveISL();
   syncQuantDefaults();
+  updatePerfSummaries();
   renderPerfSaved();
 }
 
@@ -5799,6 +5847,7 @@ function setPerfMode(mode, btn){
 }
 
 function selectPerfModel(hfId, label, btn){
+  setTimeout(updatePerfSummaries, 50);
   PERF_STATE.modelPath  = hfId;
   PERF_STATE.modelLabel = label;
   document.querySelectorAll('#perf-model-chips .chip').forEach(function(b){ b.classList.remove('on'); });
@@ -5823,7 +5872,56 @@ function perfHFLookup(){
   });
 }
 
+function setPerfGPU(val, label, btn){
+  document.getElementById('perf-gpu').value = val;
+  document.querySelectorAll('[id^="pgpu-"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  updatePerfSummaries();
+  syncQuantDefaults();
+}
+function setPerfBackend(val, label, btn){
+  document.getElementById('perf-backend').value = val;
+  document.querySelectorAll('[id^="pback-"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  updatePerfSummaries();
+  syncQuantDefaults();
+}
+function setPerfDBMode(val, btn){
+  document.getElementById('perf-dbmode').value = val;
+  document.querySelectorAll('[id^="pdb-"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+}
+function setPerfTP(val, btn){
+  document.getElementById('perf-tp').value = val;
+  document.querySelectorAll('[id^="ptp-"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  updatePerfSummaries();
+}
+function updatePerfSummaries(){
+  // Update panel summary lines
+  var gpu  = document.getElementById('perf-gpu')?.value || 'h100_sxm';
+  var back = document.getElementById('perf-backend')?.value || 'vllm';
+  var tp   = document.getElementById('perf-tp')?.value || '4';
+  var isl  = document.getElementById('perf-isl')?.value || '4000';
+  var osl  = document.getElementById('perf-osl')?.value || '500';
+  var pct  = document.getElementById('perf-prefix-pct')?.value || '0';
+  var rd   = document.getElementById('perf-req-day')?.value || '100000000';
+  var buf  = document.getElementById('perf-buffer')?.value || '30';
+  var hwSum = document.getElementById('pps-hw-sum');
+  if(hwSum) hwSum.textContent = (PERF_GPU_LABELS[gpu]||gpu)+' · '+(back.toUpperCase())+' · TP='+tp;
+  var wlSum = document.getElementById('pps-workload-sum');
+  if(wlSum) wlSum.textContent = 'ISL='+isl+' · OSL='+osl+' · '+pct+'% prefix';
+  var tgSum = document.getElementById('pps-targets-sum');
+  if(tgSum) tgSum.textContent = (parseInt(rd)/1000000)+'M req/day · '+buf+'% buffer';
+  var mdSum = document.getElementById('pps-model-sum');
+  if(mdSum) mdSum.textContent = PERF_STATE.modelLabel || 'gpt-oss-20b';
+}
+function getPerfAmortMonths(){
+  var slider = document.getElementById('perf-amort-slider');
+  return slider ? parseInt(slider.value) * 12 : 60;
+}
 function syncQuantDefaults(){
+
   // Auto-populate quant fields for known combos to prevent errors
   var gpu     = (document.getElementById('perf-gpu')||{}).value     || '';
   var backend = (document.getElementById('perf-backend')||{}).value || '';
@@ -6645,10 +6743,7 @@ function getPerfOnpremUnit(){
   return slider ? parseInt(slider.value) * 1000 : 30000;
 }
 
-function getPerfAmortMonths(){
-  var el = document.getElementById('perf-amort');
-  return el ? parseInt(el.value) : 60;
-}
+// getPerfAmortMonths defined above
 
 function recalcPerfTargets(){
   // Re-render hero cards + cost + sizing math from stored result without re-calling API
