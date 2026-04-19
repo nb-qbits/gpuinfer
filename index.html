@@ -2161,7 +2161,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.58</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.59</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5824,32 +5824,42 @@ function buildPerfPayload(){
   if(PERF_STATE.mode === 'estimate'){
     return {
       endpoint: 'estimate',
-      payload: {
-        model_path:    PERF_STATE.modelPath,
-        system:        gpu,
-        backend:       backend,
-        database_mode: dbmode,
-        isl:           effIsl,
-        osl:           osl,
-        batch_size:    batch,
-        tp_size:       tp,
-        pp_size:       pp
-      },
+      payload: (function(){
+        var p = {
+          model_path:    PERF_STATE.modelPath,
+          system:        gpu,
+          backend:       backend,
+          database_mode: dbmode,
+          isl:           effIsl,
+          osl:           osl,
+          batch_size:    batch,
+          tp_size:       tp,
+          pp_size:       pp
+        };
+        // H100+vLLM doesn't support w4a16_mxfp4 — force float16
+        if(gpu === 'h100_sxm' && backend === 'vllm') p.moe_quant_mode = 'float16';
+        return p;
+      })(),
       meta: { isl_original: isl, prefix_pct: pct, eff_isl: effIsl }
     };
   } else {
     return {
       endpoint: 'query',
-      payload: {
-        model_path:    PERF_STATE.modelPath,
-        total_gpus:    tp * 4,   // 4 units of tp GPUs — reasonable search space
-        system:        gpu,
-        backend:       backend,
-        database_mode: 'HYBRID', // always HYBRID for query — broader support
-        isl:           isl,      // pass original ISL — AIC handles prefix internally
-        osl:           osl,
-        prefix:        Math.round(isl * pct/100)
-      },
+      payload: (function(){
+        var p = {
+          model_path:    PERF_STATE.modelPath,
+          total_gpus:    tp * 4,
+          system:        gpu,
+          backend:       backend,
+          database_mode: 'HYBRID',
+          isl:           isl,
+          osl:           osl,
+          prefix:        Math.round(isl * pct/100)
+        };
+        // H100+vLLM doesn't support w4a16_mxfp4 MoE quant — force float16
+        if(gpu === 'h100_sxm' && backend === 'vllm') p.moe_quant_mode = 'float16';
+        return p;
+      })(),
       meta: { isl_original: isl, prefix_pct: pct, eff_isl: effIsl }
     };
   }
