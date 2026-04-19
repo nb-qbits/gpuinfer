@@ -2265,7 +2265,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.64</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.65</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5825,6 +5825,7 @@ var perfCache = {};
 
 function initPerfPage(){
   renderPerfProviderTable();
+  updatePerfCostSummary();
   updateEffectiveISL();
   syncQuantDefaults();
   updatePerfSummaries();
@@ -6008,17 +6009,19 @@ function buildPerfPayload(){
           tp_size:       tp,
           pp_size:       pp
         };
-        // Apply user quant overrides (or auto-fix for known unsupported combos)
+        // Apply user quant overrides
         var moeQ  = (document.getElementById('perf-moe-quant')||{}).value  || '';
         var gemmQ = (document.getElementById('perf-gemm-quant')||{}).value || '';
         var bVer  = (document.getElementById('perf-backend-ver')||{}).value || '';
-        if(moeQ)  p.moe_quant_mode  = moeQ;
         if(gemmQ) p.gemm_quant_mode = gemmQ;
-        if(bVer)  p.backend_version = bVer;
-        // Auto-fix: H100+vLLM w4a16_mxfp4 not supported — default to float16/0.14.0
-        if(gpu === 'h100_sxm' && backend === 'vllm' && !moeQ){
-          p.moe_quant_mode  = 'float16';
+        // H100+vLLM: w4a16_mxfp4 not supported — ALWAYS force float16 + 0.14.0
+        // (user can override via the quant fields if needed)
+        if(gpu === 'h100_sxm' && backend === 'vllm'){
+          p.moe_quant_mode  = moeQ || 'float16';
           p.backend_version = bVer || '0.14.0';
+        } else {
+          if(moeQ) p.moe_quant_mode = moeQ;
+          if(bVer) p.backend_version = bVer;
         }
         return p;
       })(),
@@ -6041,12 +6044,13 @@ function buildPerfPayload(){
         // Apply user quant overrides
         var moeQ2  = (document.getElementById('perf-moe-quant')||{}).value  || '';
         var bVer2  = (document.getElementById('perf-backend-ver')||{}).value || '';
-        if(moeQ2) p.moe_quant_mode = moeQ2;
-        if(bVer2) p.backend_version = bVer2;
-        // Auto-fix H100+vLLM
-        if(gpu === 'h100_sxm' && backend === 'vllm' && !moeQ2){
-          p.moe_quant_mode  = 'float16';
+        // H100+vLLM: ALWAYS force float16 + 0.14.0
+        if(gpu === 'h100_sxm' && backend === 'vllm'){
+          p.moe_quant_mode  = moeQ2 || 'float16';
           p.backend_version = bVer2 || '0.14.0';
+        } else {
+          if(moeQ2) p.moe_quant_mode  = moeQ2;
+          if(bVer2) p.backend_version = bVer2;
         }
         return p;
       })(),
@@ -6708,17 +6712,19 @@ var PERF_DISC = 0;
 function renderPerfProviderTable(){
   var tbl = document.getElementById('perf-prov-table');
   if(!tbl) return;
+  var gpuKey = (document.getElementById('perf-gpu')||{}).value||'h100_sxm';
+  var gpuLabel = PERF_GPU_LABELS[gpuKey]||gpuKey;
   tbl.innerHTML =
-    '<tr><th>Provider</th><th>$/hr</th><th></th></tr>'
+    '<tr><th>Provider</th><th>GPU</th><th>$/hr</th></tr>'
     + PERF_PROVIDERS.map(function(p,i){
       return '<tr>'
         +'<td><label style="display:flex;align-items:center;gap:6px;cursor:pointer">'
         +'<input type="radio" name="perf-prov" '+(p.active?'checked':'')
         +' onchange="selectPerfProvider('+i+')" style="cursor:pointer"> '+p.name+'</label></td>'
+        +'<td style="font-size:11px;color:var(--text3)">'+gpuLabel+'</td>'
         +'<td><input type="number" value="'+p.rate+'" min="0.1" step="0.1"'
         +' onchange="PERF_PROVIDERS['+i+'].rate=+this.value;if(PERF_PROVIDERS['+i+'].active)recalcPerfTargets()"'
-        +' style="width:56px;padding:2px 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)"></td>'
-        +'<td></td>'
+        +' style="width:52px;padding:2px 4px;border:1px solid var(--border);border-radius:3px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)"></td>'
         +'</tr>';
     }).join('');
 }
@@ -6727,6 +6733,13 @@ function selectPerfProvider(i){
   PERF_PROVIDERS.forEach(function(p,j){ p.active = j===i; });
   renderPerfProviderTable();
   recalcPerfTargets();
+  updatePerfCostSummary();
+}
+function updatePerfCostSummary(){
+  var p = PERF_PROVIDERS.find(function(x){ return x.active; }) || PERF_PROVIDERS[0];
+  var disc = PERF_DISC > 0 ? ' · '+(PERF_DISC*100)+'% disc' : ' · no discount';
+  var el = document.getElementById('pps-cost-sum');
+  if(el) el.textContent = 'Cloud · '+p.name+' $'+p.rate+'/hr'+disc;
 }
 
 function setPerfDisc(d, btn){
@@ -6734,6 +6747,7 @@ function setPerfDisc(d, btn){
   document.querySelectorAll('#perf-disc-0,#perf-disc-30,#perf-disc-50').forEach(function(b){ b.classList.remove('on'); });
   if(btn) btn.classList.add('on');
   recalcPerfTargets();
+  updatePerfCostSummary();
 }
 
 function getPerfCloudRate(){
