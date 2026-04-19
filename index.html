@@ -2012,6 +2012,17 @@ button{font-family:var(--sans);cursor:pointer}
         <!-- Warning banner (unsupported / HYBRID) -->
         <div id="perf-warn-banner" style="display:none;padding:8px 12px;border-radius:var(--r);margin-bottom:12px;font-size:12px;border:1px solid #f59e0b;background:rgba(245,158,11,0.08);color:var(--text2)"></div>
 
+        <!-- ── CONTEXT: What these numbers mean ── -->
+        <div id="perf-context-bar" style="display:none;font-size:11px;color:var(--text3);background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;margin-bottom:10px;line-height:1.6">
+          <strong style="color:var(--text2)">How to read these results:</strong>
+          Running <span id="ctx-model" style="color:var(--blue);font-weight:600">—</span> on
+          <span id="ctx-gpu" style="color:var(--text1);font-weight:600">—</span> with
+          ISL=<span id="ctx-isl">—</span>, OSL=<span id="ctx-osl">—</span>, <span id="ctx-prefix">—</span>% prefix cache →
+          <span id="ctx-seqs" style="font-family:var(--mono);font-weight:600;color:var(--text1)">—</span> req/sec per GPU.
+          To serve <span id="ctx-target" style="font-weight:600">100M</span> req/day you need
+          <span id="ctx-answer" style="color:var(--blue);font-weight:700;font-size:13px">— GPUs</span>.
+        </div>
+
         <!-- ── HERO: GPU count answers ── -->
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px" id="perf-hero-cards"></div>
 
@@ -2265,7 +2276,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.66</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.67</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -6044,10 +6055,13 @@ function buildPerfPayload(){
         // Apply user quant overrides
         var moeQ2  = (document.getElementById('perf-moe-quant')||{}).value  || '';
         var bVer2  = (document.getElementById('perf-backend-ver')||{}).value || '';
-        // H100+vLLM: ALWAYS force float16 + 0.14.0
+        // H100+vLLM: ALWAYS force float16
+        // Note: /query endpoint uses backend_version differently — pass as prefill/decode versions
         if(gpu === 'h100_sxm' && backend === 'vllm'){
-          p.moe_quant_mode  = moeQ2 || 'float16';
-          p.backend_version = bVer2 || '0.14.0';
+          p.moe_quant_mode           = moeQ2 || 'float16';
+          p.prefill_backend_version  = bVer2 || '0.14.0';
+          p.decode_backend_version   = bVer2 || '0.14.0';
+          p.backend_version          = bVer2 || '0.14.0';
         } else {
           if(moeQ2) p.moe_quant_mode  = moeQ2;
           if(bVer2) p.backend_version = bVer2;
@@ -6256,6 +6270,10 @@ function renderPerfResult(result, fromCache){
   var prevWarn = document.getElementById('perf-warn-banner');
   if(prevWarn && !fromCache) prevWarn.style.display = 'none';
 
+  // Restore empty state to default (in case it was showing error)
+  var emptyEl = document.getElementById('perf-empty');
+  if(emptyEl) emptyEl.innerHTML = '<div style="font-size:40px;margin-bottom:12px">⚡</div><div style="font-size:15px;font-weight:600;margin-bottom:6px">No estimate yet</div><div style="font-size:13px;text-align:center;max-width:300px;color:var(--text3)">Configure model, hardware and targets on the left, then click Run estimate</div>';
+
   // Status bar
   var badge = document.getElementById('perf-mode-badge');
   if(badge){
@@ -6437,6 +6455,28 @@ function renderPerfResult(result, fromCache){
   renderSizingMath(result, reqDay, tokSec, bufPct, gpuKey);
 
   renderPerfSaved();
+
+  // CONTEXT BAR — plain-English explanation of what the numbers mean
+  var ctxBar = document.getElementById('perf-context-bar');
+  if(ctxBar){
+    ctxBar.style.display = 'block';
+    var cfg2  = result.cfg || {};
+    var meta2 = cfg2.meta || {};
+    var isl2  = meta2.isl_original || (cfg2.payload||{}).isl || '?';
+    var osl2  = (cfg2.payload||{}).osl || '?';
+    var pct2  = meta2.prefix_pct || 0;
+    var configGpus2 = result.num_gpus || result.tp_size || parseInt((document.getElementById('perf-tp')||{}).value)||4;
+    var seqsPerGpu2 = (result.seq_s && configGpus2) ? (result.seq_s / configGpus2).toFixed(3) : '?';
+    var rdTarget2 = reqDay;
+    document.getElementById('ctx-model').textContent  = PERF_STATE.modelLabel;
+    document.getElementById('ctx-gpu').textContent    = PERF_GPU_LABELS[gpuKey]||gpuKey;
+    document.getElementById('ctx-isl').textContent    = isl2;
+    document.getElementById('ctx-osl').textContent    = osl2;
+    document.getElementById('ctx-prefix').textContent = pct2;
+    document.getElementById('ctx-seqs').textContent   = seqsPerGpu2+' req/s/GPU';
+    document.getElementById('ctx-target').textContent = (rdTarget2/1000000).toFixed(0)+'M';
+    document.getElementById('ctx-answer').textContent = (gpuReqDay!=null ? gpuReqDay : '?') + ' ' + (PERF_GPU_LABELS[gpuKey]||gpuKey) + 's';
+  }
 }
 
 function renderDisaggSection(result){
@@ -6774,12 +6814,7 @@ function deletePerfProv(i){
   recalcPerfTargets();
 }
 
-function selectPerfProvider(i){
-  PERF_PROVIDERS.forEach(function(p,j){ p.active = j===i; });
-  renderPerfProviderTable();
-  recalcPerfTargets();
-  updatePerfCostSummary();
-}
+// duplicate selectPerfProvider removed
 function updatePerfCostSummary(){
   var p = PROVIDERS.find(function(x){ return x.active; }) || PROVIDERS[0];
   var disc = PERF_DISC > 0 ? ' · '+(PERF_DISC*100)+'% disc' : ' · no discount';
@@ -6896,10 +6931,25 @@ function recalcPerfTargets(){
 }
 
 function showPerfError(msg){
-  document.getElementById('perf-empty').style.display   = 'none';
-  document.getElementById('perf-results').style.display = 'block';
-  var warn = document.getElementById('perf-warn-banner');
-  if(warn){ warn.style.display='block'; warn.innerHTML='❌ <strong>Error:</strong> '+msg; warn.style.borderColor='var(--red)'; }
+  // Show empty state with error — don't show stale results
+  document.getElementById('perf-empty').style.display   = 'flex';
+  document.getElementById('perf-results').style.display = 'none';
+  var emptyEl = document.getElementById('perf-empty');
+  if(emptyEl){
+    emptyEl.innerHTML = 
+      '<div style="text-align:center;max-width:480px">' +
+      '<div style="font-size:32px;margin-bottom:12px">⚠️</div>' +
+      '<div style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text1)">Estimate failed</div>' +
+      '<div style="font-size:12px;color:var(--red);background:rgba(239,68,68,0.08);border:1px solid var(--red);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;text-align:left">' + msg + '</div>' +
+      '<div style="font-size:12px;color:var(--text3);line-height:1.6">' +
+      '<strong>Common fixes:</strong><br>' +
+      '• H100 + vLLM → set MoE quant = float16, backend ver = 0.14.0<br>' +
+      '• Try switching DB mode to HYBRID<br>' +
+      '• Try a different backend (TRT-LLM works for more combos)' +
+      '</div>' +
+      '<button class="btn btn-primary" style="margin-top:12px" onclick="runPerfEstimate(true)">↻ Retry with current settings</button>' +
+      '</div>';
+  }
 }
 
 function savePerfResult(){
