@@ -2276,7 +2276,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.68</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.69</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -7026,10 +7026,11 @@ function showPerfError(msg){
       '<div style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text1)">Estimate failed</div>' +
       '<div style="font-size:12px;color:var(--red);background:rgba(239,68,68,0.08);border:1px solid var(--red);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;text-align:left">' + msg + '</div>' +
       '<div style="font-size:12px;color:var(--text3);line-height:1.6">' +
-      '<strong>Common fixes:</strong><br>' +
-      '• H100 + vLLM → set MoE quant = float16, backend ver = 0.14.0<br>' +
-      '• Try switching DB mode to HYBRID<br>' +
-      '• Try a different backend (TRT-LLM works for more combos)' +
+      '<strong>Common fixes for Agg vs Disagg mode:</strong><br>' +
+      '• Switch TP to <strong>TP=8</strong> (disagg needs ≥16 GPUs total)<br>' +
+      '• Switch GPU to <strong>H200 SXM</strong> (more silicon data available)<br>' +
+      '• "No valid experiments" = increase total_gpus — try TP=8<br>' +
+      '• Try <strong>Static estimate</strong> mode instead (works with TP=4)' +
       '</div>' +
       '<button class="btn btn-primary" style="margin-top:12px" onclick="runPerfEstimate(true)">↻ Retry with current settings</button>' +
       '</div>';
