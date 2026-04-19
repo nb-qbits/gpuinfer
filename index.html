@@ -2265,7 +2265,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.63</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.64</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -6306,14 +6306,17 @@ function renderPerfResult(result, fromCache){
   var reqDayCapacity = null;
 
   if(seqS && seqS > 0){
-    var reqDayPerUnit = seqS * 86400;
-    var tpSize = result.tp_size || parseInt((document.getElementById('perf-tp')||{}).value)||4;
-    var gpusPerUnit = tpSize;
-    gpuReqDay    = Math.ceil(reqDay / reqDayPerUnit) * gpusPerUnit;
-    gpuReqDayBuf = Math.ceil(gpuReqDay * (1 + bufPct/100));
-    reqDayCapacity = reqDayPerUnit * gpusPerUnit;
+    // seqS = req/sec for the ENTIRE config (all GPUs combined)
+    // num_gpus = total GPUs used in that config
+    var configGpus   = result.num_gpus || result.tp_size || parseInt((document.getElementById('perf-tp')||{}).value)||4;
+    var reqDayConfig = seqS * 86400;                          // req/day this config can handle
+    var reqDayPerGpu = reqDayConfig / configGpus;             // req/day per single GPU
+    gpuReqDay        = Math.ceil(reqDay / reqDayPerGpu);      // GPUs to hit target
+    gpuReqDayBuf     = Math.ceil(gpuReqDay * (1 + bufPct/100));
+    reqDayCapacity   = reqDayConfig;                          // what THIS config handles/day
   }
   if(tpsGpu && tpsGpu > 0){
+    // tokens_s_gpu is already per-GPU — no tp multiplication needed
     gpuTokSec    = Math.ceil(tokSec / tpsGpu);
     gpuTokSecBuf = Math.ceil(gpuTokSec * (1 + bufPct/100));
   }
@@ -6339,7 +6342,7 @@ function renderPerfResult(result, fromCache){
         'var(--green)')
     + heroCard('Req/day capacity',
         reqDayCapacity!=null ? Math.round(reqDayCapacity/1000000).toLocaleString()+'M' : '—',
-        'per '+PERF_GPU_LABELS[gpuKey]+' unit at this batch',
+        reqDayCapacity!=null ? (result.num_gpus ? 'for '+result.num_gpus+' GPU config' : 'this config')+' · '+PERF_GPU_LABELS[gpuKey] : '',
         'var(--border)');
   }
 
@@ -6380,7 +6383,7 @@ function renderPerfResult(result, fromCache){
     var onpremUnit = getPerfOnpremUnit();
     var amortMo    = getPerfAmortMonths();
     var cloudMo    = gpuReqDay * priceHr * 24 * 30;
-    var cloud5yr   = cloudMo * 60;
+    var cloud5yr   = cloudMo * getPerfAmortMonths();
     var onpremTotal= gpuReqDay * onpremUnit;
     var onpremMo   = onpremTotal / amortMo;
     var savings    = cloudMo - onpremMo;
@@ -6603,7 +6606,7 @@ function renderSizingMath(result, reqDay, tokSec, bufPct, gpuKey){
    +line('Prefix reuse',           pct+'% → effective ISL = '+effIsl+' tokens')
    +line('Tokens / request',       effIsl+' + '+osl+' = <b>'+(parseInt(effIsl)+parseInt(osl)).toLocaleString()+'</b> tokens')
    +line('seq/s (AIC)',            seqS!=null?fmt2(seqS,2)+' req/sec':'—')
-   +line('req/day capacity (1 unit)', seqS!=null?Math.round(seqS*86400).toLocaleString()+' req/day per '+tp+' GPUs':'—');
+   +line('req/day capacity (this config)', seqS!=null?Math.round(seqS*86400).toLocaleString()+' req/day per '+tp+' GPUs':'—');
 
   if(seqS && seqS > 0){
     var unit = seqS * 86400;
@@ -6761,10 +6764,12 @@ function recalcPerfTargets(){
   // GPU counts
   var gpuReqDay=null, gpuTokSec=null, gpuReqDayBuf=null, gpuTokSecBuf=null, reqDayCap=null;
   if(seqS && seqS > 0){
-    var rdPerUnit = seqS * 86400;
-    gpuReqDay    = Math.ceil(reqDay / rdPerUnit) * tp;
+    var rConfigGpus = r.num_gpus || r.tp_size || tp;
+    var rdConfig    = seqS * 86400;
+    var rdPerGpu    = rdConfig / rConfigGpus;
+    gpuReqDay    = Math.ceil(reqDay / rdPerGpu);
     gpuReqDayBuf = Math.ceil(gpuReqDay * (1 + bufPct/100));
-    reqDayCap    = rdPerUnit * tp;
+    reqDayCap    = rdConfig;
   }
   if(tpsGpu && tpsGpu > 0){
     gpuTokSec    = Math.ceil(tokSec / tpsGpu);
@@ -6792,7 +6797,7 @@ function recalcPerfTargets(){
         'var(--green)')
     + heroCard('Req/day capacity',
         reqDayCap!=null?Math.round(reqDayCap/1000000).toLocaleString()+'M':'—',
-        'per '+(PERF_GPU_LABELS[gpuKey]||gpuKey)+' unit at this batch',
+        reqDayCap!=null ? 'entire config · '+(PERF_GPU_LABELS[gpuKey]||gpuKey) : '',
         'var(--border)');
   }
 
