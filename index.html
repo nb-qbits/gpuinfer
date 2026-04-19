@@ -1713,255 +1713,338 @@ button{font-family:var(--sans);cursor:pointer}
   <div style="display:flex;gap:0;align-items:flex-start;min-height:calc(100vh - 88px)">
 
     <!-- ===== LEFT PANEL ===== -->
-    <div style="width:320px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);padding:20px;min-height:calc(100vh - 88px);overflow-y:auto">
+    <div style="width:300px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);padding:16px;min-height:calc(100vh - 88px);overflow-y:auto">
 
-      <!-- Title + action bar (top, always visible) -->
-      <div style="margin-bottom:14px">
-        <div style="font-size:16px;font-weight:700;margin-bottom:2px">⚡ Calibrated estimate</div>
-        <div style="font-size:11px;color:var(--text3)">Modeled using benchmark-calibrated inference profiles</div>
-      </div>
+      <div style="font-size:15px;font-weight:700;margin-bottom:2px">⚡ Performance</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:12px">AIC-powered GPU sizing · real silicon data</div>
 
-      <!-- Action bar: Pull + Run at top -->
+      <!-- Action buttons -->
       <div style="display:flex;gap:6px;margin-bottom:14px">
-        <button class="btn btn-sm" style="flex:1;color:var(--blue)" onclick="calPullFromAdvanced()">&#8593; Pull from Advanced</button>
-        <button id="cal-run-btn" class="btn btn-primary" style="flex:2;font-weight:600" onclick="runCalibratedEstimate()">&#9889; Run estimate</button>
+        <button class="btn btn-sm" style="flex:1;color:var(--blue)" onclick="perfPullFromAdvanced()">↑ Pull from Advanced</button>
+        <button id="perf-run-btn" class="btn btn-primary" style="flex:2;font-weight:600" onclick="runPerfEstimate()">⚡ Run estimate</button>
       </div>
 
       <!-- MODEL -->
       <div class="section-title">MODEL</div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:12px">
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
         <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:6px">PRESET MODELS</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px" id="cal-model-chips">
-          <button class="chip on" onclick="selectCalModel('meta-llama/Meta-Llama-3.1-8B-Instruct','Llama 3.1 8B',this)">Llama 3.1 8B</button>
-          <button class="chip" onclick="selectCalModel('openai/gpt-oss-20b','gpt-oss-20b',this)">gpt-oss-20b</button>
-          <button class="chip" onclick="selectCalModel('Qwen/Qwen2.5-7B-Instruct','Qwen 2.5 7B',this)">Qwen 2.5 7B</button>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px" id="perf-model-chips">
+          <button class="chip on" onclick="selectPerfModel('openai/gpt-oss-20b','gpt-oss-20b',this)">gpt-oss-20b</button>
+          <button class="chip" onclick="selectPerfModel('meta-llama/Meta-Llama-3.1-8B-Instruct','Llama 3.1 8B',this)">Llama 3.1 8B</button>
+          <button class="chip" onclick="selectPerfModel('Qwen/Qwen3-32B-FP8','Qwen3 32B',this)">Qwen3 32B</button>
         </div>
         <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:4px">OR LOOKUP BY HF ID</div>
         <div style="display:flex;gap:6px;margin-bottom:4px">
-          <input id="cal-hf-input" type="text" placeholder="e.g. meta-llama/Llama-3.1-8B" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text1);font-size:12px">
-          <button class="btn btn-primary btn-sm" onclick="calHFLookup()" style="white-space:nowrap">Lookup</button>
+          <input id="perf-hf-input" type="text" placeholder="e.g. openai/gpt-oss-20b" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text1);font-size:12px">
+          <button class="btn btn-primary btn-sm" onclick="perfHFLookup()" style="white-space:nowrap">Lookup</button>
         </div>
-        <div id="cal-hf-status" style="font-size:11px;color:var(--text3);min-height:16px"></div>
-        <div id="cal-model-display" style="margin-top:6px;font-size:12px;font-weight:600;color:var(--blue)">Llama 3.1 8B</div>
+        <div id="perf-hf-status" style="font-size:11px;color:var(--text3);min-height:14px"></div>
+        <div id="perf-model-display" style="margin-top:4px;font-size:12px;font-weight:600;color:var(--blue)">gpt-oss-20b</div>
       </div>
 
-      <!-- INPUTS -->
-      <div class="section-title">INFERENCE INPUTS</div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:12px">
-        <div class="slider-row" style="margin-bottom:8px">
-          <label style="font-size:12px">Input tokens <span title="Approximate prompt length sent to the model" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></label>
-          <input type="number" id="cal-isl" value="1024" min="64" max="32768" oninput="calPayloadEdited=false;updateCalPayload()" style="width:80px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+      <!-- SERVING MODE -->
+      <div class="section-title">SERVING MODE</div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
+        <div style="display:flex;gap:6px">
+          <button id="perf-mode-estimate" class="chip on" style="flex:1;text-align:center" onclick="setPerfMode('estimate',this)">Static estimate</button>
+          <button id="perf-mode-query" class="chip" style="flex:1;text-align:center" onclick="setPerfMode('query',this)">Agg vs Disagg</button>
         </div>
-        <div class="slider-row" style="margin-bottom:8px">
-          <label style="font-size:12px">Output tokens <span title="Approximate response length generated by the model" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></label>
-          <input type="number" id="cal-osl" value="256" min="16" max="8192" oninput="calPayloadEdited=false;updateCalPayload()" style="width:80px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
-        </div>
-        <div class="slider-row" style="margin-bottom:8px">
-          <label style="font-size:12px">Batch size</label>
-          <input type="number" id="cal-batch" value="16" min="1" max="512" oninput="calPayloadEdited=false;updateCalPayload()" style="width:80px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
-        </div>
-        <div class="slider-row" style="margin-bottom:0">
-          <label style="font-size:12px">Context (K tokens) <span title="Maximum tokens retained per user in KV cache (memory sizing), not current request size" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></label>
-          <input type="number" id="cal-ctx" value="4" min="1" max="128" oninput="updateCalPayload()" style="width:80px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
-        </div>
+        <div style="font-size:10px;color:var(--text4);margin-top:6px" id="perf-mode-hint">Single config estimate — fast, gives per-op breakdown</div>
       </div>
 
       <!-- HARDWARE & BACKEND -->
       <div class="section-title">HARDWARE &amp; BACKEND</div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:12px">
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
         <div class="slider-row" style="margin-bottom:8px">
           <label style="font-size:12px">GPU</label>
-          <select id="cal-gpu" onchange="updateCalPayload()" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
+          <select id="perf-gpu" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
             <option value="h100_sxm">H100 SXM</option>
             <option value="h200_sxm">H200 SXM</option>
             <option value="a100_sxm">A100 80GB</option>
             <option value="l40s">L40S</option>
             <option value="b200_sxm">B200 SXM</option>
-            <option value="mi300x">MI300X</option>
           </select>
         </div>
         <div class="slider-row" style="margin-bottom:8px">
           <label style="font-size:12px">Backend</label>
-          <select id="cal-backend" onchange="updateCalPayload()" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
-            <option value="trtllm">TRT-LLM</option>
+          <select id="perf-backend" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
             <option value="vllm">vLLM</option>
+            <option value="trtllm">TRT-LLM</option>
+            <option value="sglang">SGLang</option>
           </select>
         </div>
-        <!-- TP / PP — fixed alignment -->
+        <div class="slider-row" style="margin-bottom:8px">
+          <label style="font-size:12px">DB mode <span title="SILICON=exact data, HYBRID=best-effort for unsupported combos" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></label>
+          <select id="perf-dbmode" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
+            <option value="HYBRID">HYBRID</option>
+            <option value="SILICON">SILICON</option>
+          </select>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <div>
-            <div style="font-size:11px;color:var(--text3);margin-bottom:3px">Tensor parallel <span title="Splits model across GPUs within a node" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></div>
-            <input type="number" id="cal-tp" value="1" min="1" max="8" onchange="updateCalPayload()" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box">
+            <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:3px">TP SIZE</div>
+            <input type="number" id="perf-tp" value="4" min="1" max="8" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box">
           </div>
           <div>
-            <div style="font-size:11px;color:var(--text3);margin-bottom:3px">Pipeline parallel <span title="Splits model across nodes in sequence" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></div>
-            <input type="number" id="cal-pp" value="1" min="1" max="8" onchange="updateCalPayload()" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box">
+            <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:3px">PP SIZE</div>
+            <input type="number" id="perf-pp" value="1" min="1" max="8" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box">
           </div>
         </div>
       </div>
 
-      <!-- REQUEST PAYLOAD (collapsed) -->
+      <!-- WORKLOAD -->
+      <div class="section-title">WORKLOAD</div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
+        <div class="slider-row" style="margin-bottom:8px">
+          <label style="font-size:12px">Input tokens (ISL)</label>
+          <input type="number" id="perf-isl" value="4000" min="64" max="32768" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+        </div>
+        <div class="slider-row" style="margin-bottom:8px">
+          <label style="font-size:12px">Output tokens (OSL)</label>
+          <input type="number" id="perf-osl" value="500" min="8" max="8192" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+        </div>
+        <div class="slider-row" style="margin-bottom:8px">
+          <label style="font-size:12px">Prefix reuse % <span title="% of input tokens served from KV cache" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></label>
+          <input type="number" id="perf-prefix-pct" value="0" min="0" max="99" oninput="updateEffectiveISL()" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+        </div>
+        <div id="perf-effective-isl-row" style="display:none;font-size:11px;color:var(--text3);margin-bottom:8px;padding:4px 8px;background:var(--bg2);border-radius:4px">
+          Effective ISL: <span id="perf-effective-isl" style="font-family:var(--mono);color:var(--blue)">—</span> tokens
+        </div>
+        <div class="slider-row" style="margin-bottom:0">
+          <label style="font-size:12px">Batch / concurrency</label>
+          <input type="number" id="perf-batch" value="64" min="1" max="512" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+        </div>
+      </div>
+
+      <!-- SCALING TARGETS -->
+      <div class="section-title">SCALING TARGETS</div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
+        <div class="slider-row" style="margin-bottom:8px">
+          <label style="font-size:12px">Requests / day</label>
+          <input type="number" id="perf-req-day" value="100000000" min="1000" style="width:100px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+        </div>
+        <div class="slider-row" style="margin-bottom:8px">
+          <label style="font-size:12px">Tokens / sec target</label>
+          <input type="number" id="perf-tok-sec" value="5000" min="100" style="width:100px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+        </div>
+        <div class="slider-row" style="margin-bottom:0">
+          <label style="font-size:12px">Infra buffer %</label>
+          <input type="number" id="perf-buffer" value="30" min="0" max="100" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+        </div>
+      </div>
+
+      <!-- AUTO SWEEP (estimate mode only) -->
+      <div id="perf-sweep-section">
+        <div class="section-title">BATCH SWEEP</div>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <label style="font-size:12px">Auto-sweep batch sizes</label>
+            <input type="checkbox" id="perf-auto-sweep" style="cursor:pointer">
+          </div>
+          <div style="font-size:10px;color:var(--text4)">Runs 32, 64, 128, 180, 256 — finds optimal batch for each SLA target. Takes ~5x longer.</div>
+        </div>
+      </div>
+
+      <!-- REQUEST PAYLOAD -->
       <details style="margin-bottom:8px">
         <summary style="font-size:11px;font-weight:600;color:var(--text3);cursor:pointer;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between">
-          <span>&#128196; Estimator request payload</span><span style="color:var(--text4)">▾</span>
+          <span>📄 Request payload</span><span style="color:var(--text4)">▾</span>
         </summary>
-        <div style="background:var(--bg);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:10px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <span style="font-size:10px;color:var(--text4)">Sent to estimator API. Edit before running.</span>
-            <button onclick="navigator.clipboard.writeText(document.getElementById('cal-payload-editor').value)" style="font-size:10px;padding:1px 6px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3)">Copy</button>
-          </div>
-          <textarea id="cal-payload-editor" style="width:100%;height:160px;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono);resize:vertical;box-sizing:border-box" onchange="calPayloadEdited=true" oninput="calPayloadEdited=true"></textarea>
-          <div style="font-size:10px;color:var(--text4);margin-top:3px">database_mode defaults to HYBRID. Edits here override the form.</div>
+        <div style="background:var(--bg);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:8px">
+          <pre id="perf-req-payload" style="font-size:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;overflow:auto;max-height:180px;margin:0;color:var(--text2)">— configure and run —</pre>
+          <button onclick="navigator.clipboard.writeText(document.getElementById('perf-req-payload').textContent)" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3);margin-top:4px">Copy</button>
         </div>
       </details>
 
-      <!-- RAW RESPONSE (collapsed, filled after run) -->
-      <details id="cal-response-details" style="margin-bottom:8px">
+      <!-- RESPONSE PAYLOAD -->
+      <details style="margin-bottom:8px">
         <summary style="font-size:11px;font-weight:600;color:var(--text3);cursor:pointer;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between">
-          <span>&#128269; Estimator response &amp; debug</span><span style="color:var(--text4)">▾</span>
+          <span>🔍 Raw API response</span><span style="color:var(--text4)">▾</span>
         </summary>
-        <div style="background:var(--bg);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:10px">
-          <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:4px">RAW JSON RESPONSE</div>
-          <div style="display:flex;justify-content:flex-end;margin-bottom:4px">
-            <button onclick="navigator.clipboard.writeText(document.getElementById('cal-raw-response').textContent)" style="font-size:10px;padding:1px 6px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3)">Copy</button>
-          </div>
-          <pre id="cal-raw-response" style="font-size:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;overflow:auto;max-height:200px;margin:0;color:var(--text2)">— not run yet —</pre>
-          <div style="font-size:10px;color:var(--text4);font-weight:600;margin:10px 0 4px">PARSED FIELDS</div>
-          <pre id="cal-parsed-fields" style="font-size:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;overflow:auto;max-height:140px;margin:0;color:var(--text2)">— not run yet —</pre>
+        <div style="background:var(--bg);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:8px">
+          <pre id="perf-raw-response" style="font-size:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;overflow:auto;max-height:200px;margin:0;color:var(--text2)">— not run yet —</pre>
+          <button onclick="navigator.clipboard.writeText(document.getElementById('perf-raw-response').textContent)" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3);margin-top:4px">Copy JSON</button>
         </div>
       </details>
 
-      <div style="font-size:10px;color:var(--text4);line-height:1.4;margin-top:8px">Calibrated estimates are modeled using benchmark-calibrated inference profiles and should be validated with workload-specific benchmarking before procurement.</div>
+      <div style="font-size:10px;color:var(--text4);line-height:1.4;margin-top:8px">Powered by NVIDIA AIConfigurator. Results are estimates — validate with workload benchmarking before procurement.</div>
     </div>
 
     <!-- ===== RIGHT PANEL ===== -->
-    <div style="flex:1;padding:20px 24px;min-width:0;overflow-x:hidden" id="cal-right">
+    <div style="flex:1;padding:20px 24px;min-width:0;overflow-x:hidden" id="perf-right">
 
-      <!-- Top action bar (matches other pages) -->
+      <!-- Top bar -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
         <div>
-          <h1 style="font-size:20px;font-weight:700;margin-bottom:2px">Calibrated estimate</h1>
-          <p style="font-size:12px;color:var(--text3)">All numbers editable · results update on re-run</p>
+          <h1 style="font-size:20px;font-weight:700;margin-bottom:2px">⚡ Performance</h1>
+          <p style="font-size:12px;color:var(--text3)">GPU sizing · AIC silicon data · disagg vs agg</p>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap" id="cal-action-bar">
-          <span id="cal-cache-badge" style="font-size:10px;padding:2px 8px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);display:none"></span>
-          <button id="cal-refresh-btn" style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--blue);cursor:pointer;display:none" onclick="runCalibratedEstimate(true)">↻ Refresh</button>
-          <button class="btn btn-sm" onclick="saveCalResult()" style="display:none" id="cal-save-btn">+ Add to comparison</button>
-          <button class="btn btn-sm" onclick="exportCalToSheets()" style="color:var(--green);display:none" id="cal-export-btn">&#128202; Sheets</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span id="perf-cache-badge" style="font-size:10px;padding:2px 8px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);display:none"></span>
+          <button id="perf-refresh-btn" style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--blue);cursor:pointer;display:none" onclick="runPerfEstimate(true)">↻ Refresh</button>
+          <button class="btn btn-sm" onclick="exportPerfToSheets()" style="color:var(--green);display:none" id="perf-export-btn">📊 Sheets</button>
+          <button class="btn btn-sm" onclick="copyPerfAsJSON()" style="display:none" id="perf-json-btn">{ } Copy JSON</button>
         </div>
       </div>
 
       <!-- Empty state -->
-      <div id="cal-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:360px;color:var(--text4)">
+      <div id="perf-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:360px;color:var(--text4)">
         <div style="font-size:40px;margin-bottom:12px">⚡</div>
         <div style="font-size:15px;font-weight:600;margin-bottom:6px">No estimate yet</div>
-        <div style="font-size:13px;text-align:center;max-width:280px;color:var(--text3)">Configure model and hardware on the left, then click Run estimate</div>
+        <div style="font-size:13px;text-align:center;max-width:300px;color:var(--text3)">Configure model, hardware and targets on the left, then click Run estimate</div>
       </div>
 
       <!-- Results -->
-      <div id="cal-results" style="display:none">
-        <!-- Mode + model header -->
+      <div id="perf-results" style="display:none">
+
+        <!-- Status bar -->
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-          <span id="cal-mode-badge" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;background:var(--bg2);border:1px solid var(--border)">—</span>
-          <span id="cal-result-model" style="font-size:13px;font-weight:600;color:var(--text1)">—</span>
-          <span id="cal-result-gpu-badge" style="font-size:11px;color:var(--text3)">—</span>
-          <span id="cal-cache-ts" style="font-size:10px;color:var(--text4)"></span>
+          <span id="perf-mode-badge" style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;background:var(--bg2);border:1px solid var(--border)">—</span>
+          <span id="perf-result-model" style="font-size:13px;font-weight:600">—</span>
+          <span id="perf-result-config" style="font-size:11px;color:var(--text3)">—</span>
+          <span id="perf-result-ts" style="font-size:10px;color:var(--text4)"></span>
         </div>
-        <!-- Proxy note -->
-        <div id="cal-proxy-note" style="display:none;font-size:12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:14px"></div>
-        <!-- KPI tiles (decision + estimator metrics) -->
-        <div class="outcome-cards" id="cal-metrics-grid"></div>
-        <!-- GPU sizing breakdown — collapsible, editable inputs -->
-        <details id="cal-breakdown-details" style="display:none;margin-bottom:12px">
-          <summary style="font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between;align-items:center;user-select:none">
-            <span>Sizing calculation</span><span style="font-size:10px;color:var(--text4)">▾ edit inputs to recalculate</span>
+
+        <!-- Warning banner (unsupported / HYBRID) -->
+        <div id="perf-warn-banner" style="display:none;padding:8px 12px;border-radius:var(--r);margin-bottom:12px;font-size:12px;border:1px solid #f59e0b;background:rgba(245,158,11,0.08);color:var(--text2)"></div>
+
+        <!-- ── HERO: GPU count answers ── -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px" id="perf-hero-cards"></div>
+
+        <!-- ── PERFORMANCE tiles ── -->
+        <div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Performance</div>
+        <div class="outcome-cards" id="perf-perf-cards" style="margin-bottom:14px"></div>
+
+        <!-- ── THROUGHPUT tiles ── -->
+        <div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Throughput &amp; capacity</div>
+        <div class="outcome-cards" id="perf-throughput-cards" style="margin-bottom:14px"></div>
+
+        <!-- ── COST card (cloud + on-prem) ── -->
+        <div id="perf-cost-card" style="margin-bottom:14px"></div>
+
+        <!-- ── DISAGG P/D breakdown (shown for query/disagg mode) ── -->
+        <div id="perf-disagg-section" style="display:none;margin-bottom:14px">
+          <div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Disaggregated serving — prefill / decode split</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div id="perf-prefill-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px">
+              <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:8px">PREFILL NODES</div>
+              <div id="perf-prefill-body" style="font-size:12px"></div>
+            </div>
+            <div id="perf-decode-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px">
+              <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px">DECODE NODES</div>
+              <div id="perf-decode-body" style="font-size:12px"></div>
+            </div>
+          </div>
+          <!-- Top-N configs table -->
+          <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">Top configurations (ranked by tokens/s/gpu)</div>
+          <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--r)">
+            <table style="width:100%;border-collapse:collapse;font-size:11px" id="perf-disagg-table"></table>
+          </div>
+        </div>
+
+        <!-- ── AGG top configs (for query mode) ── -->
+        <div id="perf-agg-section" style="display:none;margin-bottom:14px">
+          <div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Aggregated serving — top configurations</div>
+          <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--r)">
+            <table style="width:100%;border-collapse:collapse;font-size:11px" id="perf-agg-table"></table>
+          </div>
+        </div>
+
+        <!-- ── AGG vs DISAGG comparison ── -->
+        <div id="perf-compare-section" style="display:none;margin-bottom:14px">
+          <div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Agg vs disagg comparison</div>
+          <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--r)">
+            <table style="width:100%;border-collapse:collapse;font-size:12px" id="perf-compare-table"></table>
+          </div>
+        </div>
+
+        <!-- ── BATCH SWEEP results ── -->
+        <div id="perf-sweep-results" style="display:none;margin-bottom:14px">
+          <div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Batch sweep — find optimal batch size</div>
+          <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--r)">
+            <table style="width:100%;border-collapse:collapse;font-size:11px" id="perf-sweep-table"></table>
+          </div>
+          <div id="perf-sweep-recommendation" style="font-size:12px;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);margin-top:8px"></div>
+        </div>
+
+        <!-- ── PER-OP LATENCY breakdown ── -->
+        <details id="perf-perop-details" style="margin-bottom:12px;display:none">
+          <summary style="font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between">
+            <span>Per-op latency breakdown</span><span style="color:var(--text4);font-size:10px">▾ context + generation ops</span>
           </summary>
           <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:12px">
-            <!-- Editable sizing inputs -->
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
               <div>
-                <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:3px">INPUT TOKENS</div>
-                <input type="number" id="sz-isl" min="64" max="32768" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box" oninput="recomputeSizing()">
+                <div style="font-size:10px;font-weight:600;color:var(--text4);margin-bottom:6px">CONTEXT (PREFILL) OPS</div>
+                <div id="perf-context-ops" style="font-size:11px;font-family:var(--mono)"></div>
               </div>
               <div>
-                <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:3px">OUTPUT TOKENS</div>
-                <input type="number" id="sz-osl" min="16" max="8192" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box" oninput="recomputeSizing()">
-              </div>
-              <div>
-                <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:3px">BATCH SIZE</div>
-                <input type="number" id="sz-batch" min="1" max="512" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box" oninput="recomputeSizing()">
-              </div>
-              <div>
-                <div style="font-size:10px;color:var(--text4);font-weight:600;margin-bottom:3px">CONTEXT (K)</div>
-                <input type="number" id="sz-ctx" min="1" max="128" style="width:100%;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text1);font-size:12px;font-family:var(--mono);box-sizing:border-box" oninput="recomputeSizing()">
+                <div style="font-size:10px;font-weight:600;color:var(--text4);margin-bottom:6px">GENERATION (DECODE) OPS</div>
+                <div id="perf-gen-ops" style="font-size:11px;font-family:var(--mono)"></div>
               </div>
             </div>
-            <div id="cal-breakdown" style="font-size:12px;color:var(--text2)"></div>
+            <div id="perf-scheduling" style="margin-top:10px;font-size:11px;color:var(--text3)"></div>
           </div>
         </details>
-        <!-- Add to comparison — near results -->
-        <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
-          <button class="btn btn-sm" onclick="saveCalResult()" id="cal-save-btn2" style="display:none">+ Add to comparison</button>
-          <button class="btn btn-sm" onclick="exportCalToSheets()" id="cal-export-btn2" style="color:var(--green);display:none">&#128202; Sheets</button>
-        </div>
-        <!-- Collapsible estimator details -->
-        <details style="margin-bottom:16px">
-          <summary style="font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between;align-items:center">
-            <span>Estimator details</span><span style="color:var(--text4);font-size:10px">▾ expand</span>
+
+        <!-- ── SIZING MATH ── -->
+        <details style="margin-bottom:12px">
+          <summary style="font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between">
+            <span>Sizing calculation</span><span style="color:var(--text4);font-size:10px">▾ step-by-step math</span>
           </summary>
-          <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);overflow:hidden">
-            <table style="width:100%;border-collapse:collapse" id="cal-metrics-table"></table>
+          <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:12px">
+            <div id="perf-sizing-math" style="font-size:12px;color:var(--text2)"></div>
           </div>
         </details>
-        <!-- Comparison section -->
-        <div id="cal-comparison" style="display:none">
-          <div style="font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+
+        <!-- ── SAVED RUNS comparison ── -->
+        <div id="perf-comparison" style="display:none">
+          <div style="font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
             <span>Saved runs</span>
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <label style="font-size:11px;color:var(--text3)">Compare by</label>
-              <select id="cal-compare-metric" onchange="renderCalChart()" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1)">
-                <option value="tokens_per_sec">Tokens/sec</option>
-                <option value="tokens_per_sec_per_gpu">Tokens/sec/GPU</option>
-                <option value="latency_ms">Latency (ms)</option>
-                <option value="ttft_ms">TTFT (ms)</option>
-                <option value="tpot_ms">TPOT (ms)</option>
-                <option value="gpu_memory_gb">GPU memory (GB)</option>
-              </select>
-              <button class="btn btn-sm" onclick="clearCalSaved()" style="font-size:10px;padding:2px 6px;color:var(--red)">Clear all</button>
-            </div>
-          </div>
-          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:12px">
-            <div style="position:relative;height:300px;max-height:340px"><canvas id="cal-chart"></canvas></div>
+            <button class="btn btn-sm" onclick="clearPerfSaved()" style="font-size:10px;color:var(--red)">Clear all</button>
           </div>
           <div style="overflow-x:auto">
-            <table style="width:100%;border-collapse:collapse;font-size:12px" id="cal-compare-table">
-              <thead>
-                <tr style="border-bottom:2px solid var(--border)">
-                  <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:500">Model</th>
-                  <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:500">GPU</th>
-                  <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:500">Backend</th>
-                  <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">Tok/s</th>
-                  <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">Tok/s/GPU</th>
-                  <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">Latency</th>
-                  <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">TTFT</th>
-                  <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">Mode</th>
-                  <th style="padding:6px 8px"></th>
-                </tr>
-              </thead>
-              <tbody id="cal-compare-tbody"></tbody>
+            <table style="width:100%;border-collapse:collapse;font-size:12px" id="perf-saved-table">
+              <thead><tr style="border-bottom:2px solid var(--border)">
+                <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:500">Model</th>
+                <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:500">GPU</th>
+                <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">GPUs needed</th>
+                <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">Latency</th>
+                <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">TTFT</th>
+                <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">tok/s/gpu</th>
+                <th style="padding:6px 8px"></th>
+              </tr></thead>
+              <tbody id="perf-saved-tbody"></tbody>
             </table>
           </div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn btn-sm" onclick="exportPerfToSheets()" style="color:var(--green)">📊 Export all to Sheets</button>
+          </div>
         </div>
-      </div>
-    </div>
+
+        <!-- Save + Export actions -->
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="savePerfResult()" id="perf-save-btn" style="display:none">+ Save run</button>
+          <button class="btn btn-sm" onclick="exportPerfToSheets()" id="perf-export-btn2" style="color:var(--green);display:none">📊 Sheets</button>
+          <button class="btn btn-sm" onclick="copyPerfAsJSON()" id="perf-json-btn2" style="display:none">{ } Copy JSON</button>
+        </div>
+
+      </div><!-- end #perf-results -->
+    </div><!-- end right panel -->
   </div>
 
   <!-- Loading modal -->
-  <div id="cal-loading-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:32px;max-width:340px;width:90%;text-align:center">
-      <div style="font-size:32px;margin-bottom:12px;animation:spin 1s linear infinite">⚙️</div>
-      <div style="font-size:15px;font-weight:600;margin-bottom:8px">Running calibrated estimate</div>
-      <div id="cal-loading-tip" style="font-size:12px;color:var(--text3);line-height:1.5">Querying benchmark-calibrated profiles...</div>
+  <div id="perf-loading-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:32px;max-width:360px;width:90%;text-align:center">
+      <div style="font-size:32px;margin-bottom:12px;animation:spin 1s linear infinite">⚡</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:8px" id="perf-loading-title">Running estimate...</div>
+      <div id="perf-loading-tip" style="font-size:12px;color:var(--text3);line-height:1.5">Querying AIC silicon database...</div>
+      <div id="perf-sweep-progress" style="display:none;margin-top:10px">
+        <div id="perf-sweep-bar-wrap" style="background:var(--bg);border-radius:4px;height:6px;overflow:hidden">
+          <div id="perf-sweep-bar" style="background:var(--blue);height:100%;width:0%;transition:width .3s"></div>
+        </div>
+        <div id="perf-sweep-status" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -2078,7 +2161,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.55</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.56</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2375,7 +2458,7 @@ function navTo(page,fromHash){
   if(map[page]!==undefined && tabs[map[page]]) tabs[map[page]].classList.add('active');
   if(!fromHash) location.hash='#'+page;
   if(page==='advanced') calc();
-  if(page==='calibrated') initCalibratedPage();
+  if(page==='calibrated') initPerfPage();
   if(page==='hybrid'){calcHybrid();renderHGpuChips();}
   if(page==='explorer') loadExplorer(); // lazy — Chart.js loads only here
   if(page==='saved') renderSaved();
@@ -5601,987 +5684,1048 @@ function hideGpuTip(){
 
 // ===== CALIBRATED ESTIMATE PAGE =====
 
-var CAL_API = 'https://aiconfig-api.onrender.com/estimate';
+var AIC_WORKER_URL = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
-var CAL_STATE = {
-  modelPath: 'meta-llama/Meta-Llama-3.1-8B-Instruct',
-  modelLabel: 'Llama 3.1 8B',
-  modelArch: null,  // full arch fields — set on model select/lookup
-  lastResult: null,
-  savedRuns: [],
-  payloadEdited: false
-};
 
-var calPayloadEdited = false;
+// ===== PERFORMANCE TAB (AIC-powered) =====
 
-// Proxy/fallback map
-var MODEL_FALLBACKS = {
-  'google/gemma-3-12b-it':           { proxy:'Qwen/Qwen2.5-14B',                        mode:'proxy',     reason:'Gemma unsupported in estimator' },
-  'microsoft/Phi-4-reasoning':        { proxy:'Qwen/Qwen2-7B',                           mode:'proxy',     reason:'Phi unsupported in estimator' },
-  'microsoft/phi-4-reasoning-plus':   { proxy:'Qwen/Qwen2-7B',                           mode:'proxy',     reason:'Phi unsupported in estimator' },
-  'meta-llama/Llama-Guard-4-12B':     { proxy:'meta-llama/Meta-Llama-3.1-8B-Instruct',  mode:'proxy',     reason:'Guard parser gap in estimator' }
-};
+var AIC_WORKER = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
-// GPU display label map
-var CAL_GPU_LABELS = {
+var PERF_GPU_LABELS = {
   h100_sxm:'H100 SXM', h200_sxm:'H200 SXM', a100_sxm:'A100 80GB',
-  l40s:'L40S', b200_sxm:'B200 SXM', mi300x:'MI300X'
+  l40s:'L40S', b200_sxm:'B200 SXM'
 };
-// VRAM (GB) for each system key — reuses GPU_DATA where possible
-var CAL_GPU_VRAM = {
-  h100_sxm:80, h200_sxm:141, a100_sxm:80, l40s:48, b200_sxm:180, mi300x:192
+var PERF_GPU_VRAM = {
+  h100_sxm:80, h200_sxm:141, a100_sxm:80, l40s:48, b200_sxm:192
+};
+var PERF_GPU_CLOUD_PRICE = {
+  h100_sxm:3.20, h200_sxm:4.50, a100_sxm:1.80, l40s:1.20, b200_sxm:7.00
+};
+var PERF_GPU_ONPREM_PRICE = {
+  h100_sxm:30000, h200_sxm:45000, a100_sxm:20000, l40s:12000, b200_sxm:60000
 };
 
-// Compute GPU sizing from calibrated result
-function calcCalGPUs(result){
-  if(!result) return null;
-  var tpsPerGpu = result.tokens_per_sec_per_gpu;
-  var latMs     = result.latency_ms || result.ttft_ms;
-  var isl       = result.isl  || 1024;
-  var osl       = result.osl  || 256;
-  var batch     = result.batch || 16;
-  var gpuLabel  = CAL_GPU_LABELS[result.gpu] || result.gpu;
-  var ctxK      = parseInt((document.getElementById('cal-ctx')||{}).value)||4;
+var PERF_STATE = {
+  modelPath:  'openai/gpt-oss-20b',
+  modelLabel: 'gpt-oss-20b',
+  mode:       'estimate',
+  lastResult: null,
+  lastRaw:    null,
+  savedRuns:  [],
+  sweepResults: null
+};
 
-  // A. Tokens per request
-  var tokPerReq = isl + osl;
+var perfCache = {};
+(function(){ try{ var c=localStorage.getItem('perf_cache'); if(c) perfCache=JSON.parse(c)||{}; }catch(e){} })();
+(function(){ try{ var s=localStorage.getItem('perf_saved'); if(s) PERF_STATE.savedRuns=JSON.parse(s)||[]; }catch(e){} })();
 
-  // B. Request rate
-  var latSec = latMs ? latMs / 1000 : null;
-  var rps    = latSec ? (batch / latSec) : batch;
-
-  // C. Token demand
-  var demandTps     = rps * tokPerReq;
-  var gpusThroughput = tpsPerGpu ? Math.ceil(demandTps / tpsPerGpu) : null;
-
-  // D. Memory/KV fit — call compute() directly, exactly as Capacity does.
-  //    Set S to calibrated inputs, call compute(), restore S. One formula, two callers.
-  // Arch priority: current CAL_STATE (chip/lookup) > result.modelArch (stored at estimate time)
-  // result.modelArch is only null for results cached before v5.4.49 or if lookup was skipped.
-  var arch = CAL_STATE.modelArch || result.modelArch;
-  if(!arch && typeof MODELS !== 'undefined'){
-    var mMatch = MODELS.find(function(x){
-      return x.hfId===CAL_STATE.modelPath || x.name===CAL_STATE.modelLabel
-          || x.hfId===result.modelPath    || x.name===result.modelLabel;
-    });
-    if(mMatch) arch = {
-      params:mMatch.params, prec:'fp16', kvPrec:'fp16',
-      numLayers:mMatch.layers, numKvHeads:mMatch.kvHeads,
-      numHeads:mMatch.numHeads||mMatch.kvHeads*4||32,
-      headDim:mMatch.headDim, attn:mMatch.attn,
-      kvLayers:mMatch.kvLayers||null, kvArchType:mMatch.kvArchType||null,
-      kvGlobalLayers:mMatch.kvGlobalLayers!=null?mMatch.kvGlobalLayers:null,
-      kvSlidingLayers:mMatch.kvSlidingLayers!=null?mMatch.kvSlidingLayers:null,
-      slidingWindow:mMatch.slidingWindow||null,
-      globalKvHeads:mMatch.globalKvHeads||null, globalHeadDim:mMatch.globalHeadDim||null,
-      kvLoraRank:mMatch.kvLoraRank||null, qkRopeHeadDim:mMatch.qkRopeHeadDim||null,
-      activeExperts:mMatch.activeExperts||null, totalExperts:mMatch.totalExperts||null
-    };
-    if(arch) CAL_STATE.modelArch = arch;
-  }
-
-  // Save all S fields that compute() reads
-  var _s = {
-    params:S.params, prec:S.prec, kvPrec:S.kvPrec,
-    numLayers:S.numLayers, numKvHeads:S.numKvHeads, numHeads:S.numHeads,
-    headDim:S.headDim, attn:S.attn,
-    kvLayers:S.kvLayers, kvArchType:S.kvArchType,
-    kvGlobalLayers:S.kvGlobalLayers, kvSlidingLayers:S.kvSlidingLayers,
-    slidingWindow:S.slidingWindow, globalKvHeads:S.globalKvHeads,
-    globalHeadDim:S.globalHeadDim, kvLoraRank:S.kvLoraRank, qkRopeHeadDim:S.qkRopeHeadDim,
-    activeExperts:S.activeExperts, totalExperts:S.totalExperts,
-    gpuVram:S.gpuVram, gpuName:S.gpuName,
-    users:S.users, ctx:S.ctx, tp:S.tp, fw:S.fw,
-    hitrate:S.hitrate, mode:S.mode
-  };
-
-  // Set S to calibrated inputs
-  if(arch){
-    S.params=arch.params; S.prec=arch.prec||'fp16'; S.kvPrec=arch.kvPrec||arch.prec||'fp16';
-    S.numLayers=arch.numLayers; S.numKvHeads=arch.numKvHeads; S.numHeads=arch.numHeads;
-    S.headDim=arch.headDim; S.attn=arch.attn;
-    S.kvLayers=arch.kvLayers; S.kvArchType=arch.kvArchType;
-    S.kvGlobalLayers=arch.kvGlobalLayers; S.kvSlidingLayers=arch.kvSlidingLayers;
-    S.slidingWindow=arch.slidingWindow; S.globalKvHeads=arch.globalKvHeads;
-    S.globalHeadDim=arch.globalHeadDim; S.kvLoraRank=arch.kvLoraRank;
-    S.qkRopeHeadDim=arch.qkRopeHeadDim;
-    S.activeExperts=arch.activeExperts; S.totalExperts=arch.totalExperts;
-  }
-  S.gpuVram = CAL_GPU_VRAM[result.gpu] || 80;
-  S.gpuName = CAL_GPU_LABELS[result.gpu] || result.gpu;
-  S.users   = batch;
-  S.ctx     = ctxK;
-  S.tp      = result.tp || 1;
-  S.fw      = result.backend === 'vllm' ? 'vllm' : 'trtllm';
-  S.hitrate = _s.hitrate; // keep user's prefix cache setting
-  S.mode    = 'std';      // not llm-d
-
-  var C = compute(); // ← exact same function Capacity calls
-
-  // Restore S
-  Object.assign(S, _s);
-
-  var gpusMemory = C.totalGPUs;
-  var gpusFinal  = gpusThroughput ? Math.max(gpusThroughput, gpusMemory) : gpusMemory;
-
-  return {
-    tokPerReq, rps, demandTps, tpsPerGpu,
-    gpusThroughput, gpusMemory, gpusFinal,
-    wGB:      C.wGB,
-    kvPU:     C.kvPU,
-    avail:    C.avail,
-    upr:      C.upr,
-    replicas: C.replicas,
-    autoTp:   C.autoTp,
-    vram:     CAL_GPU_VRAM[result.gpu] || 80,
-    gpuLabel, latSec, batch, isl, osl, ctxK
-  };
+function initPerfPage(){
+  updateEffectiveISL();
+  renderPerfSaved();
 }
 
-// Loading tips
-var CAL_TIPS = [
-  'GPU memory bandwidth is often the bottleneck, not compute.',
-  'KV cache size grows linearly with context length and batch size.',
-  'Tensor parallelism reduces per-GPU memory but adds communication overhead.',
-  'TRT-LLM typically outperforms vLLM on fixed-batch throughput benchmarks.',
-  'For long contexts, GQA models use significantly less KV cache memory.',
-  'Pipeline parallelism is most effective for large models across multiple nodes.',
-  'Prefill (TTFT) is compute-bound; decode (TPOT) is memory-bandwidth-bound.',
-  'INT8/FP8 quantization can double throughput with minimal accuracy loss on most tasks.'
-];
-
-// Cache: key = JSON payload string → result
-var calCache = {};
-(function loadCalCache(){
-  try{
-    var c=localStorage.getItem('cal_cache');
-    if(c){
-      var raw=JSON.parse(c)||{};
-      // Drop cached results that predate modelArch storage (v5.4.49+)
-      Object.keys(raw).forEach(function(k){
-        if(raw[k] && !raw[k].modelArch) delete raw[k];
-      });
-      calCache=raw;
-    }
-  }catch(e){}
-})();
-(function loadCalSaved(){
-  try{var s=localStorage.getItem('cal_saved');if(s){CAL_STATE.savedRuns=JSON.parse(s)||{};}}catch(e){}
-  // migrate: savedRuns may be array or object
-  if(!Array.isArray(CAL_STATE.savedRuns)) CAL_STATE.savedRuns=[];
-})();
-
-function initCalibratedPage(){
-  // Ensure modelArch is populated for the default/current model
-  if(!CAL_STATE.modelArch && typeof MODELS !== 'undefined'){
-    var m = MODELS.find(function(x){
-      return x.hfId === CAL_STATE.modelPath || x.name === CAL_STATE.modelLabel;
-    });
-    if(m) CAL_STATE.modelArch = {
-      params: m.params, prec:'fp16',
-      numLayers:m.layers, numKvHeads:m.kvHeads,
-      numHeads:m.numHeads||m.kvHeads*4||32, headDim:m.headDim, attn:m.attn,
-      kvLayers:m.kvLayers||null, kvArchType:m.kvArchType||null,
-      kvGlobalLayers:m.kvGlobalLayers!=null?m.kvGlobalLayers:null,
-      kvSlidingLayers:m.kvSlidingLayers!=null?m.kvSlidingLayers:null,
-      slidingWindow:m.slidingWindow||null,
-      globalKvHeads:m.globalKvHeads||null, globalHeadDim:m.globalHeadDim||null,
-      kvLoraRank:m.kvLoraRank||null, qkRopeHeadDim:m.qkRopeHeadDim||null,
-      activeExperts:m.activeExperts||null, totalExperts:m.totalExperts||null
-    };
-  }
-  updateCalPayload();
-  renderCalSavedComparison();
-}
-
-function selectCalModel(hfId, label, btn){
-  CAL_STATE.modelPath = hfId;
-  CAL_STATE.modelLabel = label;
-  // Store arch from MODELS array so compute() uses correct weights/KV
-  var m = (typeof MODELS!=='undefined') && MODELS.find(function(x){ return x.hfId===hfId || x.name===label; });
-  CAL_STATE.modelArch = m ? {
-    params: m.params, prec: 'fp16',
-    numLayers: m.layers, numKvHeads: m.kvHeads,
-    numHeads: m.numHeads||m.kvHeads*4||32,
-    headDim: m.headDim, attn: m.attn,
-    kvLayers: m.kvLayers||null, kvArchType: m.kvArchType||null,
-    kvGlobalLayers: m.kvGlobalLayers!=null?m.kvGlobalLayers:null,
-    kvSlidingLayers: m.kvSlidingLayers!=null?m.kvSlidingLayers:null,
-    slidingWindow: m.slidingWindow||null,
-    globalKvHeads: m.globalKvHeads||null, globalHeadDim: m.globalHeadDim||null,
-    kvLoraRank: m.kvLoraRank||null, qkRopeHeadDim: m.qkRopeHeadDim||null,
-    activeExperts: m.activeExperts||null, totalExperts: m.totalExperts||null
-  } : null;
-  document.querySelectorAll('#cal-model-chips .chip').forEach(function(b){b.classList.remove('on');});
+function setPerfMode(mode, btn){
+  PERF_STATE.mode = mode;
+  document.querySelectorAll('#perf-mode-estimate, #perf-mode-query').forEach(function(b){ b.classList.remove('on'); });
   if(btn) btn.classList.add('on');
-  var disp = document.getElementById('cal-model-display');
-  if(disp) disp.textContent = label;
-  var inp = document.getElementById('cal-hf-input');
-  if(inp) inp.value = '';
-  var ctxEl = document.getElementById('cal-ctx');
-  if(ctxEl && S.ctx) ctxEl.value = S.ctx;
-  // Clear last result so recomputeSizing uses fresh arch, not stale cached result
-  if(CAL_STATE.lastResult && CAL_STATE.lastResult.modelPath !== hfId){
-    CAL_STATE.lastResult = null;
-    CAL_STATE.lastSizing = null;
+  var hint = document.getElementById('perf-mode-hint');
+  var sweep = document.getElementById('perf-sweep-section');
+  if(mode === 'estimate'){
+    if(hint) hint.textContent = 'Single config estimate — fast, gives per-op breakdown';
+    if(sweep) sweep.style.display = 'block';
+  } else {
+    if(hint) hint.textContent = 'Full Pareto sweep — agg vs disagg comparison (takes ~30s)';
+    if(sweep) sweep.style.display = 'none';
   }
-  calPayloadEdited = false;
-  updateCalPayload();
 }
 
-function calHFLookup(){
-  var id = (document.getElementById('cal-hf-input').value||'').trim();
+function selectPerfModel(hfId, label, btn){
+  PERF_STATE.modelPath  = hfId;
+  PERF_STATE.modelLabel = label;
+  document.querySelectorAll('#perf-model-chips .chip').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  var d = document.getElementById('perf-model-display');
+  if(d) d.textContent = label;
+  var i = document.getElementById('perf-hf-input');
+  if(i) i.value = '';
+}
+
+function perfHFLookup(){
+  var id = (document.getElementById('perf-hf-input').value||'').trim();
   if(!id) return;
-  var st = document.getElementById('cal-hf-status');
-  st.textContent = 'Looking up...';
-  st.style.color = 'var(--text3)';
-  fetchHFModel(id, 'cal-hf-status', function(m){
-    CAL_STATE.modelPath = id;
-    CAL_STATE.modelLabel = m.name;
-    CAL_STATE.modelArch = {
-      params: m.params, prec: 'fp16', kvPrec: 'fp16',
-      numLayers: m.layers, numKvHeads: m.kvHeads,
-      numHeads: m.numHeads||m.kvHeads*4||32,
-      headDim: m.headDim, attn: m.attn,
-      kvLayers: m.kvLayers||null, kvArchType: m.kvArchType||null,
-      kvGlobalLayers: m.kvGlobalLayers!=null?m.kvGlobalLayers:null,
-      kvSlidingLayers: m.kvSlidingLayers!=null?m.kvSlidingLayers:null,
-      slidingWindow: m.slidingWindow||null,
-      globalKvHeads: m.globalKvHeads||null, globalHeadDim: m.globalHeadDim||null,
-      kvLoraRank: m.kvLoraRank||null, qkRopeHeadDim: m.qkRopeHeadDim||null,
-      activeExperts: m.activeExperts||null, totalExperts: m.totalExperts||null
-    };
-    var disp = document.getElementById('cal-model-display');
-    if(disp) disp.textContent = m.name + ' (' + m.params + 'B, ' + m.layers + 'L, ' + (m.attn==='gqa'?'GQA':'MHA') + ')';
-    document.querySelectorAll('#cal-model-chips .chip').forEach(function(b){b.classList.remove('on');});
-    calPayloadEdited = false;
-    updateCalPayload();
+  var st = document.getElementById('perf-hf-status');
+  st.textContent = 'Looking up...'; st.style.color = 'var(--text3)';
+  fetchHFModel(id, 'perf-hf-status', function(m){
+    PERF_STATE.modelPath  = id;
+    PERF_STATE.modelLabel = m.name;
+    var d = document.getElementById('perf-model-display');
+    if(d) d.textContent = m.name + ' (' + m.params + 'B, ' + m.layers + 'L)';
+    document.querySelectorAll('#perf-model-chips .chip').forEach(function(b){ b.classList.remove('on'); });
   });
 }
 
-function buildCalPayload(forceModel){
-  var modelPath = forceModel || CAL_STATE.modelPath;
-  var isl  = parseInt(document.getElementById('cal-isl').value)||1024;
-  var osl  = parseInt(document.getElementById('cal-osl').value)||256;
-  var batch= parseInt(document.getElementById('cal-batch').value)||16;
-  var gpu  = document.getElementById('cal-gpu').value||'h100_sxm';
-  var back = document.getElementById('cal-backend').value||'trtllm';
-  var tp   = parseInt(document.getElementById('cal-tp').value)||1;
-  var pp   = parseInt(document.getElementById('cal-pp').value)||1;
-  return {
-    model_path: modelPath,
-    system: gpu,
-    isl: isl,
-    osl: osl,
-    batch_size: batch,
-    backend: back,
-    database_mode: 'HYBRID',
-    tp_size: tp,
-    pp_size: pp
-  };
-}
-
-function updateCalPayload(){
-  if(calPayloadEdited) return; // user edited manually — don't overwrite
-  var payload = buildCalPayload();
-  var ed = document.getElementById('cal-payload-editor');
-  if(ed) ed.value = JSON.stringify(payload, null, 2);
-}
-
-function getCalPayload(){
-  // If user edited the payload editor, use that; otherwise build fresh
-  var ed = document.getElementById('cal-payload-editor');
-  if(calPayloadEdited && ed && ed.value){
-    try{ return JSON.parse(ed.value); }
-    catch(e){ alert('Invalid JSON in payload editor: ' + e.message); return null; }
-  }
-  return buildCalPayload();
-}
-
-function showCalLoading(show){
-  var modal = document.getElementById('cal-loading-modal');
-  if(!modal) return;
-  modal.style.display = show ? 'flex' : 'none';
-  if(show){
-    var tip = document.getElementById('cal-loading-tip');
-    var idx = Math.floor(Math.random()*CAL_TIPS.length);
-    if(tip) tip.textContent = CAL_TIPS[idx];
-    // Rotate tips every 3s
-    CAL_STATE._tipTimer = setInterval(function(){
-      idx = (idx+1) % CAL_TIPS.length;
-      if(tip) tip.textContent = CAL_TIPS[idx];
-    }, 3000);
+function updateEffectiveISL(){
+  var isl = parseInt((document.getElementById('perf-isl')||{}).value)||4000;
+  var pct = parseInt((document.getElementById('perf-prefix-pct')||{}).value)||0;
+  var row = document.getElementById('perf-effective-isl-row');
+  var span = document.getElementById('perf-effective-isl');
+  if(pct > 0){
+    var eff = Math.round(isl * (1 - pct/100));
+    if(row) row.style.display = 'block';
+    if(span) span.textContent = eff.toLocaleString();
   } else {
-    if(CAL_STATE._tipTimer) clearInterval(CAL_STATE._tipTimer);
+    if(row) row.style.display = 'none';
   }
 }
 
-function runCalibratedEstimate(forceRefresh){
-  var payload = getCalPayload();
-  if(!payload) return;
+function perfPullFromAdvanced(){
+  var gpuMap = {'H100':'h100_sxm','H200':'h200_sxm','A100':'a100_sxm','A100 80GB':'a100_sxm','L40S':'l40s','B200':'b200_sxm','MI300X':'h100_sxm'};
+  var fwMap  = {'vllm':'vllm','trtllm':'trtllm','trt-llm':'trtllm'};
 
-  var cacheKey = JSON.stringify(payload);
+  PERF_STATE.modelPath  = S.hfId || PERF_STATE.modelPath;
+  PERF_STATE.modelLabel = S.modelLabel || PERF_STATE.modelLabel;
 
-  // Check cache unless forced refresh
-  if(!forceRefresh && calCache[cacheKey]){
-    showCalResult(calCache[cacheKey], true);
-    return;
-  }
-
-  // Resolve model: exact → proxy → heuristic
-  var modelPath = payload.model_path;
-  var fallback  = MODEL_FALLBACKS[modelPath];
-  var mode      = 'exact';
-  var proxyReason = null;
-
-  if(fallback){
-    mode        = fallback.mode;
-    proxyReason = fallback.reason;
-    payload     = Object.assign({}, payload, {model_path: fallback.proxy});
-  }
-
-  showCalLoading(true);
-
-  fetch(CAL_API, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify(payload)
-  })
-  .then(function(r){
-    if(!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
-  })
-  .then(function(data){
-    showCalLoading(false);
-    var result = parseCalResult(data, mode, proxyReason, payload, cacheKey);
-    calCache[cacheKey] = result;
-    try{ localStorage.setItem('cal_cache', JSON.stringify(calCache)); }catch(e){}
-    showCalResult(result, false);
-  })
-  .catch(function(err){
-    showCalLoading(false);
-    // Fall through to heuristic
-    var result = buildHeuristicResult(payload, mode, proxyReason, cacheKey, err.message);
-    showCalResult(result, false);
-  });
-}
-
-function parseCalResult(data, mode, proxyReason, payload, cacheKey){
-  // Normalize API response — field names may vary
-  // Flatten nested response — API may nest under results/result/data
-  var d = {};
-  var src = data.results || data.result || data.data || data || {};
-  // Some APIs return array of results
-  if(Array.isArray(src)) src = src[0] || {};
-  // Copy all fields from src and any nested objects one level deep
-  Object.keys(src).forEach(function(k){
-    if(src[k] !== null && typeof src[k] === 'object' && !Array.isArray(src[k])){
-      Object.keys(src[k]).forEach(function(k2){ d[k2] = src[k][k2]; });
-    } else { d[k] = src[k]; }
-  });
-
-  // Primary field names the API is documented to return
-  var tps     = d.tokens_per_sec      || d.throughput_token_per_s || d.tokens_per_second  || d.throughput            || d.output_token_throughput || null;
-  var tpsGpu  = d.tokens_per_sec_per_gpu || (tps != null && payload.tp_size ? tps / payload.tp_size : null);
-  var ttft    = d.ttft_ms             || d.ttft                   || d.time_to_first_token_ms || d.time_to_first_token || null;
-  var tpot    = d.tpot_ms             || d.tpot                   || d.time_per_output_token_ms || d.time_per_output_token || d.inter_token_latency_ms || null;
-  var lat     = d.request_latency_ms  || d.latency_ms             || d.latency             || d.end_to_end_latency_ms  || d.e2e_latency_ms          || null;
-  var mem     = d.gpu_memory_gb       || d.memory_gb              || d.gpu_memory          || d.vram_used_gb           || null;
-
-  // Derive latency if missing: TTFT + TPOT * osl
-  if(lat == null && ttft != null && tpot != null){
-    lat = ttft + tpot * (payload.osl || 256);
-  }
-
-  var parsed = {
-    tokens_per_sec:         tps,
-    tokens_per_sec_per_gpu: tpsGpu,
-    ttft_ms:                ttft,
-    tpot_ms:                tpot,
-    request_latency_ms:     lat,
-    gpu_memory_gb:          mem
-  };
-
-  // Update debug panels
-  var rawEl = document.getElementById('cal-raw-response');
-  var parsedEl = document.getElementById('cal-parsed-fields');
-  if(rawEl){
-    try{ rawEl.textContent = JSON.stringify(data, null, 2); }
-    catch(e){ rawEl.textContent = String(data); }
-  }
-  if(parsedEl){
-    parsedEl.textContent = JSON.stringify(parsed, null, 2);
-  }
-
-  return {
-    mode: mode,
-    modelPath: CAL_STATE.modelPath,
-    modelLabel: CAL_STATE.modelLabel,
-    modelArch: CAL_STATE.modelArch || null,  // carry arch with result for sizing
-    proxyModel: payload.model_path,
-    proxyReason: proxyReason,
-    gpu: payload.system,
-    backend: payload.backend,
-    isl: payload.isl,
-    osl: payload.osl,
-    batch: payload.batch_size,
-    tp: payload.tp_size,
-    pp: payload.pp_size,
-    tokens_per_sec:         tps,
-    tokens_per_sec_per_gpu: tpsGpu,
-    ttft_ms:                ttft,
-    tpot_ms:                tpot,
-    latency_ms:             lat,
-    gpu_memory_gb:          mem,
-    raw: data,
-    cacheKey: cacheKey,
-    ts: Date.now(),
-    isHeuristic: false
-  };
-}
-
-function buildHeuristicResult(payload, mode, proxyReason, cacheKey, errMsg){
-  // Simple heuristic: rough tok/s based on GPU + model size from S state
-  var heuristicTps = null;
-  var gpuBW = {h100_sxm:3350,h200_sxm:4800,a100_sxm:2000,l40s:864,b200_sxm:8000,mi300x:5300};
-  var bw = gpuBW[payload.system] || 2000; // GB/s
-  // Rough: tok/s ≈ bandwidth / (2 * params_B * bytes_per_param)
-  var params = S.params || 8;
-  var bytesPerParam = (S.prec === 'fp8' || S.kvPrec === 'fp8') ? 1 : 2;
-  heuristicTps = Math.round(bw * 1e9 / (params * 1e9 * bytesPerParam) / payload.tp_size);
-
-  return {
-    mode: 'heuristic',
-    modelPath: CAL_STATE.modelPath,
-    modelLabel: CAL_STATE.modelLabel,
-    proxyModel: payload.model_path,
-    proxyReason: proxyReason || ('API unavailable: ' + errMsg),
-    gpu: payload.system,
-    backend: payload.backend,
-    isl: payload.isl,
-    osl: payload.osl,
-    batch: payload.batch_size,
-    tp: payload.tp_size,
-    pp: payload.pp_size,
-    tokens_per_sec: heuristicTps,
-    latency_ms: null,
-    ttft_ms: null,
-    tpot_ms: null,
-    gpu_memory_gb: null,
-    raw: null,
-    cacheKey: cacheKey,
-    ts: Date.now(),
-    isHeuristic: true
-  };
-}
-
-function showCalResult(result, fromCache){
-  CAL_STATE.lastResult = result;
-
-  document.getElementById('cal-empty').style.display = 'none';
-  document.getElementById('cal-results').style.display = 'block';
-
-  // Mode badge
-  var badge = document.getElementById('cal-mode-badge');
-  var modeColors = {exact:'var(--green)',proxy:'#dc2626',heuristic:'var(--text3)'};
-  var modeLabels = {exact:'✓ Exact',proxy:'⚠ Proxy',heuristic:'~ Heuristic'};
-  badge.textContent = modeLabels[result.mode] || result.mode;
-  badge.style.color = modeColors[result.mode] || 'var(--text3)';
-  badge.style.borderColor = result.mode==='proxy' ? '#dc2626' : 'var(--border)';
-
-  // Always show current chip selection label, not stale result label
-  document.getElementById('cal-result-model').textContent = CAL_STATE.modelLabel || result.modelLabel;
-  document.getElementById('cal-result-gpu-badge').textContent =
-    (CAL_GPU_LABELS[result.gpu]||result.gpu) + ' · ' + (result.backend||'').toUpperCase() + ' · TP=' + result.tp;
-
-  // Cache badge + refresh in action bar
-  var cb = document.getElementById('cal-cache-badge');
-  var rb = document.getElementById('cal-refresh-btn');
-  var ts = document.getElementById('cal-cache-ts');
-  if(cb){
-    if(fromCache){
-      cb.textContent = '📦 Cached'; cb.title = 'Loaded from cache. Click Refresh for a fresh call.';
-      cb.style.display='inline'; if(rb) rb.style.display='inline';
-    } else {
-      cb.textContent = '✨ Fresh'; cb.title = 'Live result from estimator API.';
-      cb.style.display='inline'; if(rb) rb.style.display='none';
-    }
-  }
-  if(ts){ ts.textContent = new Date(result.ts).toLocaleTimeString(); }
-
-  // Show action buttons (both top bar and near-results)
-  ['cal-save-btn','cal-save-btn2'].forEach(function(id){
-    var b=document.getElementById(id); if(b) b.style.display='inline';
-  });
-  ['cal-export-btn','cal-export-btn2'].forEach(function(id){
-    var b=document.getElementById(id); if(b) b.style.display='inline';
-  });
-
-  // Proxy / heuristic note
-  var note = document.getElementById('cal-proxy-note');
-  if(result.mode !== 'exact'){
-    note.style.display = 'block';
-    if(result.mode === 'proxy'){
-      note.style.borderColor = '#dc2626';
-      note.style.borderWidth = '1px';
-      // Find proxy label
-      var fb = MODEL_FALLBACKS[result.modelPath] || {};
-      note.innerHTML =
-        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
-        +'<span style="background:#dc2626;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px">PROXY</span>'
-        +'<strong style="font-size:12px">Proxy model used for this estimate</strong></div>'
-        +'<table style="font-size:11px;border-collapse:collapse;width:100%">'
-        +'<tr><td style="color:var(--text4);padding:3px 10px 3px 0;white-space:nowrap;font-weight:600">Using proxy</td>'
-        +'<td style="font-family:var(--mono);color:var(--text1)">'+result.proxyModel+'</td></tr>'
-        +'<tr><td style="color:var(--text4);padding:3px 10px 3px 0;font-weight:600">Reason</td>'
-        +'<td>'+result.proxyReason+'</td></tr>'
-        +'<tr><td style="color:var(--text4);padding:3px 10px 3px 0;font-weight:600">Why this proxy</td>'
-        +'<td>'+(fb.reason||'Closest supported model for throughput estimation')+'</td></tr>'
-        +'<tr><td style="color:var(--text4);padding:3px 10px 3px 0;font-weight:600">Impact</td>'
-        +'<td>Throughput and latency are approximate. Validate with workload-specific benchmarking before procurement.</td></tr>'
-        +'</table>';
-    } else {
-      note.style.borderColor = 'var(--border)';
-      note.innerHTML = '<strong>Heuristic estimate</strong> — Estimator API unavailable. '
-        +'Showing bandwidth-based projection only.<br>'
-        +'<span style="font-size:11px;color:var(--text4)">'+(result.proxyReason||'')+'</span>';
-    }
-  } else {
-    note.style.display = 'none';
-  }
-
-  // ── Compute GPU sizing ──
-  var sizing = calcCalGPUs(result);
-  CAL_STATE.lastSizing = sizing;
-
-  var fmt = function(v,unit,dp){ return v!=null ? (dp!=null?parseFloat(v).toFixed(dp):Math.round(v))+unit : '—'; };
-  var fmtN = function(v){ return v!=null ? Math.round(v).toLocaleString() : '—'; };
-
-  // ── Outcome tiles — use exact Capacity .oc / .oc-val / .oc-label classes ──
-  var grid = document.getElementById('cal-metrics-grid');
-  if(grid){
-    var oc = function(label, val, sub, badge, cls){
-      return '<div class="oc'+(cls?' '+cls:'')+'">'
-        +'<div class="oc-label">'+label+'</div>'
-        +'<div class="oc-val">'+val+'</div>'
-        +'<div class="oc-sub">'+sub+'</div>'
-        +(badge||'')
-        +'</div>';
-    };
-    var supply  = result.tokens_per_sec_per_gpu!=null ? fmt(result.tokens_per_sec_per_gpu,' tok/s',0) : '—';
-    var tokReq  = sizing ? (sizing.isl+sizing.osl).toLocaleString() : '—';
-    var rpsStr  = sizing ? fmt(sizing.rps,'/s',1) : '—';
-    var demStr  = sizing ? fmtN(sizing.demandTps)+' tok/s' : '—';
-    var tGPUs   = sizing && sizing.gpusThroughput!=null ? String(sizing.gpusThroughput) : '—';
-    var mGPUs   = sizing ? String(sizing.gpusMemory) : '—';
-    var fGPUs   = sizing ? String(sizing.gpusFinal)  : '—';
-
-    // GPU hero — same style as Capacity winner card
-    var heroBadge = sizing
-      ? '<span class="oc-badge good">'+sizing.autoTp+'× tensor parallel</span>'
-      : '';
-    var heroSub = sizing
-      ? sizing.gpuLabel+' · '+sizing.replicas+' replica'+(sizing.replicas>1?'s':'')+' × '+sizing.autoTp+' GPU'
-      : 'run estimate first';
-
-    grid.innerHTML =
-        oc('Required GPUs', fGPUs, heroSub, heroBadge, 'winner')
-      + oc('Tokens / request', tokReq,  'input + output per request')
-      + oc('Req / sec',        rpsStr,  'batch ÷ request latency')
-      + oc('Throughput demand',demStr,  'req/s × tokens/request')
-      + oc('Supply / GPU',     supply,  'tok/s per GPU · from estimator')
-      + oc('Throughput GPUs',  tGPUs,   'ceil(demand ÷ supply/GPU)')
-      + oc('Memory / KV GPUs', mGPUs,   sizing
-          ? sizing.replicas+' replica×'+sizing.autoTp+'GPU · '+fmtN(sizing.upr)+' users/replica'
-          : 'weights + KV cache');
-  }
-
-  // ── Calculation breakdown ──
-  var breakdownDetails = document.getElementById('cal-breakdown-details');
-  var breakdown = document.getElementById('cal-breakdown');
-  if(breakdown && sizing){
-    if(breakdownDetails) breakdownDetails.style.display = 'block';
-    // Populate editable inputs with current values
-    var szIsl = document.getElementById('sz-isl');
-    var szOsl = document.getElementById('sz-osl');
-    var szBatch = document.getElementById('sz-batch');
-    var szCtx = document.getElementById('sz-ctx');
-    if(szIsl && !szIsl._edited) szIsl.value = sizing.isl;
-    if(szOsl && !szOsl._edited) szOsl.value = sizing.osl;
-    if(szBatch && !szBatch._edited) szBatch.value = sizing.batch;
-    if(szCtx && !szCtx._edited) szCtx.value = sizing.ctxK;
-    var fmt2 = function(v,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v).toLocaleString()):'—'; };
-    var line = function(label, val){
-      return '<div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">'
-        +'<span style="font-size:11px;color:var(--text3);min-width:160px;flex-shrink:0">'+label+'</span>'
-        +'<span style="font-size:12px;font-family:var(--mono);color:var(--text2);flex:1">'+val+'</span>'
-        +'</div>';
-    };
-    breakdown.innerHTML =
-      '<div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">Sizing calculation</div>'
-      + line('Tokens / request', sizing.isl+' + '+sizing.osl+' = <b>'+fmt2(sizing.tokPerReq)+'</b> tokens')
-      + line('Req / sec', fmt2(sizing.batch)+' batch ÷ '+(sizing.latSec?fmt2(sizing.latSec,3)+'s lat':'est.')+' = <b>'+fmt2(sizing.rps,1)+'/s</b>')
-      + line('Throughput demand', fmt2(sizing.rps,1)+' × '+fmt2(sizing.tokPerReq)+' = <b>'+fmt2(sizing.demandTps)+' tok/s</b>')
-      +(sizing.tpsPerGpu ? line('Supply / GPU', 'estimator → <b>'+fmt2(sizing.tpsPerGpu,0)+' tok/s</b>') : '')
-      +(sizing.gpusThroughput!=null ? line('Throughput GPUs', 'ceil('+fmt2(sizing.demandTps)+' ÷ '+fmt2(sizing.tpsPerGpu,0)+') = <b>'+sizing.gpusThroughput+'</b>') : '')
-      + line('Auto TP', sizing.autoTp+'× (min to fit '+fmt2(sizing.wGB,1)+'GB weights on '+sizing.vram+'GB VRAM)')
-      + line('KV / user', fmt2(sizing.kvPU,2)+'GB · ctx='+sizing.ctxK+'K · avail='+fmt2(sizing.avail,1)+'GB → <b>'+fmt2(sizing.upr)+' users/replica</b>')
-      + line('Memory GPUs', sizing.replicas+' replicas × '+sizing.autoTp+' GPU = <b>'+sizing.gpusMemory+'</b>')
-      + line('Final required', 'max('+[sizing.gpusThroughput!=null?sizing.gpusThroughput:'—', sizing.gpusMemory].join(', ')+') = <b style="color:var(--blue)">'+sizing.gpusFinal+' '+sizing.gpuLabel+'</b>');
-  } else if(breakdownDetails){
-    breakdownDetails.style.display = 'none';
-  }
-
-  // ── Collapsible estimator details (raw metrics + debug) ──
-  var rows = [
-    ['Tokens / sec',      result.tokens_per_sec!=null?Math.round(result.tokens_per_sec)+' tok/s':'—'],
-    ['Tokens / sec / GPU',result.tokens_per_sec_per_gpu!=null?parseFloat(result.tokens_per_sec_per_gpu).toFixed(1)+' tok/s':'—'],
-    ['TTFT',              result.ttft_ms!=null?parseFloat(result.ttft_ms).toFixed(2)+' ms':'—'],
-    ['TPOT',              result.tpot_ms!=null?parseFloat(result.tpot_ms).toFixed(2)+' ms':'—'],
-    ['Request latency',   result.latency_ms!=null?parseFloat(result.latency_ms).toFixed(1)+' ms':'—'],
-    ['GPU memory',        result.gpu_memory_gb!=null?parseFloat(result.gpu_memory_gb).toFixed(1)+' GB':'—'],
-    ['Input / Output tokens', result.isl+' / '+result.osl+' tokens'],
-    ['Batch size',        result.batch],
-    ['Tensor parallel',   result.tp],
-    ['Pipeline parallel', result.pp],
-    ['Mode',              result.mode?result.mode.charAt(0).toUpperCase()+result.mode.slice(1):'—'],
-  ];
-  var tbl = document.getElementById('cal-metrics-table');
-  if(tbl){
-    tbl.innerHTML =
-      '<tr style="background:var(--bg2);border-bottom:1px solid var(--border)">'
-      +'<th style="text-align:left;padding:5px 10px;font-size:10px;color:var(--text4);font-weight:600;text-transform:uppercase">Metric</th>'
-      +'<th style="text-align:right;padding:5px 10px;font-size:10px;color:var(--text4);font-weight:600;text-transform:uppercase">Value</th></tr>'
-      + rows.map(function(row){
-        return '<tr style="border-bottom:1px solid var(--border)">'
-          +'<td style="padding:4px 10px;font-size:12px;color:var(--text3)">'+row[0]+'</td>'
-          +'<td style="padding:4px 10px;font-size:12px;font-family:var(--mono);text-align:right;color:var(--text1)">'+row[1]+'</td>'
-          +'</tr>';
-      }).join('');
-  }
-
-  renderCalSavedComparison();
-}
-
-function saveCalResult(){
-  if(!CAL_STATE.lastResult) return;
-  var r = Object.assign({id: Date.now()}, CAL_STATE.lastResult);
-  CAL_STATE.savedRuns.push(r);
-  try{ localStorage.setItem('cal_saved', JSON.stringify(CAL_STATE.savedRuns)); }catch(e){}
-  renderCalSavedComparison();
-}
-
-function deleteCalRun(id){
-  CAL_STATE.savedRuns = CAL_STATE.savedRuns.filter(function(r){return r.id !== id;});
-  try{ localStorage.setItem('cal_saved', JSON.stringify(CAL_STATE.savedRuns)); }catch(e){}
-  renderCalSavedComparison();
-}
-
-function clearCalSaved(){
-  CAL_STATE.savedRuns = [];
-  try{ localStorage.removeItem('cal_saved'); }catch(e){}
-  renderCalSavedComparison();
-}
-
-function renderCalSavedComparison(){
-  var comp = document.getElementById('cal-comparison');
-  if(!comp) return;
-  if(!CAL_STATE.savedRuns || CAL_STATE.savedRuns.length === 0){
-    comp.style.display = 'none';
-    return;
-  }
-  comp.style.display = 'block';
-
-  // Table
-  var tbody = document.getElementById('cal-compare-tbody');
-  if(tbody){
-    tbody.innerHTML = CAL_STATE.savedRuns.map(function(r){
-      var modeColor = r.mode==='exact'?'var(--green)':r.mode==='proxy'?'#dc2626':'var(--text3)';
-      var fn = function(v,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v)):'—'; };
-      return '<tr style="border-bottom:1px solid var(--border)">'
-        +'<td style="padding:5px 8px;font-weight:500;font-size:12px">'+r.modelLabel+'</td>'
-        +'<td style="padding:5px 8px;color:var(--text2);font-size:12px">'+(CAL_GPU_LABELS[r.gpu]||r.gpu)+'</td>'
-        +'<td style="padding:5px 8px;color:var(--text2);font-size:12px">'+(r.backend||'').toUpperCase()+'</td>'
-        +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px">'+fn(r.tokens_per_sec)+'</td>'
-        +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px">'+fn(r.tokens_per_sec_per_gpu,1)+'</td>'
-        +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px">'+(r.latency_ms!=null?fn(r.latency_ms,1)+'ms':'—')+'</td>'
-        +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px">'+(r.ttft_ms!=null?fn(r.ttft_ms,1)+'ms':'—')+'</td>'
-        +'<td style="padding:5px 8px"><span style="font-size:10px;font-weight:600;color:'+modeColor+'">'+r.mode+'</span></td>'
-        +'<td style="padding:5px 8px"><button onclick="deleteCalRun('+r.id+')" style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3)">✕</button></td>'
-        +'</tr>';
-    }).join('');
-  }
-
-  renderCalChart();
-}
-
-var calChartInstance = null;
-function renderCalChart(){
-  var metric = (document.getElementById('cal-compare-metric')||{}).value || 'tokens_per_sec';
-  var canvas = document.getElementById('cal-chart');
-  if(!canvas || !CAL_STATE.savedRuns.length) return;
-
-  var metricLabels = {tokens_per_sec:'Tokens/sec',latency_ms:'Latency (ms)',
-    ttft_ms:'TTFT (ms)',tpot_ms:'TPOT (ms)',gpu_memory_gb:'GPU memory (GB)'};
-
-  if(calChartInstance) calChartInstance.destroy();
-
-  // Scatter: X=latency, Y=selected metric (default tok/s)
-  // If latency not available fall back to bar chart
-  var hasLatency = CAL_STATE.savedRuns.some(function(r){ return r.latency_ms != null; });
-  var useScatter = hasLatency && metric !== 'latency_ms';
-
-  var colors = CAL_STATE.savedRuns.map(function(r){
-    return r.mode==='exact'?'rgba(22,163,74,0.8)':r.mode==='proxy'?'rgba(245,158,11,0.8)':'rgba(107,114,128,0.6)';
-  });
-
-  function drawChart(){
-    var cfg;
-    if(useScatter){
-      var points = CAL_STATE.savedRuns.map(function(r,i){
-        var xv = r.latency_ms; var yv = r[metric];
-        return {x: xv!=null?xv:0, y: yv!=null?yv:0, label: r.modelLabel, missing: xv==null||yv==null};
-      }).filter(function(p){ return !p.missing; }); // skip runs with missing values
-      cfg = {
-        type:'scatter',
-        data:{datasets:[{
-          label:metricLabels[metric]||metric,
-          data:points,
-          backgroundColor:colors,
-          pointRadius:8, pointHoverRadius:10
-        }]},
-        options:{
-          responsive:true, maintainAspectRatio:false,
-          plugins:{
-            legend:{display:false},
-            tooltip:{callbacks:{
-              label:function(ctx){
-                var d=ctx.raw;
-                return d.label+': x='+d.x.toFixed(1)+'ms y='+d.y.toFixed(1);
-              }
-            }}
-          },
-          scales:{
-            x:{title:{display:true,text:'Latency (ms)',font:{size:11}},ticks:{font:{size:11}}},
-            y:{title:{display:true,text:metricLabels[metric]||metric,font:{size:11}},ticks:{font:{size:11}}}
-          }
-        }
-      };
-    } else {
-      var labels = CAL_STATE.savedRuns.map(function(r){ return r.modelLabel + ' / ' + (CAL_GPU_LABELS[r.gpu]||r.gpu); });
-      var values = CAL_STATE.savedRuns.map(function(r){ return r[metric] || 0; });
-      cfg = {
-        type:'bar',
-        data:{labels:labels,datasets:[{
-          label:metricLabels[metric]||metric,
-          data:values,backgroundColor:colors,borderRadius:4
-        }]},
-        options:{
-          responsive:true, maintainAspectRatio:false,
-          plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ctx.parsed.y.toFixed(1);}}}},
-          scales:{x:{ticks:{font:{size:11},maxRotation:30}},y:{ticks:{font:{size:11}}}}
-        }
-      };
-    }
-    calChartInstance = new Chart(canvas, cfg);
-  }
-
-  if(typeof Chart !== 'undefined'){
-    drawChart();
-  } else {
-    var s=document.createElement('script');
-    s.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
-    s.onload=drawChart;
-    document.head.appendChild(s);
-  }
-}
-
-function calPullFromAdvanced(){
-  var gpuMap={'H100':'h100_sxm','H200':'h200_sxm','A100':'a100_sxm','A100 80GB':'a100_sxm',
-    'L40S':'l40s','B200':'b200_sxm','MI300X':'mi300x'};
-  var fwMap={'vllm':'vllm','trtllm':'trtllm','trt-llm':'trtllm'};
-
-  // Always copy full model arch from S — this is the definitive source
-  CAL_STATE.modelPath  = S.hfId || CAL_STATE.modelPath;
-  CAL_STATE.modelLabel = S.modelLabel;
-  CAL_STATE.modelArch  = {
-    params:S.params, prec:S.prec||'fp16', kvPrec:S.kvPrec||'fp16',
-    numLayers:S.numLayers, numKvHeads:S.numKvHeads, numHeads:S.numHeads,
-    headDim:S.headDim, attn:S.attn,
-    kvLayers:S.kvLayers||null, kvArchType:S.kvArchType||null,
-    kvGlobalLayers:S.kvGlobalLayers!=null?S.kvGlobalLayers:null,
-    kvSlidingLayers:S.kvSlidingLayers!=null?S.kvSlidingLayers:null,
-    slidingWindow:S.slidingWindow||null,
-    globalKvHeads:S.globalKvHeads||null, globalHeadDim:S.globalHeadDim||null,
-    kvLoraRank:S.kvLoraRank||null, qkRopeHeadDim:S.qkRopeHeadDim||null,
-    activeExperts:S.activeExperts||null, totalExperts:S.totalExperts||null
-  };
-
-  // Update model display
-  var disp = document.getElementById('cal-model-display');
-  if(disp) disp.textContent = S.modelLabel;
-  // Deselect preset chips (pulled model may not be a preset)
-  document.querySelectorAll('#cal-model-chips .chip').forEach(function(b){
+  var d = document.getElementById('perf-model-display');
+  if(d) d.textContent = S.modelLabel;
+  document.querySelectorAll('#perf-model-chips .chip').forEach(function(b){
     b.classList.toggle('on', b.textContent.trim() === S.modelLabel);
   });
 
-  // GPU
-  var gpuVal = gpuMap[S.gpuName] || 'h100_sxm';
-  var gpuSel = document.getElementById('cal-gpu');
-  if(gpuSel) gpuSel.value = gpuVal;
+  var gpuSel = document.getElementById('perf-gpu');
+  if(gpuSel) gpuSel.value = gpuMap[S.gpuName] || gpuSel.value;
 
-  // Backend
-  var backEl = document.getElementById('cal-backend');
+  var backEl = document.getElementById('perf-backend');
   if(backEl && S.fw) backEl.value = fwMap[S.fw] || backEl.value;
 
-  // TP
-  var tpEl = document.getElementById('cal-tp');
+  var tpEl = document.getElementById('perf-tp');
   if(tpEl && S.tp) tpEl.value = S.tp;
 
-  // Input tokens ≈ 75% of context window (ctx is in K tokens)
-  var islEl = document.getElementById('cal-isl');
+  var islEl = document.getElementById('perf-isl');
   if(islEl && S.ctx) islEl.value = Math.round(S.ctx * 1000 * 0.75);
 
-  // Batch size from concurrent users
-  var batchEl = document.getElementById('cal-batch');
+  var batchEl = document.getElementById('perf-batch');
   if(batchEl && S.users) batchEl.value = S.users;
 
-  // Context window
-  var ctxEl = document.getElementById('cal-ctx');
-  if(ctxEl && S.ctx) ctxEl.value = S.ctx;
-
-  calPayloadEdited = false;
-  updateCalPayload();
+  updateEffectiveISL();
 }
 
-function exportCalToSheets(){
-  var r = CAL_STATE.lastResult;
+function buildPerfPayload(){
+  var isl     = parseInt(document.getElementById('perf-isl').value)||4000;
+  var osl     = parseInt(document.getElementById('perf-osl').value)||500;
+  var pct     = parseInt(document.getElementById('perf-prefix-pct').value)||0;
+  var effIsl  = Math.round(isl * (1 - pct/100));
+  var batch   = parseInt(document.getElementById('perf-batch').value)||64;
+  var gpu     = document.getElementById('perf-gpu').value||'h100_sxm';
+  var backend = document.getElementById('perf-backend').value||'vllm';
+  var dbmode  = document.getElementById('perf-dbmode').value||'HYBRID';
+  var tp      = parseInt(document.getElementById('perf-tp').value)||4;
+  var pp      = parseInt(document.getElementById('perf-pp').value)||1;
+
+  if(PERF_STATE.mode === 'estimate'){
+    return {
+      endpoint: 'estimate',
+      payload: {
+        model_path:    PERF_STATE.modelPath,
+        system:        gpu,
+        backend:       backend,
+        database_mode: dbmode,
+        isl:           effIsl,
+        osl:           osl,
+        batch_size:    batch,
+        tp_size:       tp,
+        pp_size:       pp
+      },
+      meta: { isl_original: isl, prefix_pct: pct, eff_isl: effIsl }
+    };
+  } else {
+    return {
+      endpoint: 'query',
+      payload: {
+        model_path:    PERF_STATE.modelPath,
+        total_gpus:    tp * 8,
+        system:        gpu,
+        backend:       backend,
+        database_mode: dbmode,
+        isl:           effIsl,
+        osl:           osl,
+        prefix:        Math.round(isl * pct/100)
+      },
+      meta: { isl_original: isl, prefix_pct: pct, eff_isl: effIsl }
+    };
+  }
+}
+
+function showPerfLoading(show, title, isSweep){
+  var modal = document.getElementById('perf-loading-modal');
+  if(!modal) return;
+  modal.style.display = show ? 'flex' : 'none';
+  if(show){
+    var t = document.getElementById('perf-loading-title');
+    if(t) t.textContent = title || 'Running estimate...';
+    var sp = document.getElementById('perf-sweep-progress');
+    if(sp) sp.style.display = isSweep ? 'block' : 'none';
+  }
+}
+
+function updateSweepProgress(done, total){
+  var bar = document.getElementById('perf-sweep-bar');
+  var st  = document.getElementById('perf-sweep-status');
+  if(bar) bar.style.width = Math.round(done/total*100)+'%';
+  if(st)  st.textContent  = 'Batch '+done+' of '+total+' complete...';
+}
+
+function runPerfEstimate(forceRefresh){
+  var cfg = buildPerfPayload();
+  var cacheKey = JSON.stringify(cfg);
+
+  // Update payload display
+  var preEl = document.getElementById('perf-req-payload');
+  if(preEl) preEl.textContent = JSON.stringify(cfg.payload, null, 2);
+
+  // Check cache
+  if(!forceRefresh && perfCache[cacheKey]){
+    renderPerfResult(perfCache[cacheKey], true);
+    return;
+  }
+
+  var autoSweep = document.getElementById('perf-auto-sweep');
+  var doSweep   = autoSweep && autoSweep.checked && PERF_STATE.mode === 'estimate';
+
+  if(doSweep){
+    runPerfSweep(cfg, cacheKey);
+  } else {
+    runSinglePerfEstimate(cfg, cacheKey);
+  }
+}
+
+function callAICEndpoint(endpoint, payload, cb, errCb){
+  // Call via Cloudflare Worker proxy (AIC key never in browser)
+  fetch(AIC_WORKER, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ endpoint: endpoint, payload: payload })
+  })
+  .then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  })
+  .then(cb)
+  .catch(errCb || function(e){ console.error('AIC error:', e); });
+}
+
+function runSinglePerfEstimate(cfg, cacheKey){
+  showPerfLoading(true, 'Running estimate...');
+
+  callAICEndpoint(cfg.endpoint, cfg.payload,
+    function(data){
+      showPerfLoading(false);
+      var raw = document.getElementById('perf-raw-response');
+      if(raw) raw.textContent = JSON.stringify(data, null, 2);
+      var result = parsePerfResult(data, cfg, cacheKey);
+      perfCache[cacheKey] = result;
+      try{ localStorage.setItem('perf_cache', JSON.stringify(perfCache)); }catch(e){}
+      renderPerfResult(result, false);
+    },
+    function(err){
+      showPerfLoading(false);
+      showPerfError('API error: '+err.message+'. Check model+GPU combo is supported. Try HYBRID database mode.');
+    }
+  );
+}
+
+function runPerfSweep(cfg, cacheKey){
+  var batchSizes = [32, 64, 128, 180, 256];
+  var results    = [];
+  var done       = 0;
+  showPerfLoading(true, 'Running batch sweep...', true);
+  updateSweepProgress(0, batchSizes.length);
+
+  function runNext(i){
+    if(i >= batchSizes.length){
+      showPerfLoading(false);
+      var sweepResult = {
+        type: 'sweep',
+        batches: results,
+        cfg: cfg,
+        cacheKey: cacheKey,
+        ts: Date.now()
+      };
+      PERF_STATE.sweepResults = sweepResult;
+      perfCache[cacheKey] = sweepResult;
+      try{ localStorage.setItem('perf_cache', JSON.stringify(perfCache)); }catch(e){}
+      renderSweepResults(sweepResult);
+      return;
+    }
+    var bs = batchSizes[i];
+    var p  = Object.assign({}, cfg.payload, {batch_size: bs});
+    var t0 = Date.now();
+
+    callAICEndpoint('estimate', p,
+      function(data){
+        done++;
+        updateSweepProgress(done, batchSizes.length);
+        results.push({ batch_size: bs, data: data, elapsed: Date.now()-t0 });
+        runNext(i+1);
+      },
+      function(err){
+        done++;
+        updateSweepProgress(done, batchSizes.length);
+        results.push({ batch_size: bs, error: err.message });
+        runNext(i+1);
+      }
+    );
+  }
+  runNext(0);
+}
+
+function parsePerfResult(data, cfg, cacheKey){
+  var p    = data.performance || {};
+  var conf = data.config       || {};
+  var mem  = data.memory_gib   || {};
+
+  // For query mode, extract from summary
+  if(cfg.endpoint === 'query'){
+    var sum = data.summary || {};
+    return {
+      type:        'query',
+      mode:        sum.chosen_mode,
+      speedup:     sum.speedup_over_other,
+      throughput:  sum.best_throughput_tokens_s_gpu,
+      ttft:        sum.best_ttft_ms,
+      tpot:        sum.best_tpot_ms,
+      latency:     sum.best_request_latency_ms,
+      disagg_configs: (data.configs||{}).disagg || [],
+      agg_configs:    (data.configs||{}).agg    || [],
+      pareto:         data.pareto || {},
+      all_tp:     data.all_best_throughputs || {},
+      all_lat:    data.all_best_latencies   || {},
+      cfg:        cfg,
+      cacheKey:   cacheKey,
+      ts:         Date.now(),
+      raw:        data
+    };
+  }
+
+  return {
+    type:         'estimate',
+    ttft:         p.ttft_ms,
+    tpot:         p.tpot_ms,
+    latency:      p.request_latency_ms,
+    tokens_s:     p.tokens_per_s,
+    tokens_s_gpu: p.tokens_per_s_gpu,
+    tokens_s_user:p.tokens_per_s_user,
+    seq_s:        p.seq_per_s,
+    tokens_day:   p.tokens_per_day,
+    memory_gib:   mem.total,
+    system:       conf.system,
+    backend:      conf.backend,
+    backend_ver:  conf.backend_version,
+    mode:         conf.mode,
+    num_gpus:     conf.num_total_gpus,
+    tp_size:      conf.tp_size,
+    parallel:     conf.parallel,
+    gemm_quant:   conf.gemm_quant,
+    kvcache_quant:conf.kvcache_quant,
+    per_op:       data.per_op_latency_ms || {},
+    scheduling:   data.scheduling || {},
+    cfg:          cfg,
+    cacheKey:     cacheKey,
+    ts:           Date.now(),
+    raw:          data
+  };
+}
+
+function renderPerfResult(result, fromCache){
+  if(result.type === 'sweep'){
+    renderSweepResults(result);
+    return;
+  }
+  PERF_STATE.lastResult = result;
+  PERF_STATE.lastRaw    = result.raw;
+
+  document.getElementById('perf-empty').style.display   = 'none';
+  document.getElementById('perf-results').style.display = 'block';
+
+  // Status bar
+  var badge = document.getElementById('perf-mode-badge');
+  if(badge){
+    var isHybrid = (result.cfg && result.cfg.payload && result.cfg.payload.database_mode === 'HYBRID');
+    badge.textContent   = isHybrid ? '~ HYBRID' : '✓ SILICON';
+    badge.style.color   = isHybrid ? '#f59e0b' : 'var(--green)';
+  }
+  var rm = document.getElementById('perf-result-model');
+  if(rm) rm.textContent = PERF_STATE.modelLabel;
+  var rc = document.getElementById('perf-result-config');
+  if(rc) rc.textContent = (PERF_GPU_LABELS[result.system||result.cfg.payload.system]||'') + ' · ' + (result.backend||result.cfg.payload.backend||'').toUpperCase() + ' · TP=' + (result.tp_size||result.cfg.payload.tp_size||'?');
+  var ts = document.getElementById('perf-result-ts');
+  if(ts) ts.textContent = (fromCache ? '📦 cached · ' : '✨ fresh · ') + new Date(result.ts).toLocaleTimeString();
+
+  // Cache badge
+  var cb = document.getElementById('perf-cache-badge');
+  var rb = document.getElementById('perf-refresh-btn');
+  if(cb){ cb.textContent = fromCache ? '📦 Cached' : '✨ Fresh'; cb.style.display='inline'; }
+  if(rb) rb.style.display = fromCache ? 'inline' : 'none';
+
+  // Show action buttons
+  ['perf-export-btn','perf-json-btn','perf-save-btn','perf-export-btn2','perf-json-btn2'].forEach(function(id){
+    var b = document.getElementById(id); if(b) b.style.display='inline';
+  });
+
+  // Warning banner
+  var warn = document.getElementById('perf-warn-banner');
+  if(warn){
+    var isHybrid2 = (result.cfg && result.cfg.payload && result.cfg.payload.database_mode === 'HYBRID');
+    if(isHybrid2){
+      warn.style.display = 'block';
+      warn.innerHTML = '⚠ <strong>HYBRID mode</strong> — no exact silicon data for this model+GPU combo. AIC is extrapolating. Add ~20-30% buffer for production planning.';
+    } else {
+      warn.style.display = 'none';
+    }
+  }
+
+  var fmt  = function(v,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v).toLocaleString()):'—'; };
+  var fmtMs = function(v){ return v!=null?parseFloat(v).toFixed(0)+'ms':'—'; };
+
+  // Targets from inputs
+  var reqDay   = parseInt((document.getElementById('perf-req-day')||{}).value)||100000000;
+  var tokSec   = parseInt((document.getElementById('perf-tok-sec')||{}).value)||5000;
+  var bufPct   = parseInt((document.getElementById('perf-buffer')||{}).value)||30;
+  var gpuKey   = (document.getElementById('perf-gpu')||{}).value||'h100_sxm';
+  var seqS     = result.seq_s;
+  var tpsGpu   = result.tokens_s_gpu;
+
+  // GPU count calculations
+  var gpuReqDay    = null, gpuTokSec = null;
+  var gpuReqDayBuf = null, gpuTokSecBuf = null;
+  var reqDayCapacity = null;
+
+  if(seqS && seqS > 0){
+    var reqDayPerUnit = seqS * 86400;
+    var tpSize = result.tp_size || parseInt((document.getElementById('perf-tp')||{}).value)||4;
+    var gpusPerUnit = tpSize;
+    gpuReqDay    = Math.ceil(reqDay / reqDayPerUnit) * gpusPerUnit;
+    gpuReqDayBuf = Math.ceil(gpuReqDay * (1 + bufPct/100));
+    reqDayCapacity = reqDayPerUnit * gpusPerUnit;
+  }
+  if(tpsGpu && tpsGpu > 0){
+    gpuTokSec    = Math.ceil(tokSec / tpsGpu);
+    gpuTokSecBuf = Math.ceil(gpuTokSec * (1 + bufPct/100));
+  }
+
+  // HERO CARDS
+  var heroGrid = document.getElementById('perf-hero-cards');
+  if(heroGrid){
+    var heroCard = function(label, val, sub, color){
+      return '<div style="background:var(--bg2);border:1px solid '+(color||'var(--border)')+';border-radius:var(--r);padding:14px;text-align:center">'
+        +'<div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">'+label+'</div>'
+        +'<div style="font-size:26px;font-weight:700;color:'+(color||'var(--text1)')+';margin-bottom:2px">'+val+'</div>'
+        +'<div style="font-size:11px;color:var(--text3)">'+sub+'</div>'
+        +'</div>';
+    };
+    heroGrid.innerHTML =
+      heroCard('GPUs for '+fmt(reqDay/1000000)+'M req/day',
+        gpuReqDay!=null ? gpuReqDay : '—',
+        gpuReqDay!=null ? 'with '+bufPct+'% buffer: '+gpuReqDayBuf+' · '+PERF_GPU_LABELS[gpuKey] : 'need seq/s data',
+        'var(--blue)')
+    + heroCard('GPUs for '+fmt(tokSec)+' tok/s',
+        gpuTokSec!=null ? gpuTokSec : '—',
+        gpuTokSec!=null ? 'with '+bufPct+'% buffer: '+gpuTokSecBuf : 'need tok/s/gpu data',
+        'var(--green)')
+    + heroCard('Req/day capacity',
+        reqDayCapacity!=null ? Math.round(reqDayCapacity/1000000).toLocaleString()+'M' : '—',
+        'per '+PERF_GPU_LABELS[gpuKey]+' unit at this batch',
+        'var(--border)');
+  }
+
+  // PERFORMANCE tiles
+  var perfCards = document.getElementById('perf-perf-cards');
+  if(perfCards){
+    var oc = function(label, val, sub){
+      return '<div class="oc"><div class="oc-label">'+label+'</div><div class="oc-val">'+val+'</div><div class="oc-sub">'+sub+'</div></div>';
+    };
+    perfCards.innerHTML =
+      oc('TTFT',             fmtMs(result.ttft),    'time to first token')
+    + oc('TPOT',             fmtMs(result.tpot),    'time per output token')
+    + oc('Request latency',  fmtMs(result.latency), 'end-to-end per request')
+    + oc('GPU memory',       result.memory_gib!=null?parseFloat(result.memory_gib).toFixed(1)+' GiB':'—', 'KV+weights+activations');
+  }
+
+  // THROUGHPUT tiles
+  var tpCards = document.getElementById('perf-throughput-cards');
+  if(tpCards){
+    var oc2 = function(label, val, sub){
+      return '<div class="oc"><div class="oc-label">'+label+'</div><div class="oc-val">'+val+'</div><div class="oc-sub">'+sub+'</div></div>';
+    };
+    tpCards.innerHTML =
+      oc2('Seq / s',           result.seq_s!=null?parseFloat(result.seq_s).toFixed(1):'—',           'requests/sec this config')
+    + oc2('Tokens / s',        result.tokens_s!=null?Math.round(result.tokens_s).toLocaleString():'—', 'total output tokens/sec')
+    + oc2('Tokens / s / GPU',  result.tokens_s_gpu!=null?parseFloat(result.tokens_s_gpu).toFixed(1):'—', 'per GPU throughput')
+    + oc2('Tokens / day',      result.tokens_day!=null?Math.round(result.tokens_day/1000000).toLocaleString()+'M':'—', 'total daily capacity');
+  }
+
+  // COST CARD
+  var costCard = document.getElementById('perf-cost-card');
+  if(costCard && gpuReqDay!=null){
+    var priceHr    = PERF_GPU_CLOUD_PRICE[gpuKey]||3.20;
+    var onpremUnit = PERF_GPU_ONPREM_PRICE[gpuKey]||30000;
+    var cloudMo    = gpuReqDay * priceHr * 24 * 30;
+    var cloud5yr   = cloudMo * 60;
+    var onpremTotal= gpuReqDay * onpremUnit;
+    var onpremMo   = onpremTotal / 60;
+    var savings    = cloudMo - onpremMo;
+    var fmtK = function(v){ return v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+(v/1000).toFixed(0)+'K':'$'+Math.round(v); };
+    costCard.innerHTML =
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px">'
+      +'<div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Monthly cost · '+gpuReqDay+' '+PERF_GPU_LABELS[gpuKey]+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">'
+      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px">'
+      +'<div style="font-size:10px;color:var(--text4);margin-bottom:4px">☁ CLOUD</div>'
+      +'<div style="font-size:22px;font-weight:700;color:#ef4444">'+fmtK(cloudMo)+'/mo</div>'
+      +'<div style="font-size:11px;color:var(--text3)">'+fmtK(cloud5yr)+' over 5yr · '+fmtK(priceHr)+'/hr/GPU</div>'
+      +'</div>'
+      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px">'
+      +'<div style="font-size:10px;color:var(--text4);margin-bottom:4px">■ ON-PREM</div>'
+      +'<div style="font-size:22px;font-weight:700;color:var(--green)">'+fmtK(onpremMo)+'/mo</div>'
+      +'<div style="font-size:11px;color:var(--text3)">5yr amort · '+fmtK(onpremTotal)+' total</div>'
+      +'</div>'
+      +'</div>'
+      +(savings>0?'<div style="font-size:12px;color:var(--green);font-weight:600">On-prem saves '+fmtK(savings)+'/mo</div>':'')
+      +'</div>';
+  }
+
+  // QUERY MODE — disagg + agg sections
+  var disaggSec = document.getElementById('perf-disagg-section');
+  var aggSec    = document.getElementById('perf-agg-section');
+  var compSec   = document.getElementById('perf-compare-section');
+
+  if(disaggSec) disaggSec.style.display = 'none';
+  if(aggSec)    aggSec.style.display    = 'none';
+  if(compSec)   compSec.style.display   = 'none';
+
+  if(result.type === 'query'){
+    renderDisaggSection(result);
+    renderAggSection(result);
+    renderCompareSection(result);
+  }
+
+  // PER-OP latency (estimate mode)
+  if(result.type === 'estimate' && result.per_op && (Object.keys(result.per_op.context||{}).length || Object.keys(result.per_op.generation||{}).length)){
+    var peropDet = document.getElementById('perf-perop-details');
+    if(peropDet) peropDet.style.display = 'block';
+    renderPerOpLatency(result.per_op, result.scheduling);
+  }
+
+  // SIZING MATH
+  renderSizingMath(result, reqDay, tokSec, bufPct, gpuKey);
+
+  renderPerfSaved();
+}
+
+function renderDisaggSection(result){
+  var disaggSec = document.getElementById('perf-disagg-section');
+  if(!disaggSec) return;
+  var configs = result.disagg_configs || [];
+  if(!configs.length){ return; }
+  disaggSec.style.display = 'block';
+
+  // Best config (rank 1)
+  var best = configs[0];
+  var pdRow = function(label, val){
+    return '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)">'
+      +'<span style="color:var(--text3)">'+label+'</span>'
+      +'<span style="font-family:var(--mono);color:var(--text1)">'+val+'</span></div>';
+  };
+
+  var prefillBody = document.getElementById('perf-prefill-body');
+  if(prefillBody) prefillBody.innerHTML =
+    pdRow('GPU', best['(p)system']||'—')
+   +pdRow('Workers', best['(p)workers']||'—')
+   +pdRow('Parallel', best['(p)parallel']||'—')
+   +pdRow('Batch size', best['(p)bs']||'—')
+   +pdRow('seq/s/worker', best['(p)seq/s/worker']!=null?parseFloat(best['(p)seq/s/worker']).toFixed(2):'—')
+   +pdRow('Memory GiB', best['(p)memory']!=null?parseFloat(best['(p)memory']).toFixed(2):'—');
+
+  var decodeBody = document.getElementById('perf-decode-body');
+  if(decodeBody) decodeBody.innerHTML =
+    pdRow('GPU', best['(d)system']||'—')
+   +pdRow('Workers', best['(d)workers']||'—')
+   +pdRow('Parallel', best['(d)parallel']||'—')
+   +pdRow('Batch size', best['(d)bs']||'—')
+   +pdRow('seq/s/worker', best['(d)seq/s/worker']!=null?parseFloat(best['(d)seq/s/worker']).toFixed(2):'—')
+   +pdRow('Memory GiB', best['(d)memory']!=null?parseFloat(best['(d)memory']).toFixed(2):'—');
+
+  // Top-N table
+  var tbl = document.getElementById('perf-disagg-table');
+  if(!tbl) return;
+  var cols = ['tokens/s/gpu','tokens/s/user','ttft','tpot','request_latency','num_total_gpus','(p)workers','(p)tp','(p)bs','(d)workers','(d)tp','(d)bs'];
+  var hdrs = ['tok/s/gpu','tok/s/user','TTFT','TPOT','latency','GPUs','(p)workers','(p)tp','(p)bs','(d)workers','(d)tp','(d)bs'];
+  var thead = '<tr style="background:var(--bg2);border-bottom:1px solid var(--border)">'
+    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:left">Rank</th>'
+    +hdrs.map(function(h){ return '<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">'+h+'</th>'; }).join('')
+    +'</tr>';
+  var tbody = configs.map(function(r,i){
+    return '<tr style="border-bottom:1px solid var(--border)'+(i===0?';background:rgba(59,130,246,0.05)':'')+'">'
+      +'<td style="padding:4px 8px;font-size:11px;font-weight:600;color:var(--blue)">'+(i+1)+'</td>'
+      +cols.map(function(c){
+        var v = r[c]; var s = v!=null?(typeof v==='number'?parseFloat(v).toFixed(c.includes('ms')||c==='ttft'||c==='tpot'||c==='request_latency'?0:1):''+v):'—';
+        return '<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right">'+s+'</td>';
+      }).join('')
+      +'</tr>';
+  }).join('');
+  tbl.innerHTML = thead + tbody;
+}
+
+function renderAggSection(result){
+  var aggSec = document.getElementById('perf-agg-section');
+  if(!aggSec) return;
+  var configs = result.agg_configs || [];
+  if(!configs.length) return;
+  aggSec.style.display = 'block';
+
+  var tbl = document.getElementById('perf-agg-table');
+  if(!tbl) return;
+  var cols = ['tokens/s/gpu','tokens/s/user','ttft','tpot','request_latency','num_total_gpus','tp','pp','bs'];
+  var hdrs = ['tok/s/gpu','tok/s/user','TTFT','TPOT','latency','GPUs','tp','pp','bs'];
+  var thead = '<tr style="background:var(--bg2);border-bottom:1px solid var(--border)">'
+    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:left">Rank</th>'
+    +hdrs.map(function(h){ return '<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">'+h+'</th>'; }).join('')
+    +'</tr>';
+  var tbody = configs.map(function(r,i){
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      +'<td style="padding:4px 8px;font-size:11px;font-weight:600;color:var(--green)">'+(i+1)+'</td>'
+      +cols.map(function(c){
+        var v = r[c]; var s = v!=null?(typeof v==='number'?parseFloat(v).toFixed(1):''+v):'—';
+        return '<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right">'+s+'</td>';
+      }).join('')
+      +'</tr>';
+  }).join('');
+  tbl.innerHTML = thead + tbody;
+}
+
+function renderCompareSection(result){
+  var compSec = document.getElementById('perf-compare-section');
+  if(!compSec) return;
+  var atp  = result.all_tp  || {};
+  var alat = result.all_lat || {};
+  if(!Object.keys(atp).length) return;
+  compSec.style.display = 'block';
+
+  var tbl = document.getElementById('perf-compare-table');
+  if(!tbl) return;
+  var modes = Object.keys(atp);
+  var fN = function(v){ return v!=null?parseFloat(v).toFixed(1):'—'; };
+  var thead = '<tr style="background:var(--bg2);border-bottom:2px solid var(--border)">'
+    +'<th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text3);font-weight:500">Mode</th>'
+    +'<th style="padding:6px 10px;text-align:right;font-size:11px;color:var(--text3);font-weight:500">tok/s/gpu</th>'
+    +'<th style="padding:6px 10px;text-align:right;font-size:11px;color:var(--text3);font-weight:500">TTFT</th>'
+    +'<th style="padding:6px 10px;text-align:right;font-size:11px;color:var(--text3);font-weight:500">TPOT</th>'
+    +'<th style="padding:6px 10px;text-align:right;font-size:11px;color:var(--text3);font-weight:500">Latency</th>'
+    +'<th style="padding:6px 10px;text-align:right;font-size:11px;color:var(--text3);font-weight:500">Winner</th>'
+    +'</tr>';
+  var tbody = modes.map(function(m){
+    var lat = alat[m]||{};
+    var isWinner = m === result.mode;
+    return '<tr style="border-bottom:1px solid var(--border)'+(isWinner?';background:rgba(34,197,94,0.06)':'')+'">'
+      +'<td style="padding:5px 10px;font-weight:600;font-size:12px;color:'+(m==='disagg'?'var(--blue)':'var(--green)')+'">'+m.toUpperCase()+'</td>'
+      +'<td style="padding:5px 10px;text-align:right;font-family:var(--mono);font-size:12px">'+fN(atp[m])+'</td>'
+      +'<td style="padding:5px 10px;text-align:right;font-family:var(--mono);font-size:12px">'+fN(lat.ttft)+'ms</td>'
+      +'<td style="padding:5px 10px;text-align:right;font-family:var(--mono);font-size:12px">'+fN(lat.tpot)+'ms</td>'
+      +'<td style="padding:5px 10px;text-align:right;font-family:var(--mono);font-size:12px">'+fN(lat.request_latency)+'ms</td>'
+      +'<td style="padding:5px 10px;text-align:right">'+(isWinner?'<span style="color:var(--green);font-weight:700;font-size:12px">✓ Best</span>':'')+'</td>'
+      +'</tr>';
+  }).join('');
+  if(result.speedup){
+    tbody += '<tr style="border-top:2px solid var(--border);background:var(--bg2)">'
+      +'<td colspan="6" style="padding:5px 10px;font-size:11px;color:var(--text3)">'+result.mode.toUpperCase()+' is <strong>'+result.speedup+'× better</strong> throughput than the other mode</td></tr>';
+  }
+  tbl.innerHTML = thead + tbody;
+}
+
+function renderPerOpLatency(perOp, sched){
+  var ctx = perOp.context    || {};
+  var gen = perOp.generation || {};
+  var fN  = function(v){ return v!=null?parseFloat(v).toFixed(2)+'ms':'—'; };
+
+  var ctxEl = document.getElementById('perf-context-ops');
+  var genEl = document.getElementById('perf-gen-ops');
+  if(ctxEl) ctxEl.innerHTML = Object.keys(ctx).map(function(k){
+    return '<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--border)">'
+      +'<span style="color:var(--text3);font-size:10px">'+k.replace('context_','')+'</span>'
+      +'<span style="color:var(--text1)">'+fN(ctx[k])+'</span></div>';
+  }).join('');
+  if(genEl) genEl.innerHTML = Object.keys(gen).map(function(k){
+    return '<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--border)">'
+      +'<span style="color:var(--text3);font-size:10px">'+k.replace('generation_','')+'</span>'
+      +'<span style="color:var(--text1)">'+fN(gen[k])+'</span></div>';
+  }).join('');
+
+  var schedEl = document.getElementById('perf-scheduling');
+  if(schedEl && sched){
+    schedEl.innerHTML = 'Mix steps: '+Math.round(sched.num_mix_steps||0)+' · '
+      +'Genonly steps: '+Math.round(sched.num_genonly_steps||0)+' · '
+      +'Mix latency: '+(sched.mix_step_latency_ms!=null?parseFloat(sched.mix_step_latency_ms).toFixed(1)+'ms':'—')+' · '
+      +'Genonly latency: '+(sched.genonly_step_latency_ms!=null?parseFloat(sched.genonly_step_latency_ms).toFixed(1)+'ms':'—');
+  }
+}
+
+function renderSizingMath(result, reqDay, tokSec, bufPct, gpuKey){
+  var el = document.getElementById('perf-sizing-math');
+  if(!el) return;
+  var cfg    = result.cfg || {};
+  var pct    = (cfg.meta||{}).prefix_pct || 0;
+  var islOrig= (cfg.meta||{}).isl_original || (cfg.payload||{}).isl || '—';
+  var effIsl = (cfg.meta||{}).eff_isl || (cfg.payload||{}).isl || '—';
+  var osl    = (cfg.payload||{}).osl || '—';
+  var tp     = result.tp_size || (cfg.payload||{}).tp_size || '?';
+  var seqS   = result.seq_s;
+  var tpsGpu = result.tokens_s_gpu;
+  var fmt2   = function(v,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v).toLocaleString()):'—'; };
+
+  var line = function(label, val){
+    return '<div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">'
+      +'<span style="font-size:11px;color:var(--text3);min-width:180px;flex-shrink:0">'+label+'</span>'
+      +'<span style="font-size:12px;font-family:var(--mono);color:var(--text2)">'+val+'</span></div>';
+  };
+
+  var html =
+    line('Original ISL',           islOrig+' tokens')
+   +line('Prefix reuse',           pct+'% → effective ISL = '+effIsl+' tokens')
+   +line('Tokens / request',       effIsl+' + '+osl+' = <b>'+(parseInt(effIsl)+parseInt(osl)).toLocaleString()+'</b> tokens')
+   +line('seq/s (AIC)',            seqS!=null?fmt2(seqS,2)+' req/sec':'—')
+   +line('req/day capacity (1 unit)', seqS!=null?Math.round(seqS*86400).toLocaleString()+' req/day per '+tp+' GPUs':'—');
+
+  if(seqS && seqS > 0){
+    var unit = seqS * 86400;
+    var gpuBase = Math.ceil(reqDay/unit) * tp;
+    var gpuBuf  = Math.ceil(gpuBase * (1+bufPct/100));
+    html +=
+      line('For '+reqDay.toLocaleString()+' req/day', 'ceil('+reqDay.toLocaleString()+' ÷ '+Math.round(unit).toLocaleString()+') × '+tp+' = <b>'+gpuBase+' GPUs</b>')
+     +line('With '+bufPct+'% infra buffer',   '<b>'+gpuBuf+' '+PERF_GPU_LABELS[gpuKey]+'</b>');
+  }
+  if(tpsGpu && tpsGpu > 0){
+    var gpuTok    = Math.ceil(tokSec/tpsGpu);
+    var gpuTokBuf = Math.ceil(gpuTok*(1+bufPct/100));
+    html +=
+      line('tok/s/gpu (AIC)',     fmt2(tpsGpu,1)+' tok/s/GPU')
+     +line('For '+tokSec.toLocaleString()+' tok/s', 'ceil('+tokSec.toLocaleString()+' ÷ '+fmt2(tpsGpu,1)+') = <b>'+gpuTok+' GPUs</b>')
+     +line('With '+bufPct+'% infra buffer',   '<b>'+gpuTokBuf+' '+PERF_GPU_LABELS[gpuKey]+'</b>');
+  }
+  el.innerHTML = html;
+}
+
+function renderSweepResults(sweepResult){
+  PERF_STATE.sweepResults = sweepResult;
+  document.getElementById('perf-empty').style.display   = 'none';
+  document.getElementById('perf-results').style.display = 'block';
+
+  ['perf-export-btn','perf-json-btn','perf-save-btn','perf-export-btn2','perf-json-btn2'].forEach(function(id){
+    var b = document.getElementById(id); if(b) b.style.display='inline';
+  });
+
+  var reqDay = parseInt((document.getElementById('perf-req-day')||{}).value)||100000000;
+  var bufPct = parseInt((document.getElementById('perf-buffer')||{}).value)||30;
+  var gpuKey = (document.getElementById('perf-gpu')||{}).value||'h100_sxm';
+  var tp     = parseInt((document.getElementById('perf-tp')||{}).value)||4;
+
+  var sweepDiv = document.getElementById('perf-sweep-results');
+  if(!sweepDiv) return;
+  sweepDiv.style.display = 'block';
+
+  var tbl = document.getElementById('perf-sweep-table');
+  if(!tbl) return;
+
+  var thead = '<tr style="background:var(--bg2);border-bottom:1px solid var(--border)">'
+    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:left">Batch</th>'
+    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">seq/s</th>'
+    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">Latency</th>'
+    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">TTFT</th>'
+    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">TPOT</th>'
+    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">Mem GiB</th>'
+    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">GPUs(req/day)</th>'
+    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">SLA 1s</th>'
+    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">SLA 2s</th>'
+    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">SLA 3s</th>'
+    +'</tr>';
+
+  var bestSeqS = 0, bestBatch = null;
+  var tbody = sweepResult.batches.map(function(b){
+    if(b.error) return '<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px;font-size:11px">'+b.batch_size+'</td><td colspan="9" style="padding:4px 8px;font-size:11px;color:var(--red)">Error: '+b.error+'</td></tr>';
+    var p   = b.data.performance || {};
+    var mem = (b.data.memory_gib||{}).total;
+    var seq = p.seq_per_s;
+    var lat = p.request_latency_ms;
+    if(seq && seq > bestSeqS){ bestSeqS = seq; bestBatch = b.batch_size; }
+    var gpus = null;
+    if(seq && seq > 0) gpus = Math.ceil(reqDay/(seq*86400)) * tp;
+    var sla = function(ms){ return lat!=null && lat <= ms ? '<span style="color:var(--green);font-weight:700">✓</span>' : '<span style="color:var(--red)">✗</span>'; };
+    var isBest = b.batch_size === bestBatch;
+    return '<tr style="border-bottom:1px solid var(--border)'+(isBest?';background:rgba(34,197,94,0.06)':'')+'">'
+      +'<td style="padding:4px 8px;font-size:11px;font-weight:'+(isBest?'700':'400')+'">'+b.batch_size+(isBest?' ★':'')+'</td>'
+      +'<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right">'+(seq!=null?parseFloat(seq).toFixed(2):'—')+'</td>'
+      +'<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right">'+(lat!=null?Math.round(lat)+'ms':'—')+'</td>'
+      +'<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right">'+(p.ttft_ms!=null?Math.round(p.ttft_ms)+'ms':'—')+'</td>'
+      +'<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right">'+(p.tpot_ms!=null?parseFloat(p.tpot_ms).toFixed(1)+'ms':'—')+'</td>'
+      +'<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right">'+(mem!=null?parseFloat(mem).toFixed(1):'—')+'</td>'
+      +'<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right;font-weight:600;color:var(--blue)">'+(gpus!=null?gpus:'—')+'</td>'
+      +'<td style="padding:4px 8px;text-align:center">'+sla(1000)+'</td>'
+      +'<td style="padding:4px 8px;text-align:center">'+sla(2000)+'</td>'
+      +'<td style="padding:4px 8px;text-align:center">'+sla(3000)+'</td>'
+      +'</tr>';
+  }).join('');
+  tbl.innerHTML = thead + tbody;
+
+  var rec = document.getElementById('perf-sweep-recommendation');
+  if(rec && bestBatch){
+    var bestGpus = Math.ceil(reqDay/(bestSeqS*86400))*tp;
+    rec.innerHTML = '★ <strong>Optimal batch size: '+bestBatch+'</strong> — highest seq/s ('+parseFloat(bestSeqS).toFixed(2)+'/s) · '+bestGpus+' '+PERF_GPU_LABELS[gpuKey]+' for '+Math.round(reqDay/1000000)+'M req/day · with '+bufPct+'% buffer: '+Math.ceil(bestGpus*(1+bufPct/100));
+  }
+}
+
+function showPerfError(msg){
+  document.getElementById('perf-empty').style.display   = 'none';
+  document.getElementById('perf-results').style.display = 'block';
+  var warn = document.getElementById('perf-warn-banner');
+  if(warn){ warn.style.display='block'; warn.innerHTML='❌ <strong>Error:</strong> '+msg; warn.style.borderColor='var(--red)'; }
+}
+
+function savePerfResult(){
+  if(!PERF_STATE.lastResult && !PERF_STATE.sweepResults) return;
+  var r = Object.assign({id: Date.now()}, PERF_STATE.lastResult || PERF_STATE.sweepResults);
+  PERF_STATE.savedRuns.push(r);
+  try{ localStorage.setItem('perf_saved', JSON.stringify(PERF_STATE.savedRuns)); }catch(e){}
+  renderPerfSaved();
+}
+
+function deletePerfRun(id){
+  PERF_STATE.savedRuns = PERF_STATE.savedRuns.filter(function(r){ return r.id !== id; });
+  try{ localStorage.setItem('perf_saved', JSON.stringify(PERF_STATE.savedRuns)); }catch(e){}
+  renderPerfSaved();
+}
+
+function clearPerfSaved(){
+  PERF_STATE.savedRuns = [];
+  try{ localStorage.removeItem('perf_saved'); }catch(e){}
+  renderPerfSaved();
+}
+
+function renderPerfSaved(){
+  var comp  = document.getElementById('perf-comparison');
+  var tbody = document.getElementById('perf-saved-tbody');
+  if(!comp || !tbody) return;
+  if(!PERF_STATE.savedRuns.length){ comp.style.display='none'; return; }
+  comp.style.display = 'block';
+  var reqDay = parseInt((document.getElementById('perf-req-day')||{}).value)||100000000;
+  var tp     = parseInt((document.getElementById('perf-tp')||{}).value)||4;
+  tbody.innerHTML = PERF_STATE.savedRuns.map(function(r){
+    var gpuLabel = PERF_GPU_LABELS[r.system||(r.cfg&&r.cfg.payload&&r.cfg.payload.system)||''] || '—';
+    var gpus = r.seq_s ? Math.ceil(reqDay/(r.seq_s*86400))*tp : '—';
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      +'<td style="padding:5px 8px;font-weight:500;font-size:12px">'+(r.cfg&&r.cfg.payload?r.cfg.payload.model_path||PERF_STATE.modelLabel:PERF_STATE.modelLabel)+'</td>'
+      +'<td style="padding:5px 8px;font-size:12px;color:var(--text2)">'+gpuLabel+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px;color:var(--blue)">'+gpus+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px">'+(r.latency!=null?Math.round(r.latency)+'ms':'—')+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px">'+(r.ttft!=null?Math.round(r.ttft)+'ms':'—')+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px">'+(r.tokens_s_gpu!=null?parseFloat(r.tokens_s_gpu).toFixed(1):'—')+'</td>'
+      +'<td style="padding:5px 8px"><button onclick="deletePerfRun('+r.id+')" style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3)">✕</button></td>'
+      +'</tr>';
+  }).join('');
+}
+
+function copyPerfAsJSON(){
+  var data = PERF_STATE.lastRaw || PERF_STATE.sweepResults;
+  if(!data){ alert('Run an estimate first.'); return; }
+  navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+}
+
+function exportPerfToSheets(){
+  var r = PERF_STATE.lastResult;
   if(!r){ alert('Run an estimate first before exporting.'); return; }
 
-  // Build a simple CSV and open as data URI
-  var sz = CAL_STATE.lastSizing;
-  var rows = [
-    ['Model','GPU','Backend','Input tokens','Output tokens','Batch size','TTFT (ms)','TPOT (ms)','Latency (ms)','Tokens/sec','Tokens/sec/GPU','GPU memory (GB)','Req/s','Tokens/request','Throughput demand (tok/s)','GPUs for throughput','GPUs for memory fit','Final GPUs','Mode'],
-    [
-      r.modelLabel,
-      CAL_GPU_LABELS[r.gpu]||r.gpu,
-      (r.backend||'').toUpperCase(),
-      r.isl, r.osl, r.batch,
-      r.ttft_ms!=null?r.ttft_ms.toFixed(2):'',
-      r.tpot_ms!=null?r.tpot_ms.toFixed(2):'',
-      r.latency_ms!=null?r.latency_ms.toFixed(1):'',
-      r.tokens_per_sec!=null?Math.round(r.tokens_per_sec):'',
-      r.tokens_per_sec_per_gpu!=null?parseFloat(r.tokens_per_sec_per_gpu).toFixed(1):'',
-      r.gpu_memory_gb!=null?r.gpu_memory_gb.toFixed(1):'',
-      sz?sz.rps.toFixed(1):'', sz?sz.tokPerReq:'', sz?Math.round(sz.demandTps):'',
-      sz?sz.gpusThroughput||'—':'', sz?sz.gpusMemory:'', sz?sz.gpusFinal:'',
-      r.mode.charAt(0).toUpperCase()+r.mode.slice(1)
-    ]
+  var reqDay  = parseInt((document.getElementById('perf-req-day')||{}).value)||100000000;
+  var tokSec  = parseInt((document.getElementById('perf-tok-sec')||{}).value)||5000;
+  var bufPct  = parseInt((document.getElementById('perf-buffer')||{}).value)||30;
+  var gpuKey  = (document.getElementById('perf-gpu')||{}).value||'h100_sxm';
+  var gpuLabel= PERF_GPU_LABELS[gpuKey]||gpuKey;
+  var tp      = r.tp_size||(r.cfg&&r.cfg.payload&&r.cfg.payload.tp_size)||4;
+  var priceHr = PERF_GPU_CLOUD_PRICE[gpuKey]||3.20;
+  var opUnit  = PERF_GPU_ONPREM_PRICE[gpuKey]||30000;
+
+  var seqS    = r.seq_s;
+  var tpsGpu  = r.tokens_s_gpu;
+  var gpuRD   = seqS  ? Math.ceil(reqDay/(seqS*86400))*tp    : '';
+  var gpuTS   = tpsGpu? Math.ceil(tokSec/tpsGpu)              : '';
+  var gpuRDBuf= gpuRD ? Math.ceil(gpuRD*(1+bufPct/100))       : '';
+  var gpuTSBuf= gpuTS ? Math.ceil(gpuTS*(1+bufPct/100))       : '';
+
+  // ── Tab 1: Summary ──
+  var summary = [
+    ['GPU Sizing Summary — gpu.calc Performance'],
+    ['Generated', new Date().toLocaleString()],
+    [''],
+    ['INPUTS','','VALUE'],
+    ['Model','',PERF_STATE.modelLabel],
+    ['GPU','',gpuLabel],
+    ['Backend','',(r.backend||'').toUpperCase()],
+    ['ISL (original)','',(r.cfg&&r.cfg.meta&&r.cfg.meta.isl_original)||''],
+    ['Prefix reuse %','',(r.cfg&&r.cfg.meta&&r.cfg.meta.prefix_pct)||0],
+    ['Effective ISL','',(r.cfg&&r.cfg.meta&&r.cfg.meta.eff_isl)||''],
+    ['OSL','',(r.cfg&&r.cfg.payload&&r.cfg.payload.osl)||''],
+    ['Batch size','',(r.cfg&&r.cfg.payload&&r.cfg.payload.batch_size)||''],
+    ['TP size','',tp],
+    ['DB mode','',(r.cfg&&r.cfg.payload&&r.cfg.payload.database_mode)||''],
+    [''],
+    ['SCALING TARGETS','','VALUE'],
+    ['Requests/day target','',reqDay],
+    ['Tokens/sec target','',tokSec],
+    ['Infra buffer %','',bufPct],
+    [''],
+    ['ANSWERS','','VALUE'],
+    ['GPUs for req/day target (no buffer)','',gpuRD],
+    ['GPUs for req/day target (with buffer)','',gpuRDBuf],
+    ['GPUs for tok/sec target (no buffer)','',gpuTS],
+    ['GPUs for tok/sec target (with buffer)','',gpuTSBuf],
+    [''],
+    ['AIC PERFORMANCE RESULTS','','VALUE'],
+    ['TTFT (ms)','',r.ttft!=null?parseFloat(r.ttft).toFixed(2):''],
+    ['TPOT (ms)','',r.tpot!=null?parseFloat(r.tpot).toFixed(2):''],
+    ['Request latency (ms)','',r.latency!=null?parseFloat(r.latency).toFixed(1):''],
+    ['Tokens/s','',r.tokens_s!=null?Math.round(r.tokens_s):''],
+    ['Tokens/s/GPU','',r.tokens_s_gpu!=null?parseFloat(r.tokens_s_gpu).toFixed(2):''],
+    ['Seq/s','',r.seq_s!=null?parseFloat(r.seq_s).toFixed(4):''],
+    ['Tokens/day','',r.tokens_day!=null?Math.round(r.tokens_day):''],
+    ['Memory GiB','',r.memory_gib!=null?parseFloat(r.memory_gib).toFixed(2):''],
   ];
-  // Also add saved runs
-  if(CAL_STATE.savedRuns && CAL_STATE.savedRuns.length > 0){
-    CAL_STATE.savedRuns.forEach(function(sr){
-      rows.push([
-        sr.modelLabel, CAL_GPU_LABELS[sr.gpu]||sr.gpu, (sr.backend||'').toUpperCase(),
-        sr.isl, sr.osl, sr.batch,
-        sr.ttft_ms!=null?sr.ttft_ms.toFixed(2):'',
-        sr.tpot_ms!=null?sr.tpot_ms.toFixed(2):'',
-        sr.latency_ms!=null?sr.latency_ms.toFixed(1):'',
-        sr.tokens_per_sec!=null?Math.round(sr.tokens_per_sec):'',
-        sr.gpu_memory_gb!=null?sr.gpu_memory_gb.toFixed(1):'',
-        sr.mode.charAt(0).toUpperCase()+sr.mode.slice(1)
+
+  // ── Tab 2: Sizing Math ──
+  var math = [
+    ['SIZING MATH — Step by step','','',''],
+    ['Step','Formula','Value','Notes'],
+    ['1. Effective ISL','ISL × (1 - prefix%)',((r.cfg&&r.cfg.meta&&r.cfg.meta.eff_isl)||''),'After prefix cache'],
+    ['2. Tokens/request','ISL + OSL',(parseInt((r.cfg&&r.cfg.meta&&r.cfg.meta.eff_isl)||0)+parseInt((r.cfg&&r.cfg.payload&&r.cfg.payload.osl)||0)),'Total tokens per request'],
+    ['3. seq/s from AIC','Direct measurement',r.seq_s!=null?parseFloat(r.seq_s).toFixed(4):'',' requests/sec per unit'],
+    ['4. req/day per unit','seq/s × 86400',r.seq_s!=null?Math.round(r.seq_s*86400):'',' per '+tp+'-GPU unit'],
+    ['5. Units for target','ceil(req_day ÷ req_day_per_unit)',seqS?Math.ceil(reqDay/(seqS*86400)):'',' GPU units needed'],
+    ['6. Total GPUs','units × tp_size',gpuRD,''],
+    ['7. With buffer','GPUs × (1 + buffer%)',gpuRDBuf,'Production-ready count'],
+    ['8. tok/s/GPU from AIC','Direct measurement',r.tokens_s_gpu!=null?parseFloat(r.tokens_s_gpu).toFixed(2):'',' tokens/s per GPU'],
+    ['9. GPUs for tok/sec','ceil(target ÷ tok/s/gpu)',gpuTS,''],
+    ['10. With buffer','GPUs × (1 + buffer%)',gpuTSBuf,''],
+    [''],
+    ['COST CALCULATION','','',''],
+    ['Cloud $/hr/GPU','',priceHr,''],
+    ['On-prem $/GPU','',opUnit,''],
+    ['Cloud monthly (req/day sizing)','GPUs × $/hr × 24 × 30',gpuRD?Math.round(gpuRD*priceHr*24*30):'',''],
+    ['On-prem total (req/day sizing)','GPUs × $/GPU',gpuRD?gpuRD*opUnit:'',''],
+    ['On-prem monthly (5yr amort)','total ÷ 60',gpuRD?Math.round(gpuRD*opUnit/60):'',''],
+  ];
+
+  // ── Tab 3: Per-op latency ──
+  var perOp = [['PER-OP LATENCY BREAKDOWN'],['Operation','Type','Latency (ms)']];
+  if(r.per_op){
+    Object.keys(r.per_op.context||{}).forEach(function(k){ perOp.push([k,'context',parseFloat(r.per_op.context[k]).toFixed(3)]); });
+    Object.keys(r.per_op.generation||{}).forEach(function(k){ perOp.push([k,'generation',parseFloat(r.per_op.generation[k]).toFixed(3)]); });
+  }
+  if(r.scheduling){
+    perOp.push([''],['SCHEDULING STATS','','']);
+    perOp.push(['Num mix steps','',r.scheduling.num_mix_steps||'']);
+    perOp.push(['Num genonly steps','',r.scheduling.num_genonly_steps||'']);
+    perOp.push(['Mix step latency ms','',r.scheduling.mix_step_latency_ms!=null?parseFloat(r.scheduling.mix_step_latency_ms).toFixed(3):'']);
+    perOp.push(['Genonly step latency ms','',r.scheduling.genonly_step_latency_ms!=null?parseFloat(r.scheduling.genonly_step_latency_ms).toFixed(3):'']);
+  }
+
+  // ── Tab 4: Disagg configs ──
+  var disaggTab = [['DISAGGREGATED TOP CONFIGS']];
+  if(r.type === 'query' && r.disagg_configs && r.disagg_configs.length){
+    var dCols = ['tokens/s/gpu','tokens/s/user','ttft','tpot','request_latency','num_total_gpus','(p)workers','(p)tp','(p)pp','(p)bs','(p)parallel','(p)memory','(d)workers','(d)tp','(d)pp','(d)bs','(d)parallel','(d)memory'];
+    disaggTab.push(dCols);
+    r.disagg_configs.forEach(function(c){ disaggTab.push(dCols.map(function(k){ return c[k]!=null?c[k]:''; })); });
+  } else { disaggTab.push(['No disagg data — run in Agg vs Disagg mode']); }
+
+  // ── Tab 5: Agg configs ──
+  var aggTab = [['AGGREGATED TOP CONFIGS']];
+  if(r.type === 'query' && r.agg_configs && r.agg_configs.length){
+    var aCols = ['tokens/s/gpu','tokens/s/user','ttft','tpot','request_latency','num_total_gpus','tp','pp','bs','parallel','memory'];
+    aggTab.push(aCols);
+    r.agg_configs.forEach(function(c){ aggTab.push(aCols.map(function(k){ return c[k]!=null?c[k]:''; })); });
+  } else { aggTab.push(['No agg data — run in Agg vs Disagg mode']); }
+
+  // ── Tab 6: Batch sweep ──
+  var sweepTab = [['BATCH SWEEP RESULTS']];
+  if(PERF_STATE.sweepResults && PERF_STATE.sweepResults.batches){
+    sweepTab.push(['Batch','seq/s','latency_ms','ttft_ms','tpot_ms','memory_gib','GPUs_for_req_day','SLA_1s','SLA_2s','SLA_3s']);
+    PERF_STATE.sweepResults.batches.forEach(function(b){
+      if(b.error){ sweepTab.push([b.batch_size,'ERROR: '+b.error]); return; }
+      var p   = b.data.performance||{};
+      var mem = (b.data.memory_gib||{}).total;
+      var seq = p.seq_per_s;
+      var lat = p.request_latency_ms;
+      var gpus= seq ? Math.ceil(reqDay/(seq*86400))*tp : '';
+      sweepTab.push([b.batch_size,
+        seq!=null?parseFloat(seq).toFixed(4):'',
+        lat!=null?parseFloat(lat).toFixed(0):'',
+        p.ttft_ms!=null?parseFloat(p.ttft_ms).toFixed(0):'',
+        p.tpot_ms!=null?parseFloat(p.tpot_ms).toFixed(1):'',
+        mem!=null?parseFloat(mem).toFixed(2):'',
+        gpus,
+        lat!=null&&lat<=1000?'YES':'NO',
+        lat!=null&&lat<=2000?'YES':'NO',
+        lat!=null&&lat<=3000?'YES':'NO'
+      ]);
+    });
+  } else { sweepTab.push(['Run with Auto-sweep enabled to get batch sweep data']); }
+
+  // ── Saved runs ──
+  var savedTab = [['SAVED RUNS']];
+  if(PERF_STATE.savedRuns.length){
+    savedTab.push(['Model','GPU','Backend','TTFT','TPOT','Latency','tok/s/gpu','GPUs(req/day)','Timestamp']);
+    PERF_STATE.savedRuns.forEach(function(sr){
+      var gpus2 = sr.seq_s ? Math.ceil(reqDay/(sr.seq_s*86400))*(sr.tp_size||tp) : '';
+      savedTab.push([
+        sr.cfg&&sr.cfg.payload?sr.cfg.payload.model_path:PERF_STATE.modelLabel,
+        PERF_GPU_LABELS[sr.system||'']||'',
+        (sr.backend||'').toUpperCase(),
+        sr.ttft!=null?parseFloat(sr.ttft).toFixed(0):'',
+        sr.tpot!=null?parseFloat(sr.tpot).toFixed(1):'',
+        sr.latency!=null?parseFloat(sr.latency).toFixed(0):'',
+        sr.tokens_s_gpu!=null?parseFloat(sr.tokens_s_gpu).toFixed(2):'',
+        gpus2,
+        new Date(sr.ts).toLocaleString()
       ]);
     });
   }
-  var csvLines = rows.map(function(row){ return row.map(function(c){ var s=String(c==null?'':c); return '"'+s.split('"').join('""')+'"'; }).join(','); }); var csv = csvLines.join('\n');
+
+  // ── Build multi-sheet CSV (tab-delimited for Sheets paste) ──
+  // We export as a single CSV with section headers since js can't write multi-tab xlsx natively
+  var allTabs = [
+    {name:'Summary', rows: summary},
+    {name:'Sizing Math', rows: math},
+    {name:'Per-Op Latency', rows: perOp},
+    {name:'Disagg Configs', rows: disaggTab},
+    {name:'Agg Configs', rows: aggTab},
+    {name:'Batch Sweep', rows: sweepTab},
+    {name:'Saved Runs', rows: savedTab}
+  ];
+
+  var csvLines = [];
+  allTabs.forEach(function(tab){
+    csvLines.push(['"=== '+tab.name+' ==="']);
+    tab.rows.forEach(function(row){
+      csvLines.push(row.map(function(c){
+        var s = String(c==null?'':c);
+        return '"'+s.replace(/"/g,'""')+'"';
+      }).join(','));
+    });
+    csvLines.push(['']);
+  });
+
+  var csv  = csvLines.join('\n');
   var blob = new Blob([csv], {type:'text/csv'});
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url; a.download = 'calibrated-estimates.csv'; a.click();
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href   = url;
+  a.download = 'gpu-calc-performance-'+PERF_STATE.modelLabel.replace(/[^a-z0-9]/gi,'_')+'-'+Date.now()+'.csv';
+  a.click();
   URL.revokeObjectURL(url);
-}
-
-
-function recomputeSizing(){
-  var result = CAL_STATE.lastResult;
-  if(!result) return;
-  // Read editable inputs — override result fields
-  var szIsl   = document.getElementById('sz-isl');
-  var szOsl   = document.getElementById('sz-osl');
-  var szBatch = document.getElementById('sz-batch');
-  var szCtx   = document.getElementById('sz-ctx');
-  // Build a modified result copy with overridden values
-  var r2 = Object.assign({}, result);
-  if(szIsl   && szIsl.value)   { r2.isl        = parseInt(szIsl.value);   szIsl._edited   = true; }
-  if(szOsl   && szOsl.value)   { r2.osl        = parseInt(szOsl.value);   szOsl._edited   = true; }
-  if(szBatch && szBatch.value) { r2.batch       = parseInt(szBatch.value); szBatch._edited = true; }
-  if(szCtx   && szCtx.value){
-    // Also update the main context input so calcCalGPUs picks it up
-    var calCtx = document.getElementById('cal-ctx');
-    if(calCtx) calCtx.value = szCtx.value;
-    szCtx._edited = true;
-  }
-  // Always use current model arch from CAL_STATE, not stale result arch
-  r2.modelArch = CAL_STATE.modelArch;
-  r2.modelPath  = CAL_STATE.modelPath;
-  r2.modelLabel = CAL_STATE.modelLabel;
-  var sizing = calcCalGPUs(r2);
-  CAL_STATE.lastSizing = sizing;
-  if(!sizing) return;
-
-  var fmt  = function(v,unit,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v))+unit:'—'; };
-  var fmtN = function(v){ return v!=null?Math.round(v).toLocaleString():'—'; };
-  var fmt2 = function(v,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v).toLocaleString()):'—'; };
-
-  // Update the outcome tiles grid (re-render just the .oc-val values without full re-render)
-  var grid = document.getElementById('cal-metrics-grid');
-  if(grid){
-    var oc = function(label,val,sub,badge,cls){
-      return '<div class="oc'+(cls?' '+cls:'')+'">'
-        +'<div class="oc-label">'+label+'</div>'
-        +'<div class="oc-val">'+val+'</div>'
-        +'<div class="oc-sub">'+sub+'</div>'
-        +(badge||'')+'</div>';
-    };
-    var supply  = result.tokens_per_sec_per_gpu!=null ? fmt(result.tokens_per_sec_per_gpu,' tok/s',0) : '—';
-    var tokReq  = (r2.isl+r2.osl).toLocaleString();
-    var rpsStr  = sizing ? fmt(sizing.rps,'/s',1) : '—';
-    var demStr  = sizing ? fmtN(sizing.demandTps)+' tok/s' : '—';
-    var tGPUs   = sizing && sizing.gpusThroughput!=null ? String(sizing.gpusThroughput) : '—';
-    var mGPUs   = sizing ? String(sizing.gpusMemory) : '—';
-    var fGPUs   = sizing ? String(sizing.gpusFinal) : '—';
-    var heroBadge = '<span class="oc-badge good">'+sizing.autoTp+'× tensor parallel</span>';
-    var heroSub   = sizing.gpuLabel+' · '+sizing.replicas+' replica'+(sizing.replicas>1?'s':'')+' × '+sizing.autoTp+' GPU';
-    grid.innerHTML =
-        oc('Required GPUs', fGPUs, heroSub, heroBadge, 'winner')
-      + oc('Tokens / request', tokReq,  'input + output per request')
-      + oc('Req / sec',        rpsStr,  'batch ÷ request latency')
-      + oc('Throughput demand',demStr,  'req/s × tokens/request')
-      + oc('Supply / GPU',     supply,  'tok/s per GPU · from estimator')
-      + oc('Throughput GPUs',  tGPUs,   'ceil(demand ÷ supply/GPU)')
-      + oc('Memory / KV GPUs', mGPUs,   sizing.replicas+' replica×'+sizing.autoTp+'GPU · '+fmtN(sizing.upr)+' users/replica');
-  }
-
-  // Update breakdown lines
-  var breakdown = document.getElementById('cal-breakdown');
-  if(breakdown){
-    var line = function(label,val){
-      return '<div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">'
-        +'<span style="font-size:11px;color:var(--text3);min-width:160px;flex-shrink:0">'+label+'</span>'
-        +'<span style="font-size:12px;font-family:var(--mono);color:var(--text2);flex:1">'+val+'</span>'
-        +'</div>';
-    };
-    breakdown.innerHTML =
-      line('Tokens / request', r2.isl+' + '+r2.osl+' = <b>'+fmt2(sizing.tokPerReq)+'</b> tokens')
-      + line('Req / sec', fmt2(sizing.batch)+' batch ÷ '+(sizing.latSec?fmt2(sizing.latSec,3)+'s lat':'est.')+' = <b>'+fmt2(sizing.rps,1)+'/s</b>')
-      + line('Throughput demand', fmt2(sizing.rps,1)+' × '+fmt2(sizing.tokPerReq)+' = <b>'+fmt2(sizing.demandTps)+' tok/s</b>')
-      +(sizing.tpsPerGpu ? line('Supply / GPU', 'estimator → <b>'+fmt2(sizing.tpsPerGpu,0)+' tok/s</b>') : '')
-      +(sizing.gpusThroughput!=null ? line('Throughput GPUs', 'ceil('+fmt2(sizing.demandTps)+' ÷ '+fmt2(sizing.tpsPerGpu,0)+') = <b>'+sizing.gpusThroughput+'</b>') : '')
-      + line('Auto TP', sizing.autoTp+'× (min to fit '+fmt2(sizing.wGB,1)+'GB weights on '+sizing.vram+'GB VRAM)')
-      + line('KV / user', fmt2(sizing.kvPU,2)+'GB · ctx='+sizing.ctxK+'K · avail='+fmt2(sizing.avail,1)+'GB → <b>'+fmt2(sizing.upr)+' users/replica</b>')
-      + line('Memory GPUs', sizing.replicas+' replicas × '+sizing.autoTp+' GPU = <b>'+sizing.gpusMemory+'</b>')
-      + line('Final required', 'max('+[sizing.gpusThroughput!=null?sizing.gpusThroughput:'—',sizing.gpusMemory].join(', ')+') = <b style="color:var(--blue)">'+sizing.gpusFinal+' '+sizing.gpuLabel+'</b>');
-  }
 }
 
 // ===== END CALIBRATED ESTIMATE PAGE =====
