@@ -1821,15 +1821,15 @@ button{font-family:var(--sans);cursor:pointer}
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
         <div class="slider-row" style="margin-bottom:8px">
           <label style="font-size:12px">Requests / day</label>
-          <input type="number" id="perf-req-day" value="100000000" min="1000" style="width:100px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+          <input type="number" id="perf-req-day" value="100000000" min="1000" oninput="recalcPerfTargets()" style="width:100px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
         </div>
         <div class="slider-row" style="margin-bottom:8px">
           <label style="font-size:12px">Tokens / sec target</label>
-          <input type="number" id="perf-tok-sec" value="5000" min="100" style="width:100px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+          <input type="number" id="perf-tok-sec" value="5000" min="100" oninput="recalcPerfTargets()" style="width:100px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
         </div>
         <div class="slider-row" style="margin-bottom:0">
           <label style="font-size:12px">Infra buffer %</label>
-          <input type="number" id="perf-buffer" value="30" min="0" max="100" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+          <input type="number" id="perf-buffer" value="30" min="0" max="100" oninput="recalcPerfTargets()" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
         </div>
       </div>
 
@@ -2161,7 +2161,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.59</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.60</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5837,7 +5837,10 @@ function buildPerfPayload(){
           pp_size:       pp
         };
         // H100+vLLM doesn't support w4a16_mxfp4 — force float16
-        if(gpu === 'h100_sxm' && backend === 'vllm') p.moe_quant_mode = 'float16';
+        if(gpu === 'h100_sxm' && backend === 'vllm'){
+          p.moe_quant_mode = 'float16';
+          p.backend_version = '0.14.0';
+        }
         return p;
       })(),
       meta: { isl_original: isl, prefix_pct: pct, eff_isl: effIsl }
@@ -5857,7 +5860,10 @@ function buildPerfPayload(){
           prefix:        Math.round(isl * pct/100)
         };
         // H100+vLLM doesn't support w4a16_mxfp4 MoE quant — force float16
-        if(gpu === 'h100_sxm' && backend === 'vllm') p.moe_quant_mode = 'float16';
+        if(gpu === 'h100_sxm' && backend === 'vllm'){
+          p.moe_quant_mode = 'float16';
+          p.backend_version = '0.14.0';
+        }
         return p;
       })(),
       meta: { isl_original: isl, prefix_pct: pct, eff_isl: effIsl }
@@ -6499,6 +6505,91 @@ function renderSweepResults(sweepResult){
     var bestGpus = Math.ceil(reqDay/(bestSeqS*86400))*tp;
     rec.innerHTML = '★ <strong>Optimal batch size: '+bestBatch+'</strong> — highest seq/s ('+parseFloat(bestSeqS).toFixed(2)+'/s) · '+bestGpus+' '+PERF_GPU_LABELS[gpuKey]+' for '+Math.round(reqDay/1000000)+'M req/day · with '+bufPct+'% buffer: '+Math.ceil(bestGpus*(1+bufPct/100));
   }
+}
+
+function recalcPerfTargets(){
+  // Re-render hero cards + cost + sizing math from stored result without re-calling API
+  var r = PERF_STATE.lastResult;
+  if(!r || document.getElementById('perf-results').style.display === 'none') return;
+  var reqDay  = parseInt((document.getElementById('perf-req-day')||{}).value)||100000000;
+  var tokSec  = parseInt((document.getElementById('perf-tok-sec')||{}).value)||5000;
+  var bufPct  = parseInt((document.getElementById('perf-buffer')||{}).value)||30;
+  var gpuKey  = (document.getElementById('perf-gpu')||{}).value||'h100_sxm';
+  var tp      = r.tp_size || parseInt((document.getElementById('perf-tp')||{}).value)||4;
+  var seqS    = r.seq_s;
+  var tpsGpu  = r.tokens_s_gpu;
+  var fmt     = function(v,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v).toLocaleString()):'—'; };
+
+  // GPU counts
+  var gpuReqDay=null, gpuTokSec=null, gpuReqDayBuf=null, gpuTokSecBuf=null, reqDayCap=null;
+  if(seqS && seqS > 0){
+    var rdPerUnit = seqS * 86400;
+    gpuReqDay    = Math.ceil(reqDay / rdPerUnit) * tp;
+    gpuReqDayBuf = Math.ceil(gpuReqDay * (1 + bufPct/100));
+    reqDayCap    = rdPerUnit * tp;
+  }
+  if(tpsGpu && tpsGpu > 0){
+    gpuTokSec    = Math.ceil(tokSec / tpsGpu);
+    gpuTokSecBuf = Math.ceil(gpuTokSec * (1 + bufPct/100));
+  }
+
+  // Update hero cards
+  var heroGrid = document.getElementById('perf-hero-cards');
+  if(heroGrid){
+    var heroCard = function(label, val, sub, color){
+      return '<div style="background:var(--bg2);border:1px solid '+(color||'var(--border)')+';border-radius:var(--r);padding:14px;text-align:center">'
+        +'<div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">'+label+'</div>'
+        +'<div style="font-size:26px;font-weight:700;color:'+(color||'var(--text1)')+';margin-bottom:2px">'+val+'</div>'
+        +'<div style="font-size:11px;color:var(--text3)">'+sub+'</div>'
+        +'</div>';
+    };
+    heroGrid.innerHTML =
+      heroCard('GPUs for '+fmt(reqDay/1000000)+'M req/day',
+        gpuReqDay!=null?gpuReqDay:'—',
+        gpuReqDay!=null?'with '+bufPct+'% buffer: '+gpuReqDayBuf+' · '+(PERF_GPU_LABELS[gpuKey]||gpuKey):'need seq/s data',
+        'var(--blue)')
+    + heroCard('GPUs for '+fmt(tokSec)+' tok/s',
+        gpuTokSec!=null?gpuTokSec:'—',
+        gpuTokSec!=null?'with '+bufPct+'% buffer: '+gpuTokSecBuf:'need tok/s/gpu data',
+        'var(--green)')
+    + heroCard('Req/day capacity',
+        reqDayCap!=null?Math.round(reqDayCap/1000000).toLocaleString()+'M':'—',
+        'per '+(PERF_GPU_LABELS[gpuKey]||gpuKey)+' unit at this batch',
+        'var(--border)');
+  }
+
+  // Update cost card
+  var costCard = document.getElementById('perf-cost-card');
+  if(costCard && gpuReqDay!=null){
+    var priceHr   = PERF_GPU_CLOUD_PRICE[gpuKey]||3.20;
+    var opUnit    = PERF_GPU_ONPREM_PRICE[gpuKey]||30000;
+    var cloudMo   = gpuReqDay * priceHr * 24 * 30;
+    var cloud5yr  = cloudMo * 60;
+    var opTotal   = gpuReqDay * opUnit;
+    var opMo      = opTotal / 60;
+    var savings   = cloudMo - opMo;
+    var fmtK = function(v){ return v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+(v/1000).toFixed(0)+'K':'$'+Math.round(v); };
+    costCard.innerHTML =
+      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px">'
+      +'<div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Monthly cost · '+gpuReqDay+' '+(PERF_GPU_LABELS[gpuKey]||gpuKey)+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">'
+      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px">'
+      +'<div style="font-size:10px;color:var(--text4);margin-bottom:4px">☁ CLOUD</div>'
+      +'<div style="font-size:22px;font-weight:700;color:#ef4444">'+fmtK(cloudMo)+'/mo</div>'
+      +'<div style="font-size:11px;color:var(--text3)">'+fmtK(cloud5yr)+' over 5yr · '+fmtK(priceHr)+'/hr/GPU</div>'
+      +'</div>'
+      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px">'
+      +'<div style="font-size:10px;color:var(--text4);margin-bottom:4px">■ ON-PREM</div>'
+      +'<div style="font-size:22px;font-weight:700;color:var(--green)">'+fmtK(opMo)+'/mo</div>'
+      +'<div style="font-size:11px;color:var(--text3)">5yr amort · '+fmtK(opTotal)+' total</div>'
+      +'</div>'
+      +'</div>'
+      +(savings>0?'<div style="font-size:12px;color:var(--green);font-weight:600">On-prem saves '+fmtK(savings)+'/mo</div>':'')
+      +'</div>';
+  }
+
+  // Update sizing math
+  renderSizingMath(r, reqDay, tokSec, bufPct, gpuKey);
 }
 
 function showPerfError(msg){
