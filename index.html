@@ -1757,7 +1757,7 @@ button{font-family:var(--sans);cursor:pointer}
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
         <div class="slider-row" style="margin-bottom:8px">
           <label style="font-size:12px">GPU</label>
-          <select id="perf-gpu" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
+          <select id="perf-gpu" onchange="syncQuantDefaults()" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
             <option value="h100_sxm">H100 SXM</option>
             <option value="h200_sxm">H200 SXM</option>
             <option value="a100_sxm">A100 80GB</option>
@@ -1767,7 +1767,7 @@ button{font-family:var(--sans);cursor:pointer}
         </div>
         <div class="slider-row" style="margin-bottom:8px">
           <label style="font-size:12px">Backend</label>
-          <select id="perf-backend" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
+          <select id="perf-backend" onchange="syncQuantDefaults()" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
             <option value="vllm">vLLM</option>
             <option value="trtllm">TRT-LLM</option>
             <option value="sglang">SGLang</option>
@@ -1833,6 +1833,29 @@ button{font-family:var(--sans);cursor:pointer}
         </div>
       </div>
 
+      <!-- PRICING (editable) -->
+      <div class="section-title">CLOUD PRICING</div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px">
+        <div class="slider-row" style="margin-bottom:8px">
+          <label style="font-size:12px">Cloud provider</label>
+          <select id="perf-cloud-provider" onchange="updatePerfCloudPrice()" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px">
+            <option value="custom">Custom</option>
+            <option value="gcp">GCP</option>
+            <option value="aws">AWS</option>
+            <option value="azure">Azure</option>
+            <option value="coreweave">CoreWeave</option>
+          </select>
+        </div>
+        <div class="slider-row" style="margin-bottom:8px">
+          <label style="font-size:12px">$/hr/GPU <span title="Cloud on-demand price per GPU per hour" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></label>
+          <input type="number" id="perf-price-hr" value="3.20" min="0.1" step="0.1" oninput="recalcPerfTargets()" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+        </div>
+        <div class="slider-row" style="margin-bottom:0">
+          <label style="font-size:12px">$/GPU on-prem <span title="On-prem server cost per GPU (capital)" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></label>
+          <input type="number" id="perf-price-onprem" value="30000" min="1000" step="1000" oninput="recalcPerfTargets()" style="width:80px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+        </div>
+      </div>
+
       <!-- AUTO SWEEP (estimate mode only) -->
       <div id="perf-sweep-section">
         <div class="section-title">BATCH SWEEP</div>
@@ -1844,6 +1867,39 @@ button{font-family:var(--sans);cursor:pointer}
           <div style="font-size:10px;color:var(--text4)">Runs 32, 64, 128, 180, 256 — finds optimal batch for each SLA target. Takes ~5x longer.</div>
         </div>
       </div>
+
+      <!-- ADVANCED: MOE QUANT OVERRIDE -->
+      <details style="margin-bottom:8px">
+        <summary style="font-size:11px;font-weight:600;color:var(--text3);cursor:pointer;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between">
+          <span>⚙ Advanced quant override</span><span style="color:var(--text4)">▾</span>
+        </summary>
+        <div style="background:var(--bg);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:8px">
+          <div style="font-size:10px;color:var(--text4);margin-bottom:6px">Override if AIC returns unsupported quant mode error. Leave blank to use model default.</div>
+          <div class="slider-row" style="margin-bottom:6px">
+            <label style="font-size:11px">MoE quant</label>
+            <select id="perf-moe-quant" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px">
+              <option value="">auto</option>
+              <option value="float16">float16</option>
+              <option value="fp8">fp8</option>
+              <option value="fp8_block">fp8_block</option>
+              <option value="w4afp8">w4afp8</option>
+            </select>
+          </div>
+          <div class="slider-row" style="margin-bottom:6px">
+            <label style="font-size:11px">GEMM quant</label>
+            <select id="perf-gemm-quant" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px">
+              <option value="">auto</option>
+              <option value="float16">float16</option>
+              <option value="fp8">fp8</option>
+              <option value="fp8_block">fp8_block</option>
+            </select>
+          </div>
+          <div class="slider-row" style="margin-bottom:0">
+            <label style="font-size:11px">Backend version</label>
+            <input type="text" id="perf-backend-ver" placeholder="e.g. 0.14.0" style="width:80px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+          </div>
+        </div>
+      </details>
 
       <!-- REQUEST PAYLOAD -->
       <details style="margin-bottom:8px">
@@ -2161,7 +2217,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.60</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.4.61</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5721,6 +5777,7 @@ var perfCache = {};
 
 function initPerfPage(){
   updateEffectiveISL();
+  syncQuantDefaults();
   renderPerfSaved();
 }
 
@@ -5762,6 +5819,21 @@ function perfHFLookup(){
     if(d) d.textContent = m.name + ' (' + m.params + 'B, ' + m.layers + 'L)';
     document.querySelectorAll('#perf-model-chips .chip').forEach(function(b){ b.classList.remove('on'); });
   });
+}
+
+function syncQuantDefaults(){
+  // Auto-populate quant fields for known combos to prevent errors
+  var gpu     = (document.getElementById('perf-gpu')||{}).value     || '';
+  var backend = (document.getElementById('perf-backend')||{}).value || '';
+  var moeEl   = document.getElementById('perf-moe-quant');
+  var verEl   = document.getElementById('perf-backend-ver');
+  if(gpu === 'h100_sxm' && backend === 'vllm'){
+    if(moeEl && !moeEl.value) moeEl.value = 'float16';
+    if(verEl && !verEl.value) verEl.value = '0.14.0';
+  } else {
+    if(moeEl && moeEl.value === 'float16') moeEl.value = '';
+    if(verEl && verEl.value === '0.14.0')  verEl.value = '';
+  }
 }
 
 function updateEffectiveISL(){
@@ -5836,10 +5908,17 @@ function buildPerfPayload(){
           tp_size:       tp,
           pp_size:       pp
         };
-        // H100+vLLM doesn't support w4a16_mxfp4 — force float16
-        if(gpu === 'h100_sxm' && backend === 'vllm'){
-          p.moe_quant_mode = 'float16';
-          p.backend_version = '0.14.0';
+        // Apply user quant overrides (or auto-fix for known unsupported combos)
+        var moeQ  = (document.getElementById('perf-moe-quant')||{}).value  || '';
+        var gemmQ = (document.getElementById('perf-gemm-quant')||{}).value || '';
+        var bVer  = (document.getElementById('perf-backend-ver')||{}).value || '';
+        if(moeQ)  p.moe_quant_mode  = moeQ;
+        if(gemmQ) p.gemm_quant_mode = gemmQ;
+        if(bVer)  p.backend_version = bVer;
+        // Auto-fix: H100+vLLM w4a16_mxfp4 not supported — default to float16/0.14.0
+        if(gpu === 'h100_sxm' && backend === 'vllm' && !moeQ){
+          p.moe_quant_mode  = 'float16';
+          p.backend_version = bVer || '0.14.0';
         }
         return p;
       })(),
@@ -5859,10 +5938,15 @@ function buildPerfPayload(){
           osl:           osl,
           prefix:        Math.round(isl * pct/100)
         };
-        // H100+vLLM doesn't support w4a16_mxfp4 MoE quant — force float16
-        if(gpu === 'h100_sxm' && backend === 'vllm'){
-          p.moe_quant_mode = 'float16';
-          p.backend_version = '0.14.0';
+        // Apply user quant overrides
+        var moeQ2  = (document.getElementById('perf-moe-quant')||{}).value  || '';
+        var bVer2  = (document.getElementById('perf-backend-ver')||{}).value || '';
+        if(moeQ2) p.moe_quant_mode = moeQ2;
+        if(bVer2) p.backend_version = bVer2;
+        // Auto-fix H100+vLLM
+        if(gpu === 'h100_sxm' && backend === 'vllm' && !moeQ2){
+          p.moe_quant_mode  = 'float16';
+          p.backend_version = bVer2 || '0.14.0';
         }
         return p;
       })(),
@@ -6192,8 +6276,8 @@ function renderPerfResult(result, fromCache){
   // COST CARD
   var costCard = document.getElementById('perf-cost-card');
   if(costCard && gpuReqDay!=null){
-    var priceHr    = PERF_GPU_CLOUD_PRICE[gpuKey]||3.20;
-    var onpremUnit = PERF_GPU_ONPREM_PRICE[gpuKey]||30000;
+    var priceHr    = parseFloat((document.getElementById('perf-price-hr')||{}).value) || PERF_GPU_CLOUD_PRICE[gpuKey] || 3.20;
+    var onpremUnit = parseFloat((document.getElementById('perf-price-onprem')||{}).value) || PERF_GPU_ONPREM_PRICE[gpuKey] || 30000;
     var cloudMo    = gpuReqDay * priceHr * 24 * 30;
     var cloud5yr   = cloudMo * 60;
     var onpremTotal= gpuReqDay * onpremUnit;
@@ -6507,6 +6591,27 @@ function renderSweepResults(sweepResult){
   }
 }
 
+// Cloud provider price presets — $/hr/GPU for H100 SXM class
+var CLOUD_PROVIDER_PRICES = {
+  gcp:       { hr: 3.20,  onprem: 30000, label: 'GCP (A3 H100)'      },
+  aws:       { hr: 3.50,  onprem: 30000, label: 'AWS (p4d H100)'      },
+  azure:     { hr: 3.40,  onprem: 30000, label: 'Azure (NDv4 H100)'   },
+  coreweave: { hr: 2.49,  onprem: 30000, label: 'CoreWeave H100'      },
+  custom:    { hr: null,   onprem: null,  label: 'Custom'              },
+};
+
+function updatePerfCloudPrice(){
+  var sel = (document.getElementById('perf-cloud-provider')||{}).value || 'custom';
+  var preset = CLOUD_PROVIDER_PRICES[sel];
+  if(preset && preset.hr){
+    var hrEl = document.getElementById('perf-price-hr');
+    var opEl = document.getElementById('perf-price-onprem');
+    if(hrEl) hrEl.value = preset.hr;
+    if(opEl) opEl.value = preset.onprem;
+  }
+  recalcPerfTargets();
+}
+
 function recalcPerfTargets(){
   // Re-render hero cards + cost + sizing math from stored result without re-calling API
   var r = PERF_STATE.lastResult;
@@ -6561,8 +6666,8 @@ function recalcPerfTargets(){
   // Update cost card
   var costCard = document.getElementById('perf-cost-card');
   if(costCard && gpuReqDay!=null){
-    var priceHr   = PERF_GPU_CLOUD_PRICE[gpuKey]||3.20;
-    var opUnit    = PERF_GPU_ONPREM_PRICE[gpuKey]||30000;
+    var priceHr   = parseFloat((document.getElementById('perf-price-hr')||{}).value) || PERF_GPU_CLOUD_PRICE[gpuKey] || 3.20;
+    var opUnit    = parseFloat((document.getElementById('perf-price-onprem')||{}).value) || PERF_GPU_ONPREM_PRICE[gpuKey] || 30000;
     var cloudMo   = gpuReqDay * priceHr * 24 * 30;
     var cloud5yr  = cloudMo * 60;
     var opTotal   = gpuReqDay * opUnit;
