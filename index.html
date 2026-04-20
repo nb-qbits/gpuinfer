@@ -2245,7 +2245,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.5.0</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.5.1</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5771,7 +5771,7 @@ function hideGpuTip(){
 var AIC_WORKER_URL = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
 
-// ===== PERFORMANCE TAB v5.5.0 =====
+// ===== PERFORMANCE TAB v5.5.1 =====
 
 var AIC_WORKER = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
@@ -5994,10 +5994,14 @@ function callAICEndpoint(endpoint, payload, cb, errCb){
   .then(function(r){
     return r.text().then(function(text){
       if(text.trim().startsWith('<')) throw new Error('AIC API is waking up (Render cold start) — wait 30s and retry');
+      // Handle plain-text errors (e.g. "Internal Server Error" from Render)
+      if(!text.trim().startsWith('{') && !text.trim().startsWith('[')){
+        throw new Error('AIC API error (HTTP '+r.status+'): '+text.slice(0,120));
+      }
       var d;
       try{ d = JSON.parse(text); }
-      catch(e){ throw new Error('Invalid response: '+text.slice(0,80)); }
-      if(!r.ok) throw new Error(d.error || d.detail || ('HTTP '+r.status));
+      catch(e){ throw new Error('Invalid JSON response: '+text.slice(0,100)); }
+      if(!r.ok) throw new Error(d.error || d.detail || ('HTTP '+r.status+': '+JSON.stringify(d).slice(0,120)));
       return d;
     });
   })
@@ -6117,14 +6121,23 @@ function runPerfV2(forceRefresh){
           disaggErr = err;
           setStep('pstep-disagg','error');
           stopQuoteRotation();
-          // If disagg fails but agg succeeded, still show agg results
+          // If disagg fails but agg succeeded, still show agg results with a note
           if(aggResult){
             var result = mergePerfV2Results(aggResult, null, payloads, cacheKey);
-            result.disaggError = err.message;
+            var emsg = err.message||'';
+            if(emsg.indexOf('500')>=0 || emsg.toLowerCase().indexOf('internal')>=0){
+              result.disaggError = 'Disagg: no valid configs found for this combination. Showing agg results only.';
+            } else {
+              result.disaggError = err.message;
+            }
             setStep('pstep-sizing','done');
             renderPerfV2Result(result, false);
           } else {
-            showPerfV2Error(err.message);
+            var msg = err.message||'';
+            if(msg.indexOf('500')>=0 || msg.toLowerCase().indexOf('internal')>=0){
+              msg = 'AIC found no valid configs. Try: HYBRID mode, TP=4, H200 SXM GPU, or TRT-LLM backend.';
+            }
+            showPerfV2Error(msg);
           }
         }
       );
@@ -6133,7 +6146,12 @@ function runPerfV2(forceRefresh){
       aggErr = err;
       setStep('pstep-agg','error');
       stopQuoteRotation();
-      showPerfV2Error(err.message);
+      var msg = err.message || '';
+      // Internal Server Error from AIC usually means no valid configs found
+      if(msg.indexOf('500')>=0 || msg.toLowerCase().indexOf('internal')>=0){
+        msg = 'AIC found no valid configs. Try: HYBRID mode, TP=4, H200 SXM GPU, or TRT-LLM backend.';
+      }
+      showPerfV2Error(msg);
     }
   );
 }
@@ -6603,7 +6621,7 @@ function showPerfV2Error(msg){
     tips.innerHTML = t.join('<br>');
   }
   // Auto-retry countdown for cold start
-  var isCold = msg && (msg.indexOf('waking')||msg.indexOf('cold')||msg.indexOf('<'));
+  var isCold = msg && (msg.indexOf('waking up')>=0 || msg.indexOf('cold start')>=0 || (msg.indexOf('<')>=0 && msg.indexOf('token')>=0));
   var wrap = document.getElementById('perf-retry-countdown');
   if(wrap && isCold){
     var secs = 35;
@@ -6643,7 +6661,7 @@ function exportPerfV2CSV(){
   var sections = [];
 
   // Header
-  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.5.0');
+  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.5.1');
   sections.push('Model: '+PERF_STATE.modelLabel+', GPU: '+(PERF_GPU_LABELS[meta.gpu]||meta.gpu)+', Backend: '+(meta.backend||'').toUpperCase()+', TP='+meta.tp);
   sections.push('ISL: '+meta.isl+', OSL: '+meta.osl+', Prefix: '+meta.pct+'%, Eff ISL: '+Math.round(meta.isl*(1-meta.pct/100)));
   sections.push('Target: '+rd.toLocaleString()+' req/day ('+( rd/86400).toFixed(1)+' req/sec), Buffer: '+buf+'%');
