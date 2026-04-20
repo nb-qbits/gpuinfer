@@ -240,6 +240,15 @@ button{font-family:var(--sans);cursor:pointer}
 .panel-section.open .panel-arrow{transform:rotate(90deg)}
 .panel-body{display:none;padding:12px 16px 16px;background:var(--bg)}
 .panel-section.open .panel-body{display:block}
+.perf-tab{padding:9px 14px;font-size:12px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--text3);background:transparent;border-top:none;border-left:none;border-right:none;transition:all .15s;white-space:nowrap;font-family:var(--sans)}
+.perf-tab:hover{color:var(--text1)}
+.perf-tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.perf-sort{font-size:10px;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;font-family:var(--sans);transition:all .15s}
+.perf-sort:hover{border-color:var(--blue);color:var(--blue)}
+.perf-sort.active{background:rgba(59,130,246,.12);border-color:var(--blue);color:var(--blue)}
+.perf-step{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:12px;color:var(--text2)}
+.pstep-icon{font-size:16px;width:22px;text-align:center}
+.pstep-label{flex:1}
 .panel-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;margin-top:12px}
 .panel-label:first-child{margin-top:0}
 .slider-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
@@ -1712,20 +1721,19 @@ button{font-family:var(--sans);cursor:pointer}
 <div id="page-calibrated" class="page">
   <div style="display:flex;gap:0;align-items:flex-start;min-height:calc(100vh - 88px)">
 
-    <!-- ===== LEFT PANEL ===== -->
-    <div style="width:260px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);min-height:calc(100vh - 88px);overflow-y:auto">
+    <!-- LEFT PANEL -->
+    <div style="width:268px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);min-height:calc(100vh - 88px);overflow-y:auto">
 
-      <!-- Header + run button -->
-      <div style="padding:12px 16px 10px;border-bottom:1px solid var(--border)">
+      <div style="padding:14px 16px 12px;border-bottom:1px solid var(--border)">
         <div style="font-size:14px;font-weight:700;margin-bottom:1px">⚡ Performance</div>
-        <div style="font-size:10px;color:var(--text4);margin-bottom:10px">AIC silicon data · GPU sizing</div>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-sm" style="flex:1;color:var(--blue);font-size:11px" onclick="perfPullFromAdvanced()">↑ Advanced</button>
-          <button id="perf-run-btn" class="btn btn-primary" style="flex:2;font-weight:600;font-size:12px" onclick="runPerfEstimate()">⚡ Run estimate</button>
+        <div style="font-size:10px;color:var(--text4)">AIC-powered · GPU sizing · real silicon data</div>
+        <div style="display:flex;gap:6px;margin-top:10px">
+          <button class="btn btn-sm" style="flex:1;font-size:11px;color:var(--blue)" onclick="perfPullFromAdvanced()">↑ Advanced</button>
+          <button class="btn btn-primary" style="flex:2;font-size:12px;font-weight:600" onclick="runPerfV2()">⚡ Run estimate</button>
         </div>
       </div>
 
-      <!-- ① MODEL -->
+      <!-- MODEL -->
       <div class="panel-section open" id="pps-model">
         <div class="panel-head" onclick="togglePanel('pps-model')">
           <div class="panel-head-left">
@@ -1744,111 +1752,91 @@ button{font-family:var(--sans);cursor:pointer}
             <button class="chip" onclick="selectPerfModel('meta-llama/Meta-Llama-3.1-8B-Instruct','Llama 3.1 8B',this)">Llama 3.1 8B</button>
             <button class="chip" onclick="selectPerfModel('Qwen/Qwen3-32B-FP8','Qwen3 32B',this)">Qwen3 32B</button>
           </div>
-          <div class="panel-label">Lookup by HF ID</div>
+          <div class="panel-label">Or lookup HF model ID</div>
           <div style="display:flex;gap:6px;margin-bottom:4px">
             <input id="perf-hf-input" type="text" placeholder="e.g. openai/gpt-oss-20b" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text1);font-size:11px">
             <button class="btn btn-primary btn-sm" onclick="perfHFLookup()">Lookup</button>
           </div>
-          <div id="perf-hf-status" style="font-size:11px;color:var(--text3);min-height:14px"></div>
+          <div id="perf-hf-status" style="font-size:10px;color:var(--text3);min-height:14px"></div>
           <div id="perf-model-display" style="font-size:12px;font-weight:600;color:var(--blue);margin-top:4px">gpt-oss-20b</div>
         </div>
       </div>
 
-      <!-- ② HARDWARE & BACKEND -->
+      <!-- HARDWARE -->
       <div class="panel-section open" id="pps-hw">
         <div class="panel-head" onclick="togglePanel('pps-hw')">
           <div class="panel-head-left">
             <div class="panel-head-icon">⚙️</div>
             <div class="panel-head-text">
               <div class="panel-head-title">Hardware &amp; backend</div>
-              <div class="panel-head-summary" id="pps-hw-sum">H100 SXM · vLLM · TP=4</div>
+              <div class="panel-head-summary" id="pps-hw-sum">H100 SXM · vLLM · TP=8</div>
             </div>
           </div>
           <span class="panel-arrow">&#9658;</span>
         </div>
         <div class="panel-body">
-          <div class="panel-label">Serving mode</div>
-          <div class="chips-wrap" style="margin-bottom:10px">
-            <button id="perf-mode-estimate" class="chip on" onclick="setPerfMode('estimate',this)">Static estimate</button>
-            <button id="perf-mode-query" class="chip" onclick="setPerfMode('query',this)">Agg vs Disagg</button>
-          </div>
-          <div style="font-size:10px;color:var(--text4);margin-bottom:8px" id="perf-mode-hint">Single config · fast · per-op breakdown</div>
-
           <div class="panel-label">GPU</div>
-          <div class="chips-wrap" style="margin-bottom:10px">
+          <div class="chips-wrap">
             <button class="chip on" id="pgpu-h100" onclick="setPerfGPU('h100_sxm','H100 SXM',this)">H100 SXM</button>
             <button class="chip" id="pgpu-h200" onclick="setPerfGPU('h200_sxm','H200 SXM',this)">H200 SXM</button>
             <button class="chip" id="pgpu-a100" onclick="setPerfGPU('a100_sxm','A100 80GB',this)">A100</button>
-            <button class="chip" id="pgpu-l40s" onclick="setPerfGPU('l40s','L40S',this)">L40S</button>
             <button class="chip" id="pgpu-b200" onclick="setPerfGPU('b200_sxm','B200 SXM',this)">B200</button>
           </div>
           <input type="hidden" id="perf-gpu" value="h100_sxm">
-
-          <div class="panel-label">Backend</div>
-          <div class="chips-wrap" style="margin-bottom:10px">
+          <div class="panel-label" style="margin-top:10px">Backend</div>
+          <div class="chips-wrap">
             <button class="chip on" id="pback-vllm"   onclick="setPerfBackend('vllm','vLLM',this)">vLLM</button>
             <button class="chip" id="pback-trtllm" onclick="setPerfBackend('trtllm','TRT-LLM',this)">TRT-LLM</button>
             <button class="chip" id="pback-sglang" onclick="setPerfBackend('sglang','SGLang',this)">SGLang</button>
           </div>
           <input type="hidden" id="perf-backend" value="vllm">
-
-          <div class="panel-label">Database mode</div>
-          <div class="chips-wrap" style="margin-bottom:10px">
-            <button class="chip on" id="pdb-hybrid"  onclick="setPerfDBMode('HYBRID',this)">HYBRID</button>
-            <button class="chip" id="pdb-silicon" onclick="setPerfDBMode('SILICON',this)">SILICON</button>
-          </div>
-          <input type="hidden" id="perf-dbmode" value="HYBRID">
-
-          <div class="panel-label">Tensor parallel</div>
-          <div class="chips-wrap" style="margin-bottom:10px">
+          <div class="panel-label" style="margin-top:10px">Tensor parallel</div>
+          <div class="chips-wrap">
             <button class="chip" id="ptp-1" onclick="setPerfTP(1,this)">TP=1</button>
             <button class="chip" id="ptp-2" onclick="setPerfTP(2,this)">TP=2</button>
-            <button class="chip on" id="ptp-4" onclick="setPerfTP(4,this)">TP=4</button>
-            <button class="chip" id="ptp-8" onclick="setPerfTP(8,this)">TP=8</button>
+            <button class="chip" id="ptp-4" onclick="setPerfTP(4,this)">TP=4</button>
+            <button class="chip on" id="ptp-8" onclick="setPerfTP(8,this)">TP=8</button>
           </div>
-          <input type="hidden" id="perf-tp" value="4">
+          <input type="hidden" id="perf-tp" value="8">
           <input type="hidden" id="perf-pp" value="1">
-
-          <!-- Quant override — visible but compact -->
-          <div style="padding:8px;background:var(--bg2);border-radius:var(--r);border:1px solid var(--border)">
-            <div style="font-size:10px;font-weight:600;color:var(--text4);margin-bottom:6px">QUANT OVERRIDE <span style="font-weight:400;color:var(--text4)" title="Auto-set for known combos. Change only if you see an unsupported quant error.">(?)</span></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
-              <div>
-                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">MoE quant</div>
-                <select id="perf-moe-quant" style="width:100%;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px">
-                  <option value="">auto</option>
-                  <option value="float16">float16</option>
-                  <option value="fp8">fp8</option>
-                  <option value="fp8_block">fp8_block</option>
-                  <option value="w4afp8">w4afp8</option>
-                </select>
-              </div>
-              <div>
-                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">GEMM quant</div>
-                <select id="perf-gemm-quant" style="width:100%;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px">
-                  <option value="">auto</option>
-                  <option value="float16">float16</option>
-                  <option value="fp8">fp8</option>
-                  <option value="fp8_block">fp8_block</option>
-                </select>
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <div style="font-size:10px;color:var(--text4);white-space:nowrap">Backend ver.</div>
-              <input type="text" id="perf-backend-ver" placeholder="e.g. 0.14.0" style="flex:1;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
-            </div>
+          <div class="panel-label" style="margin-top:10px">DB mode</div>
+          <div class="chips-wrap">
+            <button class="chip on" id="pdb-hybrid"  onclick="setPerfDBMode('HYBRID',this)">HYBRID</button>
+            <button class="chip"    id="pdb-silicon" onclick="setPerfDBMode('SILICON',this)">SILICON</button>
           </div>
+          <input type="hidden" id="perf-dbmode" value="HYBRID">
+          <!-- Quant override — collapsed by default -->
+          <details style="margin-top:10px">
+            <summary style="font-size:11px;font-weight:600;color:var(--text4);cursor:pointer;list-style:none">⚙ Quant override <span style="font-weight:400">(advanced)</span></summary>
+            <div style="margin-top:8px;padding:8px;background:var(--bg2);border-radius:var(--r);border:1px solid var(--border)">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+                <div>
+                  <div style="font-size:10px;color:var(--text4);margin-bottom:2px">MoE quant</div>
+                  <select id="perf-moe-quant" style="width:100%;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px">
+                    <option value="">auto</option>
+                    <option value="float16">float16</option>
+                    <option value="fp8">fp8</option>
+                    <option value="fp8_block">fp8_block</option>
+                  </select>
+                </div>
+                <div>
+                  <div style="font-size:10px;color:var(--text4);margin-bottom:2px">Backend ver.</div>
+                  <input type="text" id="perf-backend-ver" placeholder="e.g. 0.14.0" style="width:100%;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+                </div>
+              </div>
+            </div>
+          </details>
         </div>
       </div>
 
-      <!-- ③ WORKLOAD -->
+      <!-- WORKLOAD -->
       <div class="panel-section open" id="pps-workload">
         <div class="panel-head" onclick="togglePanel('pps-workload')">
           <div class="panel-head-left">
             <div class="panel-head-icon">📊</div>
             <div class="panel-head-text">
               <div class="panel-head-title">Workload</div>
-              <div class="panel-head-summary" id="pps-workload-sum">ISL=4000 · OSL=500 · 0% prefix</div>
+              <div class="panel-head-summary" id="pps-workload-sum">ISL=9000 · OSL=50 · 80% prefix</div>
             </div>
           </div>
           <span class="panel-arrow">&#9658;</span>
@@ -1856,41 +1844,34 @@ button{font-family:var(--sans);cursor:pointer}
         <div class="panel-body">
           <div class="slider-row" style="margin-bottom:8px">
             <label>Input tokens (ISL)</label>
-            <input type="number" id="perf-isl" value="4000" min="64" max="32768" oninput="updateEffectiveISL();updatePerfSummaries()" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+            <input type="number" id="perf-isl" value="9000" min="64" max="32768" oninput="updatePerfEffISL();updatePerfSummaries()" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
           </div>
           <div class="slider-row" style="margin-bottom:8px">
             <label>Output tokens (OSL)</label>
-            <input type="number" id="perf-osl" value="500" min="8" max="8192" oninput="updatePerfSummaries()" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+            <input type="number" id="perf-osl" value="50" min="8" max="8192" oninput="updatePerfSummaries()" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
           </div>
           <div class="slider-row" style="margin-bottom:6px">
-            <label>Prefix reuse % <span title="% of input tokens from KV cache" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></label>
-            <input type="number" id="perf-prefix-pct" value="0" min="0" max="99" oninput="updateEffectiveISL();updatePerfSummaries()" style="width:60px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+            <label>Prefix reuse % <span title="% of input tokens served from KV cache" style="cursor:help;color:var(--text4);font-size:10px">(?)</span></label>
+            <input type="number" id="perf-prefix-pct" value="80" min="0" max="99" oninput="updatePerfEffISL();updatePerfSummaries()" style="width:60px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
           </div>
-          <div id="perf-effective-isl-row" style="display:none;font-size:11px;color:var(--text3);padding:4px 8px;background:var(--bg2);border-radius:4px;margin-bottom:8px">
-            ↳ Effective ISL: <strong id="perf-effective-isl" style="font-family:var(--mono);color:var(--blue)">—</strong> tokens
+          <div id="perf-effective-isl-row" style="font-size:11px;color:var(--text3);padding:4px 8px;background:var(--bg2);border-radius:4px;margin-bottom:8px">
+            ↳ Effective ISL: <strong id="perf-effective-isl" style="font-family:var(--mono);color:var(--blue)">1,800</strong> tokens
           </div>
-          <div class="slider-row" style="margin-bottom:8px">
+          <div class="slider-row">
             <label>Batch / concurrency</label>
             <input type="number" id="perf-batch" value="64" min="1" max="512" style="width:60px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
-          </div>
-          <!-- Batch sweep toggle -->
-          <div id="perf-sweep-section" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
-            <div style="display:flex;align-items:center;justify-content:space-between">
-              <label style="font-size:12px;color:var(--text2)">Auto-sweep batch sizes <span style="font-size:10px;color:var(--text4)">(32,64,128,180,256)</span></label>
-              <input type="checkbox" id="perf-auto-sweep" style="cursor:pointer">
-            </div>
           </div>
         </div>
       </div>
 
-      <!-- ④ SCALING TARGETS -->
+      <!-- SCALING TARGET + SLA -->
       <div class="panel-section open" id="pps-targets">
         <div class="panel-head" onclick="togglePanel('pps-targets')">
           <div class="panel-head-left">
             <div class="panel-head-icon">🎯</div>
             <div class="panel-head-text">
-              <div class="panel-head-title">Scaling targets</div>
-              <div class="panel-head-summary" id="pps-targets-sum">100M req/day · 30% buffer</div>
+              <div class="panel-head-title">Target &amp; SLA</div>
+              <div class="panel-head-summary" id="pps-targets-sum">100M req/day · TTFT ≤500ms</div>
             </div>
           </div>
           <span class="panel-arrow">&#9658;</span>
@@ -1898,20 +1879,29 @@ button{font-family:var(--sans);cursor:pointer}
         <div class="panel-body">
           <div class="slider-row" style="margin-bottom:8px">
             <label>Requests / day</label>
-            <input type="number" id="perf-req-day" value="100000000" min="1000" oninput="recalcPerfTargets();updatePerfSummaries()" style="width:100px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+            <input type="number" id="perf-req-day" value="100000000" min="1000" oninput="recalcPerfV2();updatePerfSummaries()" style="width:100px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
           </div>
+          <div id="perf-rps-hint" style="font-size:11px;color:var(--blue);font-family:var(--mono);margin-bottom:8px">= 1,157.4 req/sec</div>
           <div class="slider-row" style="margin-bottom:8px">
-            <label>Tokens / sec target</label>
-            <input type="number" id="perf-tok-sec" value="5000" min="100" oninput="recalcPerfTargets()" style="width:100px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
-          </div>
-          <div class="slider-row">
             <label>Infra buffer %</label>
-            <input type="number" id="perf-buffer" value="30" min="0" max="100" oninput="recalcPerfTargets();updatePerfSummaries()" style="width:60px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+            <input type="number" id="perf-buffer" value="30" min="0" max="100" oninput="recalcPerfV2()" style="width:60px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+          </div>
+          <div class="panel-label">SLA constraint</div>
+          <div class="chips-wrap" style="margin-bottom:8px">
+            <button class="chip on" id="psla-ttft"    onclick="setPerfSLA('ttft',this)">TTFT</button>
+            <button class="chip"    id="psla-latency" onclick="setPerfSLA('latency',this)">Latency</button>
+            <button class="chip"    id="psla-none"    onclick="setPerfSLA('none',this)">None</button>
+          </div>
+          <div id="perf-sla-val-wrap">
+            <div class="slider-row">
+              <label id="perf-sla-label">TTFT threshold (ms)</label>
+              <input type="number" id="perf-sla-val" value="500" min="50" step="50" oninput="recalcPerfV2()" style="width:72px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- ⑤ COST INPUTS — exact same pattern as Advanced tab -->
+      <!-- COST INPUTS -->
       <div class="panel-section" id="pps-cost">
         <div class="panel-head" onclick="togglePanel('pps-cost')">
           <div class="panel-head-left">
@@ -1924,49 +1914,46 @@ button{font-family:var(--sans);cursor:pointer}
           <span class="panel-arrow">&#9658;</span>
         </div>
         <div class="panel-body">
-          <div class="panel-label" style="display:flex;align-items:center;justify-content:space-between">
-            Cloud provider <span id="perf-live-badge" style="font-size:9px;color:var(--text4)"></span>
-          </div>
+          <div class="panel-label" style="display:flex;align-items:center;justify-content:space-between">Cloud provider <span id="perf-live-badge" style="font-size:9px;color:var(--text4)"></span></div>
           <table class="provider-table" id="perf-prov-table"></table>
           <div class="panel-label" style="margin-top:10px">Reserved discount</div>
           <div class="chips-wrap">
             <button class="chip on" id="perf-disc-0"  onclick="setPerfDisc(0,this)">None</button>
-            <button class="chip"   id="perf-disc-30" onclick="setPerfDisc(0.3,this)">1-yr −30%</button>
-            <button class="chip"   id="perf-disc-50" onclick="setPerfDisc(0.5,this)">3-yr −50%</button>
+            <button class="chip"    id="perf-disc-30" onclick="setPerfDisc(0.3,this)">1-yr −30%</button>
+            <button class="chip"    id="perf-disc-50" onclick="setPerfDisc(0.5,this)">3-yr −50%</button>
           </div>
-          <div class="panel-label" style="margin-top:10px">GPU purchase price ($K)</div>
+          <div class="panel-label" style="margin-top:10px">On-prem GPU price ($K)</div>
           <div class="slider-row">
             <label>Per GPU</label>
-            <input type="range" min="5" max="60" step="1" value="30" id="perf-hw-slider" oninput="document.getElementById('perf-hw-val').textContent='$'+this.value+'K';recalcPerfTargets()">
+            <input type="range" min="5" max="60" step="1" value="30" id="perf-hw-slider" oninput="document.getElementById('perf-hw-val').textContent='$'+this.value+'K';recalcPerfV2()">
             <span class="slider-val mono" id="perf-hw-val">$30K</span>
           </div>
           <div class="panel-label" style="margin-top:8px">Amortisation</div>
           <div class="slider-row">
             <label>Years</label>
-            <input type="range" min="1" max="7" step="1" value="5" id="perf-amort-slider" oninput="document.getElementById('perf-amort-val').textContent=this.value+' yrs';recalcPerfTargets()">
+            <input type="range" min="1" max="7" step="1" value="5" id="perf-amort-slider" oninput="document.getElementById('perf-amort-val').textContent=this.value+' yrs';recalcPerfV2()">
             <span class="slider-val mono" id="perf-amort-val">5 yrs</span>
           </div>
         </div>
       </div>
 
-      <!-- ⑥ PAYLOAD / RESPONSE -->
+      <!-- REQUEST/RESPONSE -->
       <div class="panel-section" id="pps-payload">
         <div class="panel-head" onclick="togglePanel('pps-payload')">
           <div class="panel-head-left">
             <div class="panel-head-icon">📄</div>
             <div class="panel-head-text">
               <div class="panel-head-title">Request &amp; response</div>
-              <div class="panel-head-summary">View API payload and raw response</div>
+              <div class="panel-head-summary">View raw API calls</div>
             </div>
           </div>
           <span class="panel-arrow">&#9658;</span>
         </div>
         <div class="panel-body">
-          <div style="font-size:10px;font-weight:600;color:var(--text4);margin-bottom:4px">REQUEST PAYLOAD</div>
-          <pre id="perf-req-payload" style="font-size:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;overflow:auto;max-height:150px;margin:0 0 6px;color:var(--text2)">— configure and run —</pre>
-          <button onclick="navigator.clipboard.writeText(document.getElementById('perf-req-payload').textContent)" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3);margin-bottom:10px">Copy</button>
-          <div style="font-size:10px;font-weight:600;color:var(--text4);margin-bottom:4px">RAW API RESPONSE</div>
-          <pre id="perf-raw-response" style="font-size:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;overflow:auto;max-height:180px;margin:0 0 6px;color:var(--text2)">— not run yet —</pre>
+          <div style="font-size:10px;font-weight:600;color:var(--text4);margin-bottom:4px">LAST REQUEST</div>
+          <pre id="perf-req-payload" style="font-size:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;overflow:auto;max-height:140px;margin:0 0 6px;color:var(--text2)">— not run yet —</pre>
+          <div style="font-size:10px;font-weight:600;color:var(--text4);margin:8px 0 4px">RAW RESPONSE</div>
+          <pre id="perf-raw-response" style="font-size:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:8px;overflow:auto;max-height:160px;margin:0 0 6px;color:var(--text2)">— not run yet —</pre>
           <button onclick="navigator.clipboard.writeText(document.getElementById('perf-raw-response').textContent)" style="font-size:10px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3)">Copy JSON</button>
         </div>
       </div>
@@ -1974,32 +1961,70 @@ button{font-family:var(--sans);cursor:pointer}
       <div style="padding:10px 16px;font-size:10px;color:var(--text4);line-height:1.5">Powered by NVIDIA AIConfigurator. Estimates — validate with benchmarking before procurement.</div>
     </div>
 
-        <!-- ===== RIGHT PANEL ===== -->
+    <!-- RIGHT PANEL -->
     <div style="flex:1;padding:20px 24px;min-width:0;overflow-x:hidden" id="perf-right">
 
       <!-- Top bar -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
         <div>
           <h1 style="font-size:20px;font-weight:700;margin-bottom:2px">⚡ Performance</h1>
-          <p style="font-size:12px;color:var(--text3)">GPU sizing · AIC silicon data · disagg vs agg</p>
+          <p style="font-size:12px;color:var(--text3)">GPU sizing · AIC silicon data · agg vs disagg</p>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <span id="perf-cache-badge" style="font-size:10px;padding:2px 8px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);display:none"></span>
-          <button id="perf-refresh-btn" style="font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--blue);cursor:pointer;display:none" onclick="runPerfEstimate(true)">↻ Refresh</button>
-          <button class="btn btn-sm" onclick="exportPerfToSheets()" style="color:var(--green);display:none" id="perf-export-btn">📊 Sheets</button>
-          <button class="btn btn-sm" onclick="copyPerfAsJSON()" style="display:none" id="perf-json-btn">{ } Copy JSON</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span id="perf-cache-badge" style="display:none;font-size:10px;padding:2px 8px;border-radius:10px;background:var(--bg2);border:1px solid var(--border)"></span>
+          <button id="perf-refresh-btn" style="display:none;font-size:11px;padding:3px 10px;border:1px solid var(--border);border-radius:10px;background:transparent;color:var(--blue);cursor:pointer" onclick="runPerfV2(true)">↻ Refresh</button>
+          <button class="btn btn-sm" onclick="exportPerfV2CSV()" id="perf-export-btn" style="display:none;color:var(--green)">📊 Export CSV</button>
         </div>
       </div>
 
-      <!-- Empty state -->
-      <div id="perf-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:360px;color:var(--text4)">
+      <!-- EMPTY STATE -->
+      <div id="perf-empty-v2" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;color:var(--text4);text-align:center">
         <div style="font-size:40px;margin-bottom:12px">⚡</div>
-        <div style="font-size:15px;font-weight:600;margin-bottom:6px">No estimate yet</div>
-        <div style="font-size:13px;text-align:center;max-width:300px;color:var(--text3)">Configure model, hardware and targets on the left, then click Run estimate</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:6px;color:var(--text2)">Configure &amp; run estimate</div>
+        <div style="font-size:13px;max-width:300px;color:var(--text3);line-height:1.6">Set your workload and target on the left. Click Run estimate to query AIC for agg and disagg configs — GPU sizing auto-derived.</div>
       </div>
 
-      <!-- Results -->
-      <div id="perf-results" style="display:none">
+      <!-- LOADING STATE -->
+      <div id="perf-loading-v2" style="display:none;flex-direction:column;align-items:center;justify-content:center;min-height:400px">
+        <div style="font-size:32px;margin-bottom:16px;animation:spin 1.2s linear infinite">⚡</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:6px" id="perf-loading-title-v2">Running estimate...</div>
+        <!-- Progress steps -->
+        <div style="width:320px;margin-bottom:20px" id="perf-steps">
+          <div class="perf-step" id="pstep-agg">
+            <span class="pstep-icon">⏳</span>
+            <span class="pstep-label">Querying AIC — aggregated (IFB) configs</span>
+          </div>
+          <div class="perf-step" id="pstep-disagg">
+            <span class="pstep-icon">⏳</span>
+            <span class="pstep-label">Querying AIC — disaggregated P/D configs</span>
+          </div>
+          <div class="perf-step" id="pstep-sizing">
+            <span class="pstep-icon">⏳</span>
+            <span class="pstep-label">Deriving GPU sizing from pareto table</span>
+          </div>
+        </div>
+        <!-- Quote -->
+        <div style="max-width:380px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;text-align:center">
+          <div style="font-size:11px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Did you know?</div>
+          <div id="perf-quote" style="font-size:13px;color:var(--text2);line-height:1.6;font-style:italic"></div>
+          <div id="perf-quote-src" style="font-size:10px;color:var(--text4);margin-top:6px"></div>
+        </div>
+      </div>
+
+      <!-- ERROR STATE -->
+      <div id="perf-error-v2" style="display:none;flex-direction:column;align-items:center;justify-content:center;min-height:300px;text-align:center">
+        <div style="font-size:32px;margin-bottom:12px">⚠️</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text1)">Estimate failed</div>
+        <div id="perf-error-msg" style="font-size:12px;color:var(--red);background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px 16px;margin-bottom:14px;max-width:480px;text-align:left"></div>
+        <div id="perf-error-tips" style="font-size:12px;color:var(--text3);line-height:1.8;margin-bottom:14px;max-width:400px;text-align:left"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" onclick="runPerfV2(true)">↻ Retry</button>
+          <div id="perf-retry-countdown"></div>
+        </div>
+      </div>
+
+      <!-- RESULTS -->
+      <div id="perf-results-v2" style="display:none">
 
         <!-- Status bar -->
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
@@ -2009,158 +2034,102 @@ button{font-family:var(--sans);cursor:pointer}
           <span id="perf-result-ts" style="font-size:10px;color:var(--text4)"></span>
         </div>
 
-        <!-- Warning banner (unsupported / HYBRID) -->
-        <div id="perf-warn-banner" style="display:none;padding:8px 12px;border-radius:var(--r);margin-bottom:12px;font-size:12px;border:1px solid #f59e0b;background:rgba(245,158,11,0.08);color:var(--text2)"></div>
-
-        <!-- ── CONTEXT: What these numbers mean ── -->
-        <div id="perf-context-bar" style="display:none;font-size:11px;color:var(--text3);background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;margin-bottom:10px;line-height:1.6">
-          <strong style="color:var(--text2)">How to read these results:</strong>
-          Running <span id="ctx-model" style="color:var(--blue);font-weight:600">—</span> on
-          <span id="ctx-gpu" style="color:var(--text1);font-weight:600">—</span> with
-          ISL=<span id="ctx-isl">—</span>, OSL=<span id="ctx-osl">—</span>, <span id="ctx-prefix">—</span>% prefix cache →
-          <span id="ctx-seqs" style="font-family:var(--mono);font-weight:600;color:var(--text1)">—</span> req/sec per GPU.
-          To serve <span id="ctx-target" style="font-weight:600">100M</span> req/day you need
-          <span id="ctx-answer" style="color:var(--blue);font-weight:700;font-size:13px">— GPUs</span>.
+        <!-- HYBRID warning -->
+        <div id="perf-hybrid-warn" style="display:none;padding:8px 12px;border-radius:var(--r);margin-bottom:12px;font-size:12px;border:1px solid #f59e0b;background:rgba(245,158,11,.08);color:var(--text2)">
+          ⚠ <strong>HYBRID mode</strong> — no exact silicon data for this combo. AIC is extrapolating. Add ~20-30% extra buffer.
         </div>
 
-        <!-- ── HERO: GPU count answers ── -->
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px" id="perf-hero-cards"></div>
+        <!-- CONTEXT BAR -->
+        <div id="perf-context-v2" style="font-size:12px;color:var(--text3);background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;margin-bottom:14px;line-height:1.7"></div>
 
-        <!-- ── PERFORMANCE tiles ── -->
-        <div id="perf-perf-label" style="display:none;font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Performance</div>
-        <div class="outcome-cards" id="perf-perf-cards" style="margin-bottom:14px"></div>
+        <!-- ANSWER HERO -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px" id="perf-hero-v2"></div>
 
-        <!-- ── THROUGHPUT tiles ── -->
-        <div id="perf-tp-label" style="display:none;font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Throughput &amp; capacity</div>
-        <div class="outcome-cards" id="perf-throughput-cards" style="margin-bottom:14px"></div>
+        <!-- PARETO TABLE SECTION -->
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);margin-bottom:14px;overflow:hidden">
+          <!-- Tab selector: agg / disagg / compare -->
+          <div style="display:flex;border-bottom:1px solid var(--border)">
+            <button class="perf-tab active" id="ptab-disagg"   onclick="showPerfTab('disagg')">Disaggregated P/D</button>
+            <button class="perf-tab"        id="ptab-agg"      onclick="showPerfTab('agg')">Aggregated (IFB)</button>
+            <button class="perf-tab"        id="ptab-compare"  onclick="showPerfTab('compare')">Agg vs Disagg</button>
+            <button class="perf-tab"        id="ptab-sizing"   onclick="showPerfTab('sizing')">Sizing math</button>
+          </div>
 
-        <!-- ── COST card (cloud + on-prem) ── -->
-        <div id="perf-cost-card" style="margin-bottom:14px"></div>
-
-        <!-- ── DISAGG P/D breakdown (shown for query/disagg mode) ── -->
-        <div id="perf-disagg-section" style="display:none;margin-bottom:14px">
-          <div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Disaggregated serving — prefill / decode split</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-            <div id="perf-prefill-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px">
-              <div style="font-size:11px;font-weight:700;color:var(--blue);margin-bottom:8px">PREFILL NODES</div>
-              <div id="perf-prefill-body" style="font-size:12px"></div>
+          <!-- Toolbar -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg3);flex-wrap:wrap;gap:6px" id="perf-toolbar">
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              <span style="font-size:10px;font-weight:600;color:var(--text4)">SORT:</span>
+              <button class="perf-sort active" id="psort-tpgpu" onclick="setPerfSort('tok_s_gpu',this)">tok/s/GPU</button>
+              <button class="perf-sort" id="psort-seqgpu" onclick="setPerfSort('seq_s_gpu',this)">seq/s/GPU</button>
+              <button class="perf-sort" id="psort-ttft"   onclick="setPerfSort('ttft',this)">TTFT</button>
+              <button class="perf-sort" id="psort-lat"    onclick="setPerfSort('latency',this)">Latency</button>
+              <button class="perf-sort" id="psort-gpus"   onclick="setPerfSort('gpus_needed',this)">GPUs needed</button>
             </div>
-            <div id="perf-decode-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px">
-              <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px">DECODE NODES</div>
-              <div id="perf-decode-body" style="font-size:12px"></div>
-            </div>
-          </div>
-          <!-- Top-N configs table -->
-          <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">Top configurations (ranked by tokens/s/gpu)</div>
-          <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--r)">
-            <table style="width:100%;border-collapse:collapse;font-size:11px" id="perf-disagg-table"></table>
-          </div>
-        </div>
-
-        <!-- ── AGG top configs (for query mode) ── -->
-        <div id="perf-agg-section" style="display:none;margin-bottom:14px">
-          <div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Aggregated serving — top configurations</div>
-          <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--r)">
-            <table style="width:100%;border-collapse:collapse;font-size:11px" id="perf-agg-table"></table>
-          </div>
-        </div>
-
-        <!-- ── AGG vs DISAGG comparison ── -->
-        <div id="perf-compare-section" style="display:none;margin-bottom:14px">
-          <div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Agg vs disagg comparison</div>
-          <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--r)">
-            <table style="width:100%;border-collapse:collapse;font-size:12px" id="perf-compare-table"></table>
-          </div>
-        </div>
-
-        <!-- ── BATCH SWEEP results ── -->
-        <div id="perf-sweep-results" style="display:none;margin-bottom:14px">
-          <div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Batch sweep — find optimal batch size</div>
-          <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--r)">
-            <table style="width:100%;border-collapse:collapse;font-size:11px" id="perf-sweep-table"></table>
-          </div>
-          <div id="perf-sweep-recommendation" style="font-size:12px;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);margin-top:8px"></div>
-        </div>
-
-        <!-- ── PER-OP LATENCY breakdown ── -->
-        <details id="perf-perop-details" style="margin-bottom:12px;display:none">
-          <summary style="font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between">
-            <span>Per-op latency breakdown</span><span style="color:var(--text4);font-size:10px">▾ context + generation ops</span>
-          </summary>
-          <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:12px">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-              <div>
-                <div style="font-size:10px;font-weight:600;color:var(--text4);margin-bottom:6px">CONTEXT (PREFILL) OPS</div>
-                <div id="perf-context-ops" style="font-size:11px;font-family:var(--mono)"></div>
+            <div style="display:flex;gap:6px">
+              <div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text3)">
+                <span style="width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block"></span>Passes SLA
+                <span style="width:7px;height:7px;border-radius:50%;background:var(--red);display:inline-block;margin-left:6px"></span>Fails SLA
               </div>
-              <div>
-                <div style="font-size:10px;font-weight:600;color:var(--text4);margin-bottom:6px">GENERATION (DECODE) OPS</div>
-                <div id="perf-gen-ops" style="font-size:11px;font-family:var(--mono)"></div>
-              </div>
+              <button onclick="exportPerfV2CSV()" style="font-size:10px;padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:transparent;cursor:pointer;color:var(--text3)">⬇ CSV</button>
             </div>
-            <div id="perf-scheduling" style="margin-top:10px;font-size:11px;color:var(--text3)"></div>
           </div>
-        </details>
 
-        <!-- ── SIZING MATH ── -->
-        <details style="margin-bottom:12px">
-          <summary style="font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;padding:8px 12px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);list-style:none;display:flex;justify-content:space-between">
-            <span>Sizing calculation</span><span style="color:var(--text4);font-size:10px">▾ step-by-step math</span>
-          </summary>
-          <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);padding:12px">
-            <div id="perf-sizing-math" style="font-size:12px;color:var(--text2)"></div>
+          <!-- Table panes -->
+          <div id="ptab-content-disagg" class="perf-tab-content" style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:11px" id="perf-disagg-tbl"></table>
           </div>
-        </details>
+          <div id="ptab-content-agg" class="perf-tab-content" style="display:none;overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:11px" id="perf-agg-tbl"></table>
+          </div>
+          <div id="ptab-content-compare" class="perf-tab-content" style="display:none;overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:12px" id="perf-compare-tbl"></table>
+          </div>
+          <div id="ptab-content-sizing" class="perf-tab-content" style="display:none;padding:16px">
+            <div id="perf-sizing-v2" style="font-size:12px;color:var(--text2)"></div>
+          </div>
+        </div>
 
-        <!-- ── SAVED RUNS comparison ── -->
-        <div id="perf-comparison" style="display:none">
-          <div style="font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
-            <span>Saved runs</span>
-            <button class="btn btn-sm" onclick="clearPerfSaved()" style="font-size:10px;color:var(--red)">Clear all</button>
+        <!-- GPU RANGE CARD -->
+        <div id="perf-range-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px">
+          <div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px" id="perf-range-title">GPU SIZING RANGE</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px" id="perf-range-grid"></div>
+          <div style="font-size:11px;color:var(--text3);padding:8px 10px;background:var(--bg3);border-radius:4px" id="perf-range-note"></div>
+        </div>
+
+        <!-- COST CARD -->
+        <div id="perf-cost-v2" style="margin-bottom:14px"></div>
+
+        <!-- SAVE + EXPORT -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+          <button class="btn btn-sm" onclick="savePerfV2Result()" id="perf-save-btn-v2">+ Save run</button>
+          <button class="btn btn-sm" onclick="exportPerfV2CSV()" style="color:var(--green)" id="perf-exportcsv-btn">📊 Export CSV</button>
+          <button class="btn btn-sm" onclick="copyPerfV2JSON()" id="perf-json-btn-v2">{ } Copy JSON</button>
+        </div>
+
+        <!-- SAVED RUNS -->
+        <div id="perf-saved-v2" style="display:none;margin-top:16px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+            Saved runs
+            <button class="btn btn-sm" onclick="clearPerfV2Saved()" style="color:var(--red);font-size:10px">Clear all</button>
           </div>
           <div style="overflow-x:auto">
-            <table style="width:100%;border-collapse:collapse;font-size:12px" id="perf-saved-table">
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
               <thead><tr style="border-bottom:2px solid var(--border)">
-                <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:500">Model</th>
-                <th style="text-align:left;padding:6px 8px;color:var(--text3);font-weight:500">GPU</th>
-                <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">GPUs needed</th>
-                <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">Latency</th>
-                <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">TTFT</th>
-                <th style="text-align:right;padding:6px 8px;color:var(--text3);font-weight:500">tok/s/gpu</th>
-                <th style="padding:6px 8px"></th>
+                <th style="padding:5px 8px;text-align:left;color:var(--text3);font-weight:500">Model</th>
+                <th style="padding:5px 8px;text-align:left;color:var(--text3);font-weight:500">GPU</th>
+                <th style="padding:5px 8px;text-align:right;color:var(--text3);font-weight:500">GPUs (best)</th>
+                <th style="padding:5px 8px;text-align:right;color:var(--text3);font-weight:500">+buffer</th>
+                <th style="padding:5px 8px;text-align:right;color:var(--text3);font-weight:500">TTFT</th>
+                <th style="padding:5px 8px;text-align:right;color:var(--text3);font-weight:500">Latency</th>
+                <th style="padding:5px 8px"></th>
               </tr></thead>
-              <tbody id="perf-saved-tbody"></tbody>
+              <tbody id="perf-saved-tbody-v2"></tbody>
             </table>
           </div>
-          <div style="display:flex;gap:8px;margin-top:8px">
-            <button class="btn btn-sm" onclick="exportPerfToSheets()" style="color:var(--green)">📊 Export all to Sheets</button>
-          </div>
         </div>
 
-        <!-- Save + Export actions -->
-        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-          <button class="btn btn-sm" onclick="savePerfResult()" id="perf-save-btn" style="display:none">+ Save run</button>
-          <button class="btn btn-sm" onclick="exportPerfToSheets()" id="perf-export-btn2" style="color:var(--green);display:none">📊 Sheets</button>
-          <button class="btn btn-sm" onclick="copyPerfAsJSON()" id="perf-json-btn2" style="display:none">{ } Copy JSON</button>
-        </div>
-
-      </div><!-- end #perf-results -->
-    </div><!-- end right panel -->
-  </div>
-
-  <!-- Loading modal -->
-  <div id="perf-loading-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:32px;max-width:360px;width:90%;text-align:center">
-      <div style="font-size:32px;margin-bottom:12px;animation:spin 1s linear infinite">⚡</div>
-      <div style="font-size:15px;font-weight:600;margin-bottom:8px" id="perf-loading-title">Running estimate...</div>
-      <div id="perf-loading-tip" style="font-size:12px;color:var(--text3);line-height:1.5">Querying AIC silicon database...</div>
-      <div id="perf-sweep-progress" style="display:none;margin-top:10px">
-        <div id="perf-sweep-bar-wrap" style="background:var(--bg);border-radius:4px;height:6px;overflow:hidden">
-          <div id="perf-sweep-bar" style="background:var(--blue);height:100%;width:0%;transition:width .3s"></div>
-        </div>
-        <div id="perf-sweep-status" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
-      </div>
-    </div>
+      </div><!-- /results -->
+    </div><!-- /right -->
   </div>
 </div>
 <!-- ===== END CALIBRATED PAGE ===== -->
@@ -2276,7 +2245,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.4.71</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.5.0</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -5802,75 +5771,193 @@ function hideGpuTip(){
 var AIC_WORKER_URL = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
 
-// ===== PERFORMANCE TAB (AIC-powered) =====
+// ===== PERFORMANCE TAB v5.5.0 =====
 
 var AIC_WORKER = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
-var PERF_GPU_LABELS = {
-  h100_sxm:'H100 SXM', h200_sxm:'H200 SXM', a100_sxm:'A100 80GB',
-  l40s:'L40S', b200_sxm:'B200 SXM'
-};
-var PERF_GPU_VRAM = {
-  h100_sxm:80, h200_sxm:141, a100_sxm:80, l40s:48, b200_sxm:192
-};
-var PERF_GPU_CLOUD_PRICE = {
-  h100_sxm:3.20, h200_sxm:4.50, a100_sxm:1.80, l40s:1.20, b200_sxm:7.00
-};
-var PERF_GPU_ONPREM_PRICE = {
-  h100_sxm:30000, h200_sxm:45000, a100_sxm:20000, l40s:12000, b200_sxm:60000
-};
+var PERF_GPU_LABELS  = {h100_sxm:'H100 SXM',h200_sxm:'H200 SXM',a100_sxm:'A100 80GB',l40s:'L40S',b200_sxm:'B200 SXM'};
+var PERF_GPU_VRAM    = {h100_sxm:80,h200_sxm:141,a100_sxm:80,l40s:48,b200_sxm:192};
+var PERF_GPU_CLOUD   = {h100_sxm:3.20,h200_sxm:4.50,a100_sxm:1.80,l40s:1.20,b200_sxm:7.00};
+var PERF_GPU_ONPREM  = {h100_sxm:30000,h200_sxm:45000,a100_sxm:20000,l40s:12000,b200_sxm:60000};
+
+var PERF_DISC = 0;
 
 var PERF_STATE = {
   modelPath:  'openai/gpt-oss-20b',
   modelLabel: 'gpt-oss-20b',
-  mode:       'estimate',
   lastResult: null,
-  lastRaw:    null,
   savedRuns:  [],
-  sweepResults: null
+  sortCol:    'tok_s_gpu',
+  sortAsc:    false,
+  activeTab:  'disagg',
+  slaMetric:  'ttft',
+  slaVal:     500
 };
 
-var perfCache = {};
-(function(){ try{ var c=localStorage.getItem('perf_cache'); if(c) perfCache=JSON.parse(c)||{}; }catch(e){} })();
-(function(){ try{ var s=localStorage.getItem('perf_saved'); if(s) PERF_STATE.savedRuns=JSON.parse(s)||[]; }catch(e){} })();
+// Load saved runs
+(function(){ try{ var s=localStorage.getItem('perf_v2_saved'); if(s) PERF_STATE.savedRuns=JSON.parse(s)||[]; }catch(e){} })();
 
-function initPerfPage(){
-  renderPerfProviderTable();
-  updatePerfCostSummary();
-  updateEffectiveISL();
-  syncQuantDefaults();
-  updatePerfSummaries();
-  renderPerfSaved();
-  // Warm up Render so first call doesn't get cold-start HTML
-  warmUpAIC();
+// Cache
+var perfV2Cache = {};
+(function(){ try{ var c=localStorage.getItem('perf_v2_cache'); if(c) perfV2Cache=JSON.parse(c)||{}; }catch(e){} })();
+
+// ── QUOTES ──────────────────────────────────────────────────────────────────
+var PERF_QUOTES = [
+  {text:'vLLM uses PagedAttention to manage KV cache memory like virtual memory in an OS — reducing fragmentation by up to 55% compared to static allocation.',src:'vLLM paper, 2023'},
+  {text:'Disaggregated prefill-decode (llm-d) separates the compute-bound prefill phase from the memory-bandwidth-bound decode phase, allowing each to scale independently.',src:'llm-d architecture'},
+  {text:'For long-context workloads (ISL > 4K), prefill dominates total request latency. A 9K token prompt at TP=8 takes ~20ms to prefill — but this grows linearly with prompt length.',src:'NVIDIA AIC benchmarks'},
+  {text:'Prefix caching can reduce effective ISL by 80%+ for RAG and document QA workloads — cutting GPU requirements by 3-4× for the same throughput target.',src:'KV cache reuse research'},
+  {text:'H200 SXM has 4.8 TB/s memory bandwidth vs H100\'s 3.35 TB/s — a 43% improvement that directly translates to higher decode throughput per GPU.',src:'NVIDIA H200 datasheet'},
+  {text:'Tensor parallelism reduces per-GPU memory linearly but adds all-reduce communication overhead. For ISL-heavy workloads, TP=1 often beats TP=4 on per-GPU throughput.',src:'cemigo H200 benchmarks, 2026'},
+  {text:'At batch=64, a 20B MoE model on H100 SXM achieves ~220 output tokens/sec/GPU — but seq/s (full requests/sec) is a better sizing metric because it includes prefill cost.',src:'AIC pareto analysis'},
+  {text:'The "green dot" operating point in throughput sweeps is where TTFT P99 ≤ SLA. This is typically 40-60% of peak throughput — not the maximum the system can handle.',src:'Red Hat perfscale benchmarks'},
+  {text:'KV cache quantization (FP8) can halve memory usage with minimal quality loss, effectively doubling the number of users per GPU replica.',src:'vLLM FP8 KV cache'},
+  {text:'llm-d v0.6.0 uses disaggregated serving with separate prefill and decode nodes, allowing heterogeneous GPU types and independent scaling of each phase.',src:'llm-d v0.6.0 release notes'},
+  {text:'For 100M requests/day at 1,157 req/sec with 80% prefix reuse, the difference between TP=1 and TP=8 can mean 78 vs 248 H200s — a 3× cost difference.',src:'gpu.calc analysis, 2026'},
+  {text:'TPOT (Time Per Output Token) measures decode speed. At 5ms TPOT, a 50-token response takes 250ms of decode time — well within typical UX budgets.',src:'LLM inference metrics'},
+];
+
+var _quoteIdx = 0;
+var _quoteTimer = null;
+
+function startQuoteRotation(){
+  _quoteIdx = Math.floor(Math.random() * PERF_QUOTES.length);
+  showQuote();
+  _quoteTimer = setInterval(function(){
+    _quoteIdx = (_quoteIdx + 1) % PERF_QUOTES.length;
+    showQuote();
+  }, 5000);
+}
+function stopQuoteRotation(){
+  if(_quoteTimer){ clearInterval(_quoteTimer); _quoteTimer = null; }
+}
+function showQuote(){
+  var q = PERF_QUOTES[_quoteIdx];
+  var el = document.getElementById('perf-quote');
+  var src = document.getElementById('perf-quote-src');
+  if(el)  el.textContent  = '"' + q.text + '"';
+  if(src) src.textContent = '— ' + q.src;
 }
 
-function warmUpAIC(){
-  // Silent ping to wake Render from sleep — doesn't need to succeed
-  fetch(AIC_WORKER, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ endpoint: 'systems', payload: {} })
-  }).catch(function(){}); // ignore errors — this is just a wake-up
+// ── STEP INDICATORS ─────────────────────────────────────────────────────────
+function setStep(id, state){
+  var el = document.getElementById(id);
+  if(!el) return;
+  var icon = el.querySelector('.pstep-icon');
+  if(!icon) return;
+  if(state==='running') icon.textContent = '⏳';
+  if(state==='done')    icon.textContent = '✅';
+  if(state==='error')   icon.textContent = '❌';
+  if(state==='wait')    icon.textContent = '⏳';
+  el.style.opacity = state==='wait' ? '.4' : '1';
 }
 
-function setPerfMode(mode, btn){
-  PERF_STATE.mode = mode;
-  document.querySelectorAll('#perf-mode-estimate, #perf-mode-query').forEach(function(b){ b.classList.remove('on'); });
+// ── CHIP SETTERS ─────────────────────────────────────────────────────────────
+function setPerfGPU(val, label, btn){
+  document.getElementById('perf-gpu').value = val;
+  document.querySelectorAll('[id^="pgpu-"]').forEach(function(b){ b.classList.remove('on'); });
   if(btn) btn.classList.add('on');
-  var hint = document.getElementById('perf-mode-hint');
-  var sweep = document.getElementById('perf-sweep-section');
-  if(mode === 'estimate'){
-    if(hint) hint.textContent = 'Single config estimate — fast, gives per-op breakdown';
-    if(sweep) sweep.style.display = 'block';
-  } else {
-    if(hint) hint.textContent = 'Full Pareto sweep — agg vs disagg comparison (takes ~30s)';
-    if(sweep) sweep.style.display = 'none';
+  updatePerfSummaries();
+  syncPerfQuantDefaults();
+}
+function setPerfBackend(val, label, btn){
+  document.getElementById('perf-backend').value = val;
+  document.querySelectorAll('[id^="pback-"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  updatePerfSummaries();
+  syncPerfQuantDefaults();
+}
+function setPerfTP(val, btn){
+  document.getElementById('perf-tp').value = val;
+  document.querySelectorAll('[id^="ptp-"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  updatePerfSummaries();
+}
+function setPerfDBMode(val, btn){
+  document.getElementById('perf-dbmode').value = val;
+  document.querySelectorAll('[id^="pdb-"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+}
+function setPerfSLA(val, btn){
+  PERF_STATE.slaMetric = val;
+  document.querySelectorAll('[id^="psla-"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  var wrap = document.getElementById('perf-sla-val-wrap');
+  if(wrap) wrap.style.display = val==='none' ? 'none' : 'block';
+  var lbl = document.getElementById('perf-sla-label');
+  if(lbl) lbl.textContent = val==='ttft' ? 'TTFT threshold (ms)' : 'Request latency threshold (ms)';
+  recalcPerfV2();
+}
+
+function syncPerfQuantDefaults(){
+  var gpu     = (document.getElementById('perf-gpu')||{}).value     || '';
+  var backend = (document.getElementById('perf-backend')||{}).value || '';
+  var moeEl   = document.getElementById('perf-moe-quant');
+  var verEl   = document.getElementById('perf-backend-ver');
+  if(gpu === 'h100_sxm' && backend === 'vllm'){
+    if(moeEl && !moeEl.value) moeEl.value = 'float16';
+    if(verEl && !verEl.value) verEl.value = '0.14.0';
   }
 }
 
+function updatePerfEffISL(){
+  var isl = parseInt((document.getElementById('perf-isl')||{}).value)||9000;
+  var pct = parseInt((document.getElementById('perf-prefix-pct')||{}).value)||0;
+  var eff = Math.round(isl * (1 - pct/100));
+  var span = document.getElementById('perf-effective-isl');
+  if(span) span.textContent = eff.toLocaleString();
+  var row = document.getElementById('perf-effective-isl-row');
+  if(row) row.style.display = pct > 0 ? 'block' : 'none';
+}
+
+function updatePerfSummaries(){
+  var gpu  = (document.getElementById('perf-gpu')||{}).value||'h100_sxm';
+  var back = (document.getElementById('perf-backend')||{}).value||'vllm';
+  var tp   = (document.getElementById('perf-tp')||{}).value||'8';
+  var isl  = (document.getElementById('perf-isl')||{}).value||'9000';
+  var osl  = (document.getElementById('perf-osl')||{}).value||'50';
+  var pct  = (document.getElementById('perf-prefix-pct')||{}).value||'80';
+  var rd   = (document.getElementById('perf-req-day')||{}).value||'100000000';
+  var buf  = (document.getElementById('perf-buffer')||{}).value||'30';
+  var rps  = (parseInt(rd)/86400).toFixed(1);
+  var hwSum = document.getElementById('pps-hw-sum');
+  if(hwSum) hwSum.textContent = (PERF_GPU_LABELS[gpu]||gpu)+' · '+back.toUpperCase()+' · TP='+tp;
+  var wlSum = document.getElementById('pps-workload-sum');
+  if(wlSum) wlSum.textContent = 'ISL='+isl+' · OSL='+osl+' · '+pct+'% prefix';
+  var tgSum = document.getElementById('pps-targets-sum');
+  if(tgSum) tgSum.textContent = (parseInt(rd)/1000000).toFixed(0)+'M req/day · TTFT ≤'+(document.getElementById('perf-sla-val')||{value:500}).value+'ms';
+  var mdSum = document.getElementById('pps-model-sum');
+  if(mdSum) mdSum.textContent = PERF_STATE.modelLabel;
+  var rpsHint = document.getElementById('perf-rps-hint');
+  if(rpsHint) rpsHint.textContent = '= '+rps+' req/sec';
+  updatePerfEffISL();
+}
+
+function perfPullFromAdvanced(){
+  var gpuMap = {'H100':'h100_sxm','H200':'h200_sxm','A100':'a100_sxm','A100 80GB':'a100_sxm','L40S':'l40s','B200':'b200_sxm'};
+  PERF_STATE.modelPath  = S.hfId || PERF_STATE.modelPath;
+  PERF_STATE.modelLabel = S.modelLabel || PERF_STATE.modelLabel;
+  var d = document.getElementById('perf-model-display');
+  if(d) d.textContent = S.modelLabel;
+  document.querySelectorAll('#perf-model-chips .chip').forEach(function(b){
+    b.classList.toggle('on', b.textContent.trim() === S.modelLabel);
+  });
+  var gpuKey = gpuMap[S.gpuName] || 'h100_sxm';
+  document.getElementById('perf-gpu').value = gpuKey;
+  document.querySelectorAll('[id^="pgpu-"]').forEach(function(b){ b.classList.remove('on'); });
+  var gpuBtn = document.getElementById('pgpu-'+gpuKey.replace('_sxm','').replace('_',''));
+  if(gpuBtn) gpuBtn.classList.add('on');
+  var tpEl = document.getElementById('perf-tp');
+  if(tpEl && S.tp) { tpEl.value = S.tp; document.querySelectorAll('[id^="ptp-"]').forEach(function(b){ b.classList.remove('on'); }); var tpBtn=document.getElementById('ptp-'+S.tp); if(tpBtn) tpBtn.classList.add('on'); }
+  var islEl = document.getElementById('perf-isl');
+  if(islEl && S.ctx) islEl.value = Math.round(S.ctx * 1000 * 0.75);
+  var batchEl = document.getElementById('perf-batch');
+  if(batchEl && S.users) batchEl.value = S.users;
+  updatePerfSummaries();
+  syncPerfQuantDefaults();
+}
+
 function selectPerfModel(hfId, label, btn){
-  setTimeout(updatePerfSummaries, 50);
   PERF_STATE.modelPath  = hfId;
   PERF_STATE.modelLabel = label;
   document.querySelectorAll('#perf-model-chips .chip').forEach(function(b){ b.classList.remove('on'); });
@@ -5879,6 +5966,7 @@ function selectPerfModel(hfId, label, btn){
   if(d) d.textContent = label;
   var i = document.getElementById('perf-hf-input');
   if(i) i.value = '';
+  updatePerfSummaries();
 }
 
 function perfHFLookup(){
@@ -5890,253 +5978,14 @@ function perfHFLookup(){
     PERF_STATE.modelPath  = id;
     PERF_STATE.modelLabel = m.name;
     var d = document.getElementById('perf-model-display');
-    if(d) d.textContent = m.name + ' (' + m.params + 'B, ' + m.layers + 'L)';
+    if(d) d.textContent = m.name+' ('+m.params+'B)';
     document.querySelectorAll('#perf-model-chips .chip').forEach(function(b){ b.classList.remove('on'); });
+    updatePerfSummaries();
   });
 }
 
-function setPerfGPU(val, label, btn){
-  document.getElementById('perf-gpu').value = val;
-  document.querySelectorAll('[id^="pgpu-"]').forEach(function(b){ b.classList.remove('on'); });
-  if(btn) btn.classList.add('on');
-  updatePerfSummaries();
-  syncQuantDefaults();
-}
-function setPerfBackend(val, label, btn){
-  document.getElementById('perf-backend').value = val;
-  document.querySelectorAll('[id^="pback-"]').forEach(function(b){ b.classList.remove('on'); });
-  if(btn) btn.classList.add('on');
-  updatePerfSummaries();
-  syncQuantDefaults();
-}
-function setPerfDBMode(val, btn){
-  document.getElementById('perf-dbmode').value = val;
-  document.querySelectorAll('[id^="pdb-"]').forEach(function(b){ b.classList.remove('on'); });
-  if(btn) btn.classList.add('on');
-}
-function setPerfTP(val, btn){
-  document.getElementById('perf-tp').value = val;
-  document.querySelectorAll('[id^="ptp-"]').forEach(function(b){ b.classList.remove('on'); });
-  if(btn) btn.classList.add('on');
-  updatePerfSummaries();
-}
-function updatePerfSummaries(){
-  // Update panel summary lines
-  var gpu  = document.getElementById('perf-gpu')?.value || 'h100_sxm';
-  var back = document.getElementById('perf-backend')?.value || 'vllm';
-  var tp   = document.getElementById('perf-tp')?.value || '4';
-  var isl  = document.getElementById('perf-isl')?.value || '4000';
-  var osl  = document.getElementById('perf-osl')?.value || '500';
-  var pct  = document.getElementById('perf-prefix-pct')?.value || '0';
-  var rd   = document.getElementById('perf-req-day')?.value || '100000000';
-  var buf  = document.getElementById('perf-buffer')?.value || '30';
-  var hwSum = document.getElementById('pps-hw-sum');
-  if(hwSum) hwSum.textContent = (PERF_GPU_LABELS[gpu]||gpu)+' · '+(back.toUpperCase())+' · TP='+tp;
-  var wlSum = document.getElementById('pps-workload-sum');
-  if(wlSum) wlSum.textContent = 'ISL='+isl+' · OSL='+osl+' · '+pct+'% prefix';
-  var tgSum = document.getElementById('pps-targets-sum');
-  if(tgSum) tgSum.textContent = (parseInt(rd)/1000000)+'M req/day · '+buf+'% buffer';
-  var mdSum = document.getElementById('pps-model-sum');
-  if(mdSum) mdSum.textContent = PERF_STATE.modelLabel || 'gpt-oss-20b';
-}
-function getPerfAmortMonths(){
-  var slider = document.getElementById('perf-amort-slider');
-  return slider ? parseInt(slider.value) * 12 : 60;
-}
-function syncQuantDefaults(){
-
-  // Auto-populate quant fields for known combos to prevent errors
-  var gpu     = (document.getElementById('perf-gpu')||{}).value     || '';
-  var backend = (document.getElementById('perf-backend')||{}).value || '';
-  var moeEl   = document.getElementById('perf-moe-quant');
-  var verEl   = document.getElementById('perf-backend-ver');
-  if(gpu === 'h100_sxm' && backend === 'vllm'){
-    if(moeEl && !moeEl.value) moeEl.value = 'float16';
-    if(verEl && !verEl.value) verEl.value = '0.14.0';
-  } else {
-    if(moeEl && moeEl.value === 'float16') moeEl.value = '';
-    if(verEl && verEl.value === '0.14.0')  verEl.value = '';
-  }
-}
-
-function updateEffectiveISL(){
-  var isl = parseInt((document.getElementById('perf-isl')||{}).value)||4000;
-  var pct = parseInt((document.getElementById('perf-prefix-pct')||{}).value)||0;
-  var row = document.getElementById('perf-effective-isl-row');
-  var span = document.getElementById('perf-effective-isl');
-  if(pct > 0){
-    var eff = Math.round(isl * (1 - pct/100));
-    if(row) row.style.display = 'flex';
-    if(span) span.textContent = eff.toLocaleString();
-  } else {
-    if(row) row.style.display = 'none';
-  }
-}
-
-function perfPullFromAdvanced(){
-  var gpuMap = {'H100':'h100_sxm','H200':'h200_sxm','A100':'a100_sxm','A100 80GB':'a100_sxm','L40S':'l40s','B200':'b200_sxm','MI300X':'h100_sxm'};
-  var fwMap  = {'vllm':'vllm','trtllm':'trtllm','trt-llm':'trtllm'};
-
-  PERF_STATE.modelPath  = S.hfId || PERF_STATE.modelPath;
-  PERF_STATE.modelLabel = S.modelLabel || PERF_STATE.modelLabel;
-
-  var d = document.getElementById('perf-model-display');
-  if(d) d.textContent = S.modelLabel;
-  document.querySelectorAll('#perf-model-chips .chip').forEach(function(b){
-    b.classList.toggle('on', b.textContent.trim() === S.modelLabel);
-  });
-
-  var gpuSel = document.getElementById('perf-gpu');
-  if(gpuSel) gpuSel.value = gpuMap[S.gpuName] || gpuSel.value;
-
-  var backEl = document.getElementById('perf-backend');
-  if(backEl && S.fw) backEl.value = fwMap[S.fw] || backEl.value;
-
-  var tpEl = document.getElementById('perf-tp');
-  if(tpEl && S.tp) tpEl.value = S.tp;
-
-  var islEl = document.getElementById('perf-isl');
-  if(islEl && S.ctx) islEl.value = Math.round(S.ctx * 1000 * 0.75);
-
-  var batchEl = document.getElementById('perf-batch');
-  if(batchEl && S.users) batchEl.value = S.users;
-
-  updateEffectiveISL();
-}
-
-function buildPerfPayload(){
-  var isl     = parseInt(document.getElementById('perf-isl').value)||4000;
-  var osl     = parseInt(document.getElementById('perf-osl').value)||500;
-  var pct     = parseInt(document.getElementById('perf-prefix-pct').value)||0;
-  var effIsl  = Math.round(isl * (1 - pct/100));
-  var batch   = parseInt(document.getElementById('perf-batch').value)||64;
-  var gpu     = document.getElementById('perf-gpu').value||'h100_sxm';
-  var backend = document.getElementById('perf-backend').value||'vllm';
-  var dbmode  = document.getElementById('perf-dbmode').value||'HYBRID';
-  var tp      = parseInt(document.getElementById('perf-tp').value)||4;
-  var pp      = parseInt(document.getElementById('perf-pp').value)||1;
-
-  if(PERF_STATE.mode === 'estimate'){
-    return {
-      endpoint: 'estimate',
-      payload: (function(){
-        var p = {
-          model_path:    PERF_STATE.modelPath,
-          system:        gpu,
-          backend:       backend,
-          database_mode: dbmode,
-          isl:           effIsl,
-          osl:           osl,
-          batch_size:    batch,
-          tp_size:       tp,
-          pp_size:       pp
-        };
-        // Apply user quant overrides
-        var moeQ  = (document.getElementById('perf-moe-quant')||{}).value  || '';
-        var gemmQ = (document.getElementById('perf-gemm-quant')||{}).value || '';
-        var bVer  = (document.getElementById('perf-backend-ver')||{}).value || '';
-        if(gemmQ) p.gemm_quant_mode = gemmQ;
-        // H100+vLLM: w4a16_mxfp4 not supported — ALWAYS force float16 + 0.14.0
-        // (user can override via the quant fields if needed)
-        if(gpu === 'h100_sxm' && backend === 'vllm'){
-          p.moe_quant_mode  = moeQ || 'float16';
-          p.backend_version = bVer || '0.14.0';
-        } else {
-          if(moeQ) p.moe_quant_mode = moeQ;
-          if(bVer) p.backend_version = bVer;
-        }
-        return p;
-      })(),
-      meta: { isl_original: isl, prefix_pct: pct, eff_isl: effIsl }
-    };
-  } else {
-    // Use /query/agg + /query/disagg in parallel — they correctly handle moe_quant_mode
-    var moeQ2  = (document.getElementById('perf-moe-quant')||{}).value  || '';
-    var bVer2  = (document.getElementById('perf-backend-ver')||{}).value || '';
-    var baseP = {
-      model_path:    PERF_STATE.modelPath,
-      total_gpus:    tp * 4,
-      system:        gpu,
-      backend:       backend,
-      database_mode: 'HYBRID',
-      isl:           isl,
-      osl:           osl,
-      prefix:        Math.round(isl * pct/100)
-    };
-    if(gpu === 'h100_sxm' && backend === 'vllm'){
-      baseP.moe_quant_mode  = moeQ2 || 'float16';
-      baseP.backend_version = bVer2 || '0.14.0';
-    } else {
-      if(moeQ2) baseP.moe_quant_mode  = moeQ2;
-      if(bVer2) baseP.backend_version = bVer2;
-    }
-    var disaggP = Object.assign({}, baseP, {
-      prefill_system:          gpu,
-      prefill_backend:         backend,
-      prefill_moe_quant:       baseP.moe_quant_mode  || null,
-      prefill_backend_version: baseP.backend_version || null,
-      decode_moe_quant:        baseP.moe_quant_mode  || null,
-      decode_backend_version:  baseP.backend_version || null
-    });
-    return {
-      endpoint:       'query_both',
-      agg_payload:    baseP,
-      disagg_payload: disaggP,
-      meta: { isl_original: isl, prefix_pct: pct, eff_isl: effIsl }
-    };
-  }
-}
-
-function showPerfLoading(show, title, isSweep){
-  var modal = document.getElementById('perf-loading-modal');
-  if(!modal) return;
-  modal.style.display = show ? 'flex' : 'none';
-  if(show){
-    var t = document.getElementById('perf-loading-title');
-    if(t) t.textContent = title || 'Running estimate...';
-    // Update tip if retrying after cold start
-    if(title && title.indexOf('Retrying') >= 0){
-      var tipEl = document.getElementById('perf-loading-tip');
-      if(tipEl) tipEl.textContent = 'AIC API woke up — running your estimate now...';
-    }
-    var sp = document.getElementById('perf-sweep-progress');
-    if(sp) sp.style.display = isSweep ? 'block' : 'none';
-  }
-}
-
-function updateSweepProgress(done, total){
-  var bar = document.getElementById('perf-sweep-bar');
-  var st  = document.getElementById('perf-sweep-status');
-  if(bar) bar.style.width = Math.round(done/total*100)+'%';
-  if(st)  st.textContent  = 'Batch '+done+' of '+total+' complete...';
-}
-
-function runPerfEstimate(forceRefresh){
-  var cfg = buildPerfPayload();
-  var cacheKey = JSON.stringify(cfg);
-
-  // Update payload display
-  var preEl = document.getElementById('perf-req-payload');
-  if(preEl) preEl.textContent = JSON.stringify(cfg.payload, null, 2);
-
-  // Check cache
-  if(!forceRefresh && perfCache[cacheKey]){
-    renderPerfResult(perfCache[cacheKey], true);
-    return;
-  }
-
-  var autoSweep = document.getElementById('perf-auto-sweep');
-  var doSweep   = autoSweep && autoSweep.checked && PERF_STATE.mode === 'estimate';
-
-  if(doSweep){
-    runPerfSweep(cfg, cacheKey);
-  } else {
-    runSinglePerfEstimate(cfg, cacheKey);
-  }
-}
-
+// ── AIC CALL ─────────────────────────────────────────────────────────────────
 function callAICEndpoint(endpoint, payload, cb, errCb){
-  // Call via Cloudflare Worker proxy (AIC key never in browser)
   fetch(AIC_WORKER, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
@@ -6144,14 +5993,11 @@ function callAICEndpoint(endpoint, payload, cb, errCb){
   })
   .then(function(r){
     return r.text().then(function(text){
-      // Detect Render cold-start HTML page or Cloudflare error
-      if(text.trim().startsWith('<')){
-        throw new Error('AIC API is starting up (Render cold start). Wait 30s and retry.');
-      }
+      if(text.trim().startsWith('<')) throw new Error('AIC API is waking up (Render cold start) — wait 30s and retry');
       var d;
       try{ d = JSON.parse(text); }
-      catch(e){ throw new Error('Invalid response from AIC API: '+text.slice(0,100)); }
-      if(!r.ok) throw new Error(d.error || d.detail || ('HTTP '+r.status+': '+text.slice(0,120)));
+      catch(e){ throw new Error('Invalid response: '+text.slice(0,80)); }
+      if(!r.ok) throw new Error(d.error || d.detail || ('HTTP '+r.status));
       return d;
     });
   })
@@ -6159,1217 +6005,781 @@ function callAICEndpoint(endpoint, payload, cb, errCb){
   .catch(errCb || function(e){ console.error('AIC error:', e); });
 }
 
-function runSinglePerfEstimate(cfg, cacheKey){
-  showPerfLoading(true, 'Running estimate...');
+// ── BUILD PAYLOADS ────────────────────────────────────────────────────────────
+function buildPerfV2Payloads(){
+  var isl     = parseInt(document.getElementById('perf-isl').value)||9000;
+  var osl     = parseInt(document.getElementById('perf-osl').value)||50;
+  var pct     = parseInt(document.getElementById('perf-prefix-pct').value)||0;
+  var prefix  = Math.round(isl * pct/100);
+  var batch   = parseInt(document.getElementById('perf-batch').value)||64;
+  var gpu     = document.getElementById('perf-gpu').value||'h100_sxm';
+  var backend = document.getElementById('perf-backend').value||'vllm';
+  var tp      = parseInt(document.getElementById('perf-tp').value)||8;
+  var dbmode  = document.getElementById('perf-dbmode').value||'HYBRID';
+  var moeQ    = (document.getElementById('perf-moe-quant')||{}).value||'';
+  var bVer    = (document.getElementById('perf-backend-ver')||{}).value||'';
+  var totalGpus = tp * 4;
 
-  if(cfg.endpoint === 'query_both'){
-    // Call /query/agg and /query/disagg in parallel
-    var aggDone = false, disaggDone = false;
-    var aggData = null, disaggData = null;
-    var errMsg = null;
+  // Auto-fix H100+vLLM quant
+  if(gpu === 'h100_sxm' && backend === 'vllm'){
+    if(!moeQ) moeQ = 'float16';
+    if(!bVer) bVer = '0.14.0';
+  }
 
-    function tryMerge(){
-      if(!aggDone || !disaggDone) return;
-      showPerfLoading(false);
-      if(errMsg && !aggData && !disaggData){ showPerfError(errMsg); return; }
-      // Merge both results
-      var merged = { agg: aggData, disagg: disaggData };
-      var raw = document.getElementById('perf-raw-response');
-      if(raw) raw.textContent = JSON.stringify(merged, null, 2);
-      var result = parsePerfQueryBoth(merged, cfg, cacheKey);
-      perfCache[cacheKey] = result;
-      try{ localStorage.setItem('perf_cache', JSON.stringify(perfCache)); }catch(e){}
-      renderPerfResult(result, false);
-    }
+  var aggBase = {
+    model_path:    PERF_STATE.modelPath,
+    total_gpus:    totalGpus,
+    system:        gpu,
+    backend:       backend,
+    database_mode: dbmode,
+    isl:           isl,
+    osl:           osl,
+    prefix:        prefix,
+    top_n:         10
+  };
+  if(moeQ) aggBase.moe_quant_mode  = moeQ;
+  if(bVer) aggBase.backend_version = bVer;
 
-    callAICEndpoint('query/agg', cfg.agg_payload,
-      function(data){ aggData = data; aggDone = true; tryMerge(); },
-      function(err){  errMsg = err.message; aggDone = true; tryMerge(); }
-    );
-    callAICEndpoint('query/disagg', cfg.disagg_payload,
-      function(data){ disaggData = data; disaggDone = true; tryMerge(); },
-      function(err){  errMsg = errMsg || err.message; disaggDone = true; tryMerge(); }
-    );
+  var disaggBase = {
+    model_path:              PERF_STATE.modelPath,
+    total_gpus:              totalGpus,
+    prefill_system:          gpu,
+    prefill_backend:         backend,
+    prefill_database_mode:   dbmode,
+    decode_system:           gpu,
+    decode_backend:          backend,
+    decode_database_mode:    dbmode,
+    isl:                     isl,
+    osl:                     osl,
+    prefix:                  prefix,
+    top_n:                   10
+  };
+  if(moeQ){ disaggBase.prefill_moe_quant = moeQ; disaggBase.decode_moe_quant = moeQ; }
+  if(bVer){ disaggBase.prefill_backend_version = bVer; disaggBase.decode_backend_version = bVer; }
+
+  return {
+    agg:    aggBase,
+    disagg: disaggBase,
+    meta:   { isl:isl, osl:osl, prefix:prefix, pct:pct, batch:batch, gpu:gpu, backend:backend, tp:tp, dbmode:dbmode }
+  };
+}
+
+// ── MAIN RUN ─────────────────────────────────────────────────────────────────
+function runPerfV2(forceRefresh){
+  var payloads = buildPerfV2Payloads();
+  var cacheKey = JSON.stringify(payloads);
+
+  // Update req payload display
+  var preEl = document.getElementById('perf-req-payload');
+  if(preEl) preEl.textContent = JSON.stringify({agg: payloads.agg, disagg: payloads.disagg}, null, 2);
+
+  // Check cache
+  if(!forceRefresh && perfV2Cache[cacheKey]){
+    renderPerfV2Result(perfV2Cache[cacheKey], true);
     return;
   }
 
-  callAICEndpoint(cfg.endpoint, cfg.payload,
+  showPerfV2State('loading');
+  startQuoteRotation();
+  setStep('pstep-agg','running');
+  setStep('pstep-disagg','wait');
+  setStep('pstep-sizing','wait');
+
+  var aggResult = null, disaggResult = null;
+  var aggErr = null,   disaggErr = null;
+
+  // Run AGG first, then DISAGG sequentially (don't exhaust API)
+  callAICEndpoint('query/agg', payloads.agg,
     function(data){
-      showPerfLoading(false);
-      var raw = document.getElementById('perf-raw-response');
-      if(raw) raw.textContent = JSON.stringify(data, null, 2);
-      var result = parsePerfResult(data, cfg, cacheKey);
-      perfCache[cacheKey] = result;
-      try{ localStorage.setItem('perf_cache', JSON.stringify(perfCache)); }catch(e){}
-      renderPerfResult(result, false);
+      aggResult = data;
+      setStep('pstep-agg','done');
+      setStep('pstep-disagg','running');
+      // Update loading title
+      var t = document.getElementById('perf-loading-title-v2');
+      if(t) t.textContent = 'Aggregated done — running disaggregated...';
+      // Now run DISAGG
+      callAICEndpoint('query/disagg', payloads.disagg,
+        function(data2){
+          disaggResult = data2;
+          setStep('pstep-disagg','done');
+          setStep('pstep-sizing','running');
+          stopQuoteRotation();
+          var result = mergePerfV2Results(aggResult, disaggResult, payloads, cacheKey);
+          setStep('pstep-sizing','done');
+          perfV2Cache[cacheKey] = result;
+          try{ localStorage.setItem('perf_v2_cache', JSON.stringify(perfV2Cache)); }catch(e){}
+          // Update raw response
+          var rawEl = document.getElementById('perf-raw-response');
+          if(rawEl) rawEl.textContent = JSON.stringify({agg:aggResult, disagg:disaggResult}, null, 2);
+          renderPerfV2Result(result, false);
+        },
+        function(err){
+          disaggErr = err;
+          setStep('pstep-disagg','error');
+          stopQuoteRotation();
+          // If disagg fails but agg succeeded, still show agg results
+          if(aggResult){
+            var result = mergePerfV2Results(aggResult, null, payloads, cacheKey);
+            result.disaggError = err.message;
+            setStep('pstep-sizing','done');
+            renderPerfV2Result(result, false);
+          } else {
+            showPerfV2Error(err.message);
+          }
+        }
+      );
     },
     function(err){
-      showPerfLoading(false);
-      showPerfError(err.message || 'API error. Check model+GPU combo — try HYBRID mode or a different backend.');
+      aggErr = err;
+      setStep('pstep-agg','error');
+      stopQuoteRotation();
+      showPerfV2Error(err.message);
     }
   );
 }
 
-function runPerfSweep(cfg, cacheKey){
-  var batchSizes = [32, 64, 128, 180, 256];
-  var results    = [];
-  var done       = 0;
-  showPerfLoading(true, 'Running batch sweep...', true);
-  updateSweepProgress(0, batchSizes.length);
+// ── MERGE RESULTS ─────────────────────────────────────────────────────────────
+function mergePerfV2Results(aggData, disaggData, payloads, cacheKey){
+  var meta = payloads.meta;
 
-  function runNext(i){
-    if(i >= batchSizes.length){
-      showPerfLoading(false);
-      var sweepResult = {
-        type: 'sweep',
-        batches: results,
-        cfg: cfg,
-        cacheKey: cacheKey,
-        ts: Date.now()
+  function extractConfigs(data, modeKey){
+    if(!data) return [];
+    var configs = data.configs || {};
+    var rows = configs[modeKey] || Object.values(configs)[0] || [];
+    return rows.map(function(r){
+      return {
+        ttft:           parseFloat(r.ttft||r['ttft']||0)||null,
+        tpot:           parseFloat(r.tpot||r['tpot']||0)||null,
+        latency:        parseFloat(r.request_latency||r['request_latency']||0)||null,
+        seq_s:          parseFloat(r['seq/s']||r.seq_s||0)||null,
+        seq_s_gpu:      parseFloat(r['seq/s/gpu']||r.seq_s_gpu||0)||null,
+        tok_s:          parseFloat(r['tokens/s']||r.tok_s||0)||null,
+        tok_s_gpu:      parseFloat(r['tokens/s/gpu']||r.tok_s_gpu||0)||null,
+        num_gpus:       parseInt(r.num_total_gpus||r.num_gpus||0)||null,
+        p_workers:      r['(p)workers']||r.p_workers||null,
+        d_workers:      r['(d)workers']||r.d_workers||null,
+        p_tp:           r['(p)tp']||r.p_tp||null,
+        d_tp:           r['(d)tp']||r.d_tp||null,
+        p_bs:           r['(p)bs']||r.p_bs||null,
+        d_bs:           r['(d)bs']||r.d_bs||null,
+        p_mem:          parseFloat(r['(p)memory']||r.p_mem||0)||null,
+        d_mem:          parseFloat(r['(d)memory']||r.d_mem||0)||null,
+        concurrency:    parseInt(r.concurrency||0)||null,
+        raw:            r
       };
-      PERF_STATE.sweepResults = sweepResult;
-      perfCache[cacheKey] = sweepResult;
-      try{ localStorage.setItem('perf_cache', JSON.stringify(perfCache)); }catch(e){}
-      renderSweepResults(sweepResult);
-      return;
-    }
-    var bs = batchSizes[i];
-    var p  = Object.assign({}, cfg.payload, {batch_size: bs});
-    var t0 = Date.now();
-
-    callAICEndpoint('estimate', p,
-      function(data){
-        done++;
-        updateSweepProgress(done, batchSizes.length);
-        results.push({ batch_size: bs, data: data, elapsed: Date.now()-t0 });
-        runNext(i+1);
-      },
-      function(err){
-        done++;
-        updateSweepProgress(done, batchSizes.length);
-        results.push({ batch_size: bs, error: err.message });
-        runNext(i+1);
-      }
-    );
+    });
   }
-  runNext(0);
-}
 
-function parsePerfQueryBoth(merged, cfg, cacheKey){
-  // Response shape from /query/agg and /query/disagg (serialize_cli_result):
-  // { summary, all_best_throughputs, all_best_latencies, configs, pareto, debug_log, request }
-  // configs = { "agg": [...rows] } or { "disagg": [...rows] }
-  var aggResp    = merged.agg    || {};
-  var disaggResp = merged.disagg || {};
+  var aggConfigs    = extractConfigs(aggData,    'agg');
+  var disaggConfigs = extractConfigs(disaggData, 'disagg');
 
-  // Extract config rows — key is "agg" or "disagg" (first key in configs object)
-  var aggConfigs    = (aggResp.configs    && (aggResp.configs['agg']    || Object.values(aggResp.configs)[0]))    || [];
-  var disaggConfigs = (disaggResp.configs && (disaggResp.configs['disagg'] || Object.values(disaggResp.configs)[0])) || [];
-
-  // Best configs (top row = best throughput)
-  var aggBest    = aggConfigs[0]    || {};
-  var disaggBest = disaggConfigs[0] || {};
-
-  // Get metrics from summary (most reliable source)
-  var aggSum    = aggResp.summary    || {};
-  var disaggSum = disaggResp.summary || {};
-
-  // Use best_throughput_tokens_s_gpu from summary
-  var aggTpsGpu    = parseFloat(aggSum.best_throughput_tokens_s_gpu    || aggBest['tokens/s/gpu']    || 0) || null;
-  var disaggTpsGpu = parseFloat(disaggSum.best_throughput_tokens_s_gpu || disaggBest['tokens/s/gpu'] || 0) || null;
-
-  // Determine which is better
-  var useDisagg = disaggTpsGpu != null && (aggTpsGpu == null || disaggTpsGpu >= aggTpsGpu);
-  var bestSum   = useDisagg ? disaggSum : aggSum;
-  var bestCfg   = useDisagg ? disaggBest : aggBest;
-
-  var tpsGpu = useDisagg ? disaggTpsGpu : aggTpsGpu;
-  var ttft   = parseFloat(bestSum.best_ttft_ms             || bestCfg.ttft             || 0) || null;
-  var tpot   = parseFloat(bestSum.best_tpot_ms             || bestCfg.tpot             || 0) || null;
-  var lat    = parseFloat(bestSum.best_request_latency_ms  || bestCfg.request_latency  || 0) || null;
-
-  // seq/s/gpu from best config row
-  var seqSGpu = parseFloat(bestCfg['seq/s/gpu'] || bestCfg.seq_s_gpu || 0) || null;
-  var numGpus = parseInt(bestCfg.num_total_gpus || cfg.agg_payload.total_gpus || 16);
-  var seqS    = seqSGpu ? seqSGpu * numGpus : null;
-
-  // all_best_throughputs for comparison table
-  var allTp  = {};
-  var allLat = {};
-  if(aggResp.all_best_throughputs)    allTp['agg']    = parseFloat(aggResp.all_best_throughputs['agg']    || 0) || null;
-  if(disaggResp.all_best_throughputs) allTp['disagg'] = parseFloat(disaggResp.all_best_throughputs['disagg'] || 0) || null;
-  if(aggResp.all_best_latencies)    allLat['agg']    = aggResp.all_best_latencies['agg']    || {};
-  if(disaggResp.all_best_latencies) allLat['disagg'] = disaggResp.all_best_latencies['disagg'] || {};
+  var aggSum    = aggData    ? (aggData.summary    || {}) : {};
+  var disaggSum = disaggData ? (disaggData.summary || {}) : {};
 
   return {
-    type:         'query_both',
-    mode:         useDisagg ? 'disagg' : 'agg',
-    ttft:         ttft,
-    tpot:         tpot,
-    latency:      lat,
-    seq_s:        seqS,
-    tokens_s_gpu: tpsGpu,
-    num_gpus:     numGpus,
-    tp_size:      numGpus / 2,
-    agg_configs:    aggConfigs.slice(0,5),
-    disagg_configs: disaggConfigs.slice(0,5),
-    all_tp:         allTp,
-    all_lat:        allLat,
-    speedup:        aggSum.speedup_over_other || disaggSum.speedup_over_other || null,
-    cfg:            cfg,
+    type:           'v2',
+    aggConfigs:     aggConfigs,
+    disaggConfigs:  disaggConfigs,
+    aggSummary:     aggSum,
+    disaggSummary:  disaggSum,
+    allTp:          Object.assign({}, aggData&&aggData.all_best_throughputs, disaggData&&disaggData.all_best_throughputs),
+    allLat:         Object.assign({}, aggData&&aggData.all_best_latencies,   disaggData&&disaggData.all_best_latencies),
+    meta:           meta,
     cacheKey:       cacheKey,
-    ts:             Date.now(),
-    raw:            merged
+    ts:             Date.now()
   };
 }
 
-function parsePerfResult(data, cfg, cacheKey){
-  var p    = data.performance || {};
-  var conf = data.config       || {};
-  var mem  = data.memory_gib   || {};
-
-  // For query mode, extract from summary
-  if(cfg.endpoint === 'query'){
-    var sum = data.summary || {};
-    return {
-      type:        'query',
-      mode:        sum.chosen_mode,
-      speedup:     sum.speedup_over_other,
-      throughput:  sum.best_throughput_tokens_s_gpu,
-      ttft:        sum.best_ttft_ms,
-      tpot:        sum.best_tpot_ms,
-      latency:     sum.best_request_latency_ms,
-      disagg_configs: (data.configs||{}).disagg || [],
-      agg_configs:    (data.configs||{}).agg    || [],
-      pareto:         data.pareto || {},
-      all_tp:     data.all_best_throughputs || {},
-      all_lat:    data.all_best_latencies   || {},
-      cfg:        cfg,
-      cacheKey:   cacheKey,
-      ts:         Date.now(),
-      raw:        data
-    };
-  }
-
-  return {
-    type:         'estimate',
-    ttft:         p.ttft_ms,
-    tpot:         p.tpot_ms,
-    latency:      p.request_latency_ms,
-    tokens_s:     p.tokens_per_s,
-    tokens_s_gpu: p.tokens_per_s_gpu,
-    tokens_s_user:p.tokens_per_s_user,
-    seq_s:        p.seq_per_s,
-    tokens_day:   p.tokens_per_day,
-    memory_gib:   mem.total,
-    system:       conf.system,
-    backend:      conf.backend,
-    backend_ver:  conf.backend_version,
-    mode:         conf.mode,
-    num_gpus:     conf.num_total_gpus,
-    tp_size:      conf.tp_size,
-    parallel:     conf.parallel,
-    gemm_quant:   conf.gemm_quant,
-    kvcache_quant:conf.kvcache_quant,
-    per_op:       data.per_op_latency_ms || {},
-    scheduling:   data.scheduling || {},
-    cfg:          cfg,
-    cacheKey:     cacheKey,
-    ts:           Date.now(),
-    raw:          data
-  };
+// ── SLA FILTER ────────────────────────────────────────────────────────────────
+function perfV2SLAPass(row){
+  if(PERF_STATE.slaMetric === 'none') return true;
+  var threshold = parseInt((document.getElementById('perf-sla-val')||{value:500}).value)||500;
+  PERF_STATE.slaVal = threshold;
+  if(PERF_STATE.slaMetric === 'ttft')    return row.ttft    != null ? row.ttft    <= threshold : true;
+  if(PERF_STATE.slaMetric === 'latency') return row.latency != null ? row.latency <= threshold : true;
+  return true;
 }
 
-function renderPerfResult(result, fromCache){
-  if(result.type === 'sweep'){
-    renderSweepResults(result);
-    return;
-  }
+function perfV2GPUs(row, withBuffer){
+  var seqSGpu = row.seq_s_gpu;
+  var numGpus = row.num_gpus || 16;
+  var rps     = parseInt((document.getElementById('perf-req-day')||{value:100000000}).value) / 86400;
+  var buf     = parseInt((document.getElementById('perf-buffer')||{value:30}).value) || 0;
+  if(!seqSGpu || seqSGpu <= 0) return null;
+  // seqSGpu is per-GPU; rps is total needed
+  var base = Math.ceil(rps / seqSGpu);
+  return withBuffer ? Math.ceil(base * (1 + buf/100)) : base;
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function renderPerfV2Result(result, fromCache){
   PERF_STATE.lastResult = result;
-  PERF_STATE.lastRaw    = result.raw;
+  showPerfV2State('results');
 
-  document.getElementById('perf-empty').style.display   = 'none';
-  document.getElementById('perf-results').style.display = 'block';
-
-  // Clear any previous error banner on fresh result
-  var prevWarn = document.getElementById('perf-warn-banner');
-  if(prevWarn && !fromCache) prevWarn.style.display = 'none';
-
-  // Restore empty state to default (in case it was showing error)
-  var emptyEl = document.getElementById('perf-empty');
-  if(emptyEl) emptyEl.innerHTML = '<div style="font-size:40px;margin-bottom:12px">⚡</div><div style="font-size:15px;font-weight:600;margin-bottom:6px">No estimate yet</div><div style="font-size:13px;text-align:center;max-width:300px;color:var(--text3)">Configure model, hardware and targets on the left, then click Run estimate</div>';
+  var meta = result.meta || {};
+  var gpu  = meta.gpu || 'h100_sxm';
+  var gpuLabel = PERF_GPU_LABELS[gpu] || gpu;
+  var rps  = parseInt((document.getElementById('perf-req-day')||{value:100000000}).value) / 86400;
+  var rd   = parseInt((document.getElementById('perf-req-day')||{value:100000000}).value);
+  var buf  = parseInt((document.getElementById('perf-buffer')||{value:30}).value)||0;
 
   // Status bar
   var badge = document.getElementById('perf-mode-badge');
-  if(badge){
-    var isHybrid = (result.cfg && result.cfg.payload && result.cfg.payload.database_mode === 'HYBRID');
-    badge.textContent   = isHybrid ? '~ HYBRID' : '✓ SILICON';
-    badge.style.color   = isHybrid ? '#f59e0b' : 'var(--green)';
-  }
-  var rm = document.getElementById('perf-result-model');
-  if(rm) rm.textContent = PERF_STATE.modelLabel;
-  var rc = document.getElementById('perf-result-config');
-  if(rc) rc.textContent = (PERF_GPU_LABELS[result.system||result.cfg.payload.system]||'') + ' · ' + (result.backend||result.cfg.payload.backend||'').toUpperCase() + ' · TP=' + (result.tp_size||result.cfg.payload.tp_size||'?');
-  var ts = document.getElementById('perf-result-ts');
-  if(ts) ts.textContent = (fromCache ? '📦 cached · ' : '✨ fresh · ') + new Date(result.ts).toLocaleTimeString();
+  var isHybrid = meta.dbmode === 'HYBRID';
+  if(badge){ badge.textContent = isHybrid ? '~ HYBRID' : '✓ SILICON'; badge.style.color = isHybrid ? '#f59e0b' : 'var(--green)'; }
+  var rm = document.getElementById('perf-result-model'); if(rm) rm.textContent = PERF_STATE.modelLabel;
+  var rc = document.getElementById('perf-result-config'); if(rc) rc.textContent = gpuLabel+' · '+(meta.backend||'vllm').toUpperCase()+' · TP='+meta.tp;
+  var ts = document.getElementById('perf-result-ts'); if(ts) ts.textContent = (fromCache?'📦 cached':'✨ fresh')+' · '+new Date(result.ts).toLocaleTimeString();
 
-  // Cache badge
+  // Cache badges
   var cb = document.getElementById('perf-cache-badge');
   var rb = document.getElementById('perf-refresh-btn');
-  if(cb){ cb.textContent = fromCache ? '📦 Cached' : '✨ Fresh'; cb.style.display='inline'; }
-  if(rb) rb.style.display = fromCache ? 'inline' : 'none';
+  if(cb){ cb.style.display='inline'; cb.textContent = fromCache?'📦 Cached':'✨ Fresh'; }
+  if(rb) rb.style.display = fromCache?'inline':'none';
 
-  // Show action buttons
-  ['perf-export-btn','perf-json-btn','perf-save-btn','perf-export-btn2','perf-json-btn2'].forEach(function(id){
-    var b = document.getElementById(id); if(b) b.style.display='inline';
-  });
+  // HYBRID warning
+  var hw = document.getElementById('perf-hybrid-warn');
+  if(hw) hw.style.display = isHybrid ? 'block' : 'none';
 
-  // Warning banner
-  var warn = document.getElementById('perf-warn-banner');
-  if(warn){
-    var isHybrid2 = (result.cfg && result.cfg.payload && result.cfg.payload.database_mode === 'HYBRID');
-    if(isHybrid2){
-      warn.style.display = 'block';
-      warn.innerHTML = '⚠ <strong>HYBRID mode</strong> — no exact silicon data for this model+GPU combo. AIC is extrapolating. Add ~20-30% buffer for production planning.';
-    } else {
-      warn.style.display = 'none';
-    }
-  }
+  // Export button
+  var eb = document.getElementById('perf-export-btn'); if(eb) eb.style.display='inline';
 
-  var fmt  = function(v,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v).toLocaleString()):'—'; };
-  var fmtMs = function(v){ return v!=null?parseFloat(v).toFixed(0)+'ms':'—'; };
-
-  // Targets from inputs
-  var reqDay   = parseInt((document.getElementById('perf-req-day')||{}).value)||100000000;
-  var tokSec   = parseInt((document.getElementById('perf-tok-sec')||{}).value)||5000;
-  var bufPct   = parseInt((document.getElementById('perf-buffer')||{}).value)||30;
-  var gpuKey   = (document.getElementById('perf-gpu')||{}).value||'h100_sxm';
-  var seqS     = result.seq_s;
-  var tpsGpu   = result.tokens_s_gpu;
-
-  // GPU count calculations
-  var gpuReqDay    = null, gpuTokSec = null;
-  var gpuReqDayBuf = null, gpuTokSecBuf = null;
-  var reqDayCapacity = null;
-
-  if(seqS && seqS > 0){
-    // seqS = req/sec for the ENTIRE config (all GPUs combined)
-    // num_gpus = total GPUs used in that config
-    var configGpus   = result.num_gpus || result.tp_size || parseInt((document.getElementById('perf-tp')||{}).value)||4;
-    var reqDayConfig = seqS * 86400;                          // req/day this config can handle
-    var reqDayPerGpu = reqDayConfig / configGpus;             // req/day per single GPU
-    gpuReqDay        = Math.ceil(reqDay / reqDayPerGpu);      // GPUs to hit target
-    gpuReqDayBuf     = Math.ceil(gpuReqDay * (1 + bufPct/100));
-    reqDayCapacity   = reqDayConfig;                          // what THIS config handles/day
-  }
-  if(tpsGpu && tpsGpu > 0){
-    // tokens_s_gpu is already per-GPU — no tp multiplication needed
-    gpuTokSec    = Math.ceil(tokSec / tpsGpu);
-    gpuTokSecBuf = Math.ceil(gpuTokSec * (1 + bufPct/100));
-  }
-
-  // HERO CARDS
-  var heroGrid = document.getElementById('perf-hero-cards');
-  if(heroGrid){
-    var heroCard = function(label, val, sub, color){
-      return '<div style="background:var(--bg2);border:1px solid '+(color||'var(--border)')+';border-radius:var(--r);padding:14px;text-align:center">'
-        +'<div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">'+label+'</div>'
-        +'<div style="font-size:26px;font-weight:700;color:'+(color||'var(--text1)')+';margin-bottom:2px">'+val+'</div>'
-        +'<div style="font-size:11px;color:var(--text3)">'+sub+'</div>'
-        +'</div>';
-    };
-    heroGrid.innerHTML =
-      heroCard('GPUs for '+fmt(reqDay/1000000)+'M req/day',
-        gpuReqDay!=null ? gpuReqDay : '—',
-        gpuReqDay!=null ? 'with '+bufPct+'% buffer: '+gpuReqDayBuf+' · '+PERF_GPU_LABELS[gpuKey] : 'need seq/s data',
-        'var(--blue)')
-    + heroCard('GPUs for '+fmt(tokSec)+' tok/s',
-        gpuTokSec!=null ? gpuTokSec : '—',
-        gpuTokSec!=null ? 'with '+bufPct+'% buffer: '+gpuTokSecBuf : 'need tok/s/gpu data',
-        'var(--green)')
-    + heroCard('Req/day capacity',
-        reqDayCapacity!=null ? Math.round(reqDayCapacity/1000000).toLocaleString()+'M' : '—',
-        reqDayCapacity!=null ? (result.num_gpus ? 'for '+result.num_gpus+' GPU config' : 'this config')+' · '+PERF_GPU_LABELS[gpuKey] : '',
-        'var(--border)');
-  }
-
-  // Show section labels
-  var ppL=document.getElementById('perf-perf-label'); if(ppL) ppL.style.display='block';
-  var tpL=document.getElementById('perf-tp-label');   if(tpL) tpL.style.display='block';
-
-  // PERFORMANCE tiles
-  var perfCards = document.getElementById('perf-perf-cards');
-  if(perfCards){
-    var oc = function(label, val, sub){
-      return '<div class="oc"><div class="oc-label">'+label+'</div><div class="oc-val">'+val+'</div><div class="oc-sub">'+sub+'</div></div>';
-    };
-    perfCards.innerHTML =
-      oc('TTFT',             fmtMs(result.ttft),    'time to first token')
-    + oc('TPOT',             fmtMs(result.tpot),    'time per output token')
-    + oc('Request latency',  fmtMs(result.latency), 'end-to-end per request')
-    + oc('GPU memory',       result.memory_gib!=null?parseFloat(result.memory_gib).toFixed(1)+' GiB':'—', 'KV+weights+activations');
-  }
-
-  // THROUGHPUT tiles
-  var tpCards = document.getElementById('perf-throughput-cards');
-  if(tpCards){
-    var oc2 = function(label, val, sub){
-      return '<div class="oc"><div class="oc-label">'+label+'</div><div class="oc-val">'+val+'</div><div class="oc-sub">'+sub+'</div></div>';
-    };
-    tpCards.innerHTML =
-      oc2('Seq / s',           result.seq_s!=null?parseFloat(result.seq_s).toFixed(1):'—',           'requests/sec this config')
-    + oc2('Tokens / s',        result.tokens_s!=null?Math.round(result.tokens_s).toLocaleString():'—', 'total output tokens/sec')
-    + oc2('Tokens / s / GPU',  result.tokens_s_gpu!=null?parseFloat(result.tokens_s_gpu).toFixed(1):'—', 'per GPU throughput')
-    + oc2('Tokens / day',      result.tokens_day!=null?Math.round(result.tokens_day/1000000).toLocaleString()+'M':'—', 'total daily capacity');
-  }
-
-  // COST CARD
-  var costCard = document.getElementById('perf-cost-card');
-  if(costCard && gpuReqDay!=null){
-    var priceHr    = getPerfCloudRate();
-    var onpremUnit = getPerfOnpremUnit();
-    var amortMo    = getPerfAmortMonths();
-    var cloudMo    = gpuReqDay * priceHr * 24 * 30;
-    var cloud5yr   = cloudMo * getPerfAmortMonths();
-    var onpremTotal= gpuReqDay * onpremUnit;
-    var onpremMo   = onpremTotal / amortMo;
-    var savings    = cloudMo - onpremMo;
-    var fmtK = function(v){ return v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+(v/1000).toFixed(0)+'K':'$'+Math.round(v); };
-    costCard.innerHTML =
-      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px">'
-      +'<div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Monthly cost · '+gpuReqDay+' '+PERF_GPU_LABELS[gpuKey]+'</div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">'
-      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px">'
-      +'<div style="font-size:10px;color:var(--text4);margin-bottom:4px">☁ CLOUD</div>'
-      +'<div style="font-size:22px;font-weight:700;color:#ef4444">'+fmtK(cloudMo)+'/mo</div>'
-      +'<div style="font-size:11px;color:var(--text3)">'+fmtK(cloud5yr)+' over 5yr · '+fmtK(priceHr)+'/hr/GPU</div>'
-      +'</div>'
-      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px">'
-      +'<div style="font-size:10px;color:var(--text4);margin-bottom:4px">■ ON-PREM</div>'
-      +'<div style="font-size:22px;font-weight:700;color:var(--green)">'+fmtK(onpremMo)+'/mo</div>'
-      +'<div style="font-size:11px;color:var(--text3)">5yr amort · '+fmtK(onpremTotal)+' total</div>'
-      +'</div>'
-      +'</div>'
-      +(savings>0?'<div style="font-size:12px;color:var(--green);font-weight:600">On-prem saves '+fmtK(savings)+'/mo</div>':'')
-      +'</div>';
-  }
-
-  // QUERY MODE — disagg + agg sections
-  var disaggSec = document.getElementById('perf-disagg-section');
-  var aggSec    = document.getElementById('perf-agg-section');
-  var compSec   = document.getElementById('perf-compare-section');
-
-  if(disaggSec) disaggSec.style.display = 'none';
-  if(aggSec)    aggSec.style.display    = 'none';
-  if(compSec)   compSec.style.display   = 'none';
-
-  if(result.type === 'query' || result.type === 'query_both'){
-    renderDisaggSection(result);
-    renderAggSection(result);
-    renderCompareSection(result);
-  }
-
-  // PER-OP latency (estimate mode)
-  if(result.type === 'estimate' && result.per_op && (Object.keys(result.per_op.context||{}).length || Object.keys(result.per_op.generation||{}).length)){
-    var peropDet = document.getElementById('perf-perop-details');
-    if(peropDet) peropDet.style.display = 'block';
-    renderPerOpLatency(result.per_op, result.scheduling);
-  }
-
-  // SIZING MATH
-  renderSizingMath(result, reqDay, tokSec, bufPct, gpuKey);
-
-  renderPerfSaved();
-
-  // CONTEXT BAR — plain-English explanation of what the numbers mean
-  var ctxBar = document.getElementById('perf-context-bar');
-  if(ctxBar){
-    ctxBar.style.display = 'block';
-    var cfg2  = result.cfg || {};
-    var meta2 = cfg2.meta || {};
-    var isl2  = meta2.isl_original || (cfg2.payload||{}).isl || '?';
-    var osl2  = (cfg2.payload||{}).osl || '?';
-    var pct2  = meta2.prefix_pct || 0;
-    var configGpus2 = result.num_gpus || result.tp_size || parseInt((document.getElementById('perf-tp')||{}).value)||4;
-    var seqsPerGpu2 = (result.seq_s && configGpus2) ? (result.seq_s / configGpus2).toFixed(3) : '?';
-    var rdTarget2 = reqDay;
-    document.getElementById('ctx-model').textContent  = PERF_STATE.modelLabel;
-    document.getElementById('ctx-gpu').textContent    = PERF_GPU_LABELS[gpuKey]||gpuKey;
-    document.getElementById('ctx-isl').textContent    = isl2;
-    document.getElementById('ctx-osl').textContent    = osl2;
-    document.getElementById('ctx-prefix').textContent = pct2;
-    document.getElementById('ctx-seqs').textContent   = seqsPerGpu2+' req/s/GPU';
-    document.getElementById('ctx-target').textContent = (rdTarget2/1000000).toFixed(0)+'M';
-    document.getElementById('ctx-answer').textContent = (gpuReqDay!=null ? gpuReqDay : '?') + ' ' + (PERF_GPU_LABELS[gpuKey]||gpuKey) + 's';
-  }
-}
-
-function renderDisaggSection(result){
-  var disaggSec = document.getElementById('perf-disagg-section');
-  if(!disaggSec) return;
-  var configs = result.disagg_configs || [];
-  if(!configs.length){ return; }
-  disaggSec.style.display = 'block';
-
-  // Best config (rank 1)
-  var best = configs[0];
-  var pdRow = function(label, val){
-    return '<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)">'
-      +'<span style="color:var(--text3)">'+label+'</span>'
-      +'<span style="font-family:var(--mono);color:var(--text1)">'+val+'</span></div>';
-  };
-
-  var prefillBody = document.getElementById('perf-prefill-body');
-  if(prefillBody) prefillBody.innerHTML =
-    pdRow('GPU', best['(p)system']||'—')
-   +pdRow('Workers', best['(p)workers']||'—')
-   +pdRow('Parallel', best['(p)parallel']||'—')
-   +pdRow('Batch size', best['(p)bs']||'—')
-   +pdRow('seq/s/worker', best['(p)seq/s/worker']!=null?parseFloat(best['(p)seq/s/worker']).toFixed(2):'—')
-   +pdRow('Memory GiB', best['(p)memory']!=null?parseFloat(best['(p)memory']).toFixed(2):'—');
-
-  var decodeBody = document.getElementById('perf-decode-body');
-  if(decodeBody) decodeBody.innerHTML =
-    pdRow('GPU', best['(d)system']||'—')
-   +pdRow('Workers', best['(d)workers']||'—')
-   +pdRow('Parallel', best['(d)parallel']||'—')
-   +pdRow('Batch size', best['(d)bs']||'—')
-   +pdRow('seq/s/worker', best['(d)seq/s/worker']!=null?parseFloat(best['(d)seq/s/worker']).toFixed(2):'—')
-   +pdRow('Memory GiB', best['(d)memory']!=null?parseFloat(best['(d)memory']).toFixed(2):'—');
-
-  // Top-N table
-  var tbl = document.getElementById('perf-disagg-table');
-  if(!tbl) return;
-  var cols = ['tokens/s/gpu','tokens/s/user','ttft','tpot','request_latency','num_total_gpus','(p)workers','(p)tp','(p)bs','(d)workers','(d)tp','(d)bs'];
-  var hdrs = ['tok/s/gpu','tok/s/user','TTFT','TPOT','latency','GPUs','(p)workers','(p)tp','(p)bs','(d)workers','(d)tp','(d)bs'];
-  var thead = '<tr style="background:var(--bg2);border-bottom:1px solid var(--border)">'
-    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:left">Rank</th>'
-    +hdrs.map(function(h){ return '<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">'+h+'</th>'; }).join('')
-    +'</tr>';
-  var tbody = configs.map(function(r,i){
-    return '<tr style="border-bottom:1px solid var(--border)'+(i===0?';background:rgba(59,130,246,0.05)':'')+'">'
-      +'<td style="padding:4px 8px;font-size:11px;font-weight:600;color:var(--blue)">'+(i+1)+'</td>'
-      +cols.map(function(c){
-        var v = r[c]; var s = v!=null?(typeof v==='number'?parseFloat(v).toFixed(c.includes('ms')||c==='ttft'||c==='tpot'||c==='request_latency'?0:1):''+v):'—';
-        return '<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right">'+s+'</td>';
-      }).join('')
-      +'</tr>';
-  }).join('');
-  tbl.innerHTML = thead + tbody;
-}
-
-function renderAggSection(result){
-  var aggSec = document.getElementById('perf-agg-section');
-  if(!aggSec) return;
-  var configs = result.agg_configs || [];
-  if(!configs.length) return;
-  aggSec.style.display = 'block';
-
-  var tbl = document.getElementById('perf-agg-table');
-  if(!tbl) return;
-  var cols = ['tokens/s/gpu','tokens/s/user','ttft','tpot','request_latency','num_total_gpus','tp','pp','bs'];
-  var hdrs = ['tok/s/gpu','tok/s/user','TTFT','TPOT','latency','GPUs','tp','pp','bs'];
-  var thead = '<tr style="background:var(--bg2);border-bottom:1px solid var(--border)">'
-    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:left">Rank</th>'
-    +hdrs.map(function(h){ return '<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">'+h+'</th>'; }).join('')
-    +'</tr>';
-  var tbody = configs.map(function(r,i){
-    return '<tr style="border-bottom:1px solid var(--border)">'
-      +'<td style="padding:4px 8px;font-size:11px;font-weight:600;color:var(--green)">'+(i+1)+'</td>'
-      +cols.map(function(c){
-        var v = r[c]; var s = v!=null?(typeof v==='number'?parseFloat(v).toFixed(1):''+v):'—';
-        return '<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right">'+s+'</td>';
-      }).join('')
-      +'</tr>';
-  }).join('');
-  tbl.innerHTML = thead + tbody;
-}
-
-function renderCompareSection(result){
-  var compSec = document.getElementById('perf-compare-section');
-  if(!compSec) return;
-  var atp  = result.all_tp  || {};
-  var alat = result.all_lat || {};
-  if(!Object.keys(atp).length) return;
-  compSec.style.display = 'block';
-
-  var tbl = document.getElementById('perf-compare-table');
-  if(!tbl) return;
-  var modes = Object.keys(atp);
-  var fN = function(v){ return v!=null?parseFloat(v).toFixed(1):'—'; };
-  var thead = '<tr style="background:var(--bg2);border-bottom:2px solid var(--border)">'
-    +'<th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text3);font-weight:500">Mode</th>'
-    +'<th style="padding:6px 10px;text-align:right;font-size:11px;color:var(--text3);font-weight:500">tok/s/gpu</th>'
-    +'<th style="padding:6px 10px;text-align:right;font-size:11px;color:var(--text3);font-weight:500">TTFT</th>'
-    +'<th style="padding:6px 10px;text-align:right;font-size:11px;color:var(--text3);font-weight:500">TPOT</th>'
-    +'<th style="padding:6px 10px;text-align:right;font-size:11px;color:var(--text3);font-weight:500">Latency</th>'
-    +'<th style="padding:6px 10px;text-align:right;font-size:11px;color:var(--text3);font-weight:500">Winner</th>'
-    +'</tr>';
-  var tbody = modes.map(function(m){
-    var lat = alat[m]||{};
-    var isWinner = m === result.mode;
-    return '<tr style="border-bottom:1px solid var(--border)'+(isWinner?';background:rgba(34,197,94,0.06)':'')+'">'
-      +'<td style="padding:5px 10px;font-weight:600;font-size:12px;color:'+(m==='disagg'?'var(--blue)':'var(--green)')+'">'+m.toUpperCase()+'</td>'
-      +'<td style="padding:5px 10px;text-align:right;font-family:var(--mono);font-size:12px">'+fN(atp[m])+'</td>'
-      +'<td style="padding:5px 10px;text-align:right;font-family:var(--mono);font-size:12px">'+fN(lat.ttft)+'ms</td>'
-      +'<td style="padding:5px 10px;text-align:right;font-family:var(--mono);font-size:12px">'+fN(lat.tpot)+'ms</td>'
-      +'<td style="padding:5px 10px;text-align:right;font-family:var(--mono);font-size:12px">'+fN(lat.request_latency)+'ms</td>'
-      +'<td style="padding:5px 10px;text-align:right">'+(isWinner?'<span style="color:var(--green);font-weight:700;font-size:12px">✓ Best</span>':'')+'</td>'
-      +'</tr>';
-  }).join('');
-  if(result.speedup){
-    tbody += '<tr style="border-top:2px solid var(--border);background:var(--bg2)">'
-      +'<td colspan="6" style="padding:5px 10px;font-size:11px;color:var(--text3)">'+result.mode.toUpperCase()+' is <strong>'+result.speedup+'× better</strong> throughput than the other mode</td></tr>';
-  }
-  tbl.innerHTML = thead + tbody;
-}
-
-function renderPerOpLatency(perOp, sched){
-  var ctx = perOp.context    || {};
-  var gen = perOp.generation || {};
-  var fN  = function(v){ return v!=null?parseFloat(v).toFixed(2)+'ms':'—'; };
-
-  var ctxEl = document.getElementById('perf-context-ops');
-  var genEl = document.getElementById('perf-gen-ops');
-  if(ctxEl) ctxEl.innerHTML = Object.keys(ctx).map(function(k){
-    return '<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--border)">'
-      +'<span style="color:var(--text3);font-size:10px">'+k.replace('context_','')+'</span>'
-      +'<span style="color:var(--text1)">'+fN(ctx[k])+'</span></div>';
-  }).join('');
-  if(genEl) genEl.innerHTML = Object.keys(gen).map(function(k){
-    return '<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--border)">'
-      +'<span style="color:var(--text3);font-size:10px">'+k.replace('generation_','')+'</span>'
-      +'<span style="color:var(--text1)">'+fN(gen[k])+'</span></div>';
-  }).join('');
-
-  var schedEl = document.getElementById('perf-scheduling');
-  if(schedEl && sched){
-    schedEl.innerHTML = 'Mix steps: '+Math.round(sched.num_mix_steps||0)+' · '
-      +'Genonly steps: '+Math.round(sched.num_genonly_steps||0)+' · '
-      +'Mix latency: '+(sched.mix_step_latency_ms!=null?parseFloat(sched.mix_step_latency_ms).toFixed(1)+'ms':'—')+' · '
-      +'Genonly latency: '+(sched.genonly_step_latency_ms!=null?parseFloat(sched.genonly_step_latency_ms).toFixed(1)+'ms':'—');
-  }
-}
-
-function renderSizingMath(result, reqDay, tokSec, bufPct, gpuKey){
-  var el = document.getElementById('perf-sizing-math');
-  if(!el) return;
-  var cfg    = result.cfg || {};
-  var pct    = (cfg.meta||{}).prefix_pct || 0;
-  var islOrig= (cfg.meta||{}).isl_original || (cfg.payload||{}).isl || '—';
-  var effIsl = (cfg.meta||{}).eff_isl || (cfg.payload||{}).isl || '—';
-  var osl    = (cfg.payload||{}).osl || '—';
-  var tp     = result.tp_size || (cfg.payload||{}).tp_size || '?';
-  var seqS   = result.seq_s;
-  var tpsGpu = result.tokens_s_gpu;
-  var fmt2   = function(v,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v).toLocaleString()):'—'; };
-
-  var line = function(label, val){
-    return '<div style="display:flex;align-items:baseline;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">'
-      +'<span style="font-size:11px;color:var(--text3);min-width:180px;flex-shrink:0">'+label+'</span>'
-      +'<span style="font-size:12px;font-family:var(--mono);color:var(--text2)">'+val+'</span></div>';
-  };
-
-  var html =
-    line('Original ISL',           islOrig+' tokens')
-   +line('Prefix reuse',           pct+'% → effective ISL = '+effIsl+' tokens')
-   +line('Tokens / request',       effIsl+' + '+osl+' = <b>'+(parseInt(effIsl)+parseInt(osl)).toLocaleString()+'</b> tokens')
-   +line('seq/s (AIC)',            seqS!=null?fmt2(seqS,2)+' req/sec':'—')
-   +line('req/day capacity (this config)', seqS!=null?Math.round(seqS*86400).toLocaleString()+' req/day per '+tp+' GPUs':'—');
-
-  if(seqS && seqS > 0){
-    var unit = seqS * 86400;
-    var gpuBase = Math.ceil(reqDay/unit) * tp;
-    var gpuBuf  = Math.ceil(gpuBase * (1+bufPct/100));
-    html +=
-      line('For '+reqDay.toLocaleString()+' req/day', 'ceil('+reqDay.toLocaleString()+' ÷ '+Math.round(unit).toLocaleString()+') × '+tp+' = <b>'+gpuBase+' GPUs</b>')
-     +line('With '+bufPct+'% infra buffer',   '<b>'+gpuBuf+' '+PERF_GPU_LABELS[gpuKey]+'</b>');
-  }
-  if(tpsGpu && tpsGpu > 0){
-    var gpuTok    = Math.ceil(tokSec/tpsGpu);
-    var gpuTokBuf = Math.ceil(gpuTok*(1+bufPct/100));
-    html +=
-      line('tok/s/gpu (AIC)',     fmt2(tpsGpu,1)+' tok/s/GPU')
-     +line('For '+tokSec.toLocaleString()+' tok/s', 'ceil('+tokSec.toLocaleString()+' ÷ '+fmt2(tpsGpu,1)+') = <b>'+gpuTok+' GPUs</b>')
-     +line('With '+bufPct+'% infra buffer',   '<b>'+gpuTokBuf+' '+PERF_GPU_LABELS[gpuKey]+'</b>');
-  }
-  el.innerHTML = html;
-}
-
-function renderSweepResults(sweepResult){
-  PERF_STATE.sweepResults = sweepResult;
-  document.getElementById('perf-empty').style.display   = 'none';
-  document.getElementById('perf-results').style.display = 'block';
-
-  ['perf-export-btn','perf-json-btn','perf-save-btn','perf-export-btn2','perf-json-btn2'].forEach(function(id){
-    var b = document.getElementById(id); if(b) b.style.display='inline';
-  });
-
-  var reqDay = parseInt((document.getElementById('perf-req-day')||{}).value)||100000000;
-  var bufPct = parseInt((document.getElementById('perf-buffer')||{}).value)||30;
-  var gpuKey = (document.getElementById('perf-gpu')||{}).value||'h100_sxm';
-  var tp     = parseInt((document.getElementById('perf-tp')||{}).value)||4;
-
-  var sweepDiv = document.getElementById('perf-sweep-results');
-  if(!sweepDiv) return;
-  sweepDiv.style.display = 'block';
-
-  var tbl = document.getElementById('perf-sweep-table');
-  if(!tbl) return;
-
-  var thead = '<tr style="background:var(--bg2);border-bottom:1px solid var(--border)">'
-    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:left">Batch</th>'
-    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">seq/s</th>'
-    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">Latency</th>'
-    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">TTFT</th>'
-    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">TPOT</th>'
-    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">Mem GiB</th>'
-    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">GPUs(req/day)</th>'
-    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">SLA 1s</th>'
-    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">SLA 2s</th>'
-    +'<th style="padding:5px 8px;font-size:10px;color:var(--text4);font-weight:600;text-align:right">SLA 3s</th>'
-    +'</tr>';
-
-  var bestSeqS = 0, bestBatch = null;
-  var tbody = sweepResult.batches.map(function(b){
-    if(b.error) return '<tr style="border-bottom:1px solid var(--border)"><td style="padding:4px 8px;font-size:11px">'+b.batch_size+'</td><td colspan="9" style="padding:4px 8px;font-size:11px;color:var(--red)">Error: '+b.error+'</td></tr>';
-    var p   = b.data.performance || {};
-    var mem = (b.data.memory_gib||{}).total;
-    var seq = p.seq_per_s;
-    var lat = p.request_latency_ms;
-    if(seq && seq > bestSeqS){ bestSeqS = seq; bestBatch = b.batch_size; }
-    var gpus = null;
-    if(seq && seq > 0) gpus = Math.ceil(reqDay/(seq*86400)) * tp;
-    var sla = function(ms){ return lat!=null && lat <= ms ? '<span style="color:var(--green);font-weight:700">✓</span>' : '<span style="color:var(--red)">✗</span>'; };
-    var isBest = b.batch_size === bestBatch;
-    return '<tr style="border-bottom:1px solid var(--border)'+(isBest?';background:rgba(34,197,94,0.06)':'')+'">'
-      +'<td style="padding:4px 8px;font-size:11px;font-weight:'+(isBest?'700':'400')+'">'+b.batch_size+(isBest?' ★':'')+'</td>'
-      +'<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right">'+(seq!=null?parseFloat(seq).toFixed(2):'—')+'</td>'
-      +'<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right">'+(lat!=null?Math.round(lat)+'ms':'—')+'</td>'
-      +'<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right">'+(p.ttft_ms!=null?Math.round(p.ttft_ms)+'ms':'—')+'</td>'
-      +'<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right">'+(p.tpot_ms!=null?parseFloat(p.tpot_ms).toFixed(1)+'ms':'—')+'</td>'
-      +'<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right">'+(mem!=null?parseFloat(mem).toFixed(1):'—')+'</td>'
-      +'<td style="padding:4px 8px;font-size:11px;font-family:var(--mono);text-align:right;font-weight:600;color:var(--blue)">'+(gpus!=null?gpus:'—')+'</td>'
-      +'<td style="padding:4px 8px;text-align:center">'+sla(1000)+'</td>'
-      +'<td style="padding:4px 8px;text-align:center">'+sla(2000)+'</td>'
-      +'<td style="padding:4px 8px;text-align:center">'+sla(3000)+'</td>'
-      +'</tr>';
-  }).join('');
-  tbl.innerHTML = thead + tbody;
-
-  var rec = document.getElementById('perf-sweep-recommendation');
-  if(rec && bestBatch){
-    var bestGpus = Math.ceil(reqDay/(bestSeqS*86400))*tp;
-    rec.innerHTML = '★ <strong>Optimal batch size: '+bestBatch+'</strong> — highest seq/s ('+parseFloat(bestSeqS).toFixed(2)+'/s) · '+bestGpus+' '+PERF_GPU_LABELS[gpuKey]+' for '+Math.round(reqDay/1000000)+'M req/day · with '+bufPct+'% buffer: '+Math.ceil(bestGpus*(1+bufPct/100));
-  }
-}
-
-// Perf tab uses the same PROVIDERS array as Capacity tab
-var PERF_DISC = 0;
-
-function renderPerfProviderTable(){
-  // Reuse same PROVIDERS array and live price map as Capacity tab
-  // Render into perf-prov-table using identical logic as renderProviderTable()
-  var tbl = document.getElementById('perf-prov-table');
-  if(!tbl) return;
-  var lpm = (typeof _livePriceMap !== 'undefined' && _livePriceMap) ? _livePriceMap : {};
-  var h = '<tr><th></th><th>Provider</th><th>GPU</th><th>$/hr</th><th></th></tr>';
-  PROVIDERS.forEach(function(p,i){
-    var provGpuKeys = Object.keys(lpm).filter(function(k){ return k.split('|')[0] === p.name; });
-    var gpuOpts = '';
-    if(provGpuKeys.length > 0){
-      provGpuKeys.forEach(function(k){
-        var g = k.split('|')[1];
-        var match = CLOUD_GPU_OPTIONS.find(function(o){ return o.toUpperCase().indexOf(g) >= 0 || g.indexOf(o.toUpperCase()) >= 0; });
-        gpuOpts += '<option value="' + (match||g) + '">' + (match||g) + '</option>';
+  // Tag configs with SLA pass + GPU count
+  function tagConfigs(configs){
+    return configs.map(function(r, i){
+      var pass = perfV2SLAPass(r);
+      return Object.assign({}, r, {
+        _idx:     i,
+        _pass:    pass,
+        _gpuBase: perfV2GPUs(r, false),
+        _gpuBuf:  perfV2GPUs(r, true)
       });
-      gpuOpts += '<option value="Custom">Custom</option>';
-    } else {
-      gpuOpts = CLOUD_GPU_OPTIONS.map(function(g){ return '<option value="' + g + '">' + g + '</option>'; }).join('');
-    }
-    h += '<tr>'
-      + '<td><input type="radio" name="perf-prov-radio" ' + (p.active ? 'checked' : '') + ' onchange="selectPerfProvider(' + i + ')"></td>'
-      + '<td style="font-size:12px;font-weight:' + (p.active?'600':'400') + ';color:' + (p.active?'var(--blue)':'var(--text1)') + '">' + p.name + '</td>'
-      + '<td><select id="pprov-gpu-' + i + '" style="padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:10px;font-family:var(--mono)" onchange="updatePerfProvGpu(' + i + ',this.value)">' + gpuOpts + '</select></td>'
-      + '<td><input type="number" value="' + p.rate.toFixed(2) + '" step="0.01" style="width:58px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-family:var(--mono);font-size:11px" onchange="PERF_PROVIDERS_updateRate(' + i + ',+this.value)"></td>'
-      + '<td><button class="prov-del" onclick="deletePerfProv(' + i + ')">&#215;</button></td>'
-      + '</tr>';
+    });
+  }
+
+  var aggTagged    = tagConfigs(result.aggConfigs    || []);
+  var disaggTagged = tagConfigs(result.disaggConfigs || []);
+
+  // Find best from each (max tok_s_gpu among passing)
+  function bestPassing(tagged){
+    var passing = tagged.filter(function(r){ return r._pass; });
+    if(!passing.length) return null;
+    return passing.reduce(function(a,b){ return (b.tok_s_gpu||0)>(a.tok_s_gpu||0)?b:a; });
+  }
+
+  var bestAgg    = bestPassing(aggTagged);
+  var bestDisagg = bestPassing(disaggTagged);
+  var bestOverall = (!bestAgg && !bestDisagg) ? null :
+    (!bestAgg ? bestDisagg : !bestDisagg ? bestAgg :
+    (bestDisagg.tok_s_gpu||0) >= (bestAgg.tok_s_gpu||0) ? bestDisagg : bestAgg);
+  var bestMode = bestOverall === bestDisagg ? 'disagg' : 'agg';
+
+  // Context bar
+  var ctxEl = document.getElementById('perf-context-v2');
+  if(ctxEl){
+    var eff = Math.round(meta.isl * (1 - meta.pct/100));
+    var bestMetric = bestOverall ? (bestOverall.tok_s_gpu||bestOverall.seq_s_gpu||null) : null;
+    ctxEl.innerHTML = '<strong>Reading this:</strong> '
+      +PERF_STATE.modelLabel+' on '+gpuLabel
+      +' · ISL='+meta.isl+', OSL='+meta.osl+', '+meta.pct+'% prefix reuse → eff ISL=<strong style="color:var(--blue)">'+eff.toLocaleString()+'</strong>'
+      +' · Target: <strong style="color:var(--blue)">'+(rd/1000000).toFixed(0)+'M req/day</strong> ('+rps.toFixed(1)+' req/sec)'
+      +(bestOverall
+        ? ' · Best '+bestMode+' config: <strong style="color:var(--green)">'+(bestOverall._gpuBase||'?')+'</strong> '+gpuLabel+'s'
+          +' ('+buf+'% buffer: <strong style="color:var(--green)">'+(bestOverall._gpuBuf||'?')+'</strong>)'
+        : ' · <span style="color:var(--amber)">⚠ No configs pass SLA — relax threshold</span>');
+  }
+
+  // Hero cards
+  renderPerfV2Hero(bestOverall, bestAgg, bestDisagg, bestMode, gpuLabel, rd, buf);
+
+  // Tables
+  var sortedAgg    = sortPerfConfigs(aggTagged,    PERF_STATE.sortCol, PERF_STATE.sortAsc);
+  var sortedDisagg = sortPerfConfigs(disaggTagged, PERF_STATE.sortCol, PERF_STATE.sortAsc);
+  renderPerfV2Table('perf-disagg-tbl', sortedDisagg, 'disagg', bestDisagg);
+  renderPerfV2Table('perf-agg-tbl',    sortedAgg,    'agg',    bestAgg);
+  renderPerfV2CompareTable(result, bestAgg, bestDisagg);
+  renderPerfV2SizingMath(bestOverall, bestMode, meta, rd, buf, gpuLabel);
+
+  // Range card
+  renderPerfV2Range(aggTagged, disaggTagged, bestOverall, gpuLabel, rd, buf);
+
+  // Cost card
+  renderPerfV2Cost(bestOverall, gpuLabel, gpu, rd, buf);
+
+  // Saved runs
+  renderPerfV2Saved();
+
+  // disagg error note
+  if(result.disaggError){
+    var warn = document.getElementById('perf-hybrid-warn');
+    if(warn){ warn.style.display='block'; warn.innerHTML='⚠ Disagg query failed: '+result.disaggError+'. Showing agg results only.'; }
+  }
+}
+
+function sortPerfConfigs(configs, col, asc){
+  return configs.slice().sort(function(a,b){
+    var av=0, bv=0;
+    if(col==='tok_s_gpu')    { av=a.tok_s_gpu||0;  bv=b.tok_s_gpu||0; }
+    if(col==='seq_s_gpu')    { av=a.seq_s_gpu||0;  bv=b.seq_s_gpu||0; }
+    if(col==='ttft')         { av=a.ttft||9999;     bv=b.ttft||9999; }
+    if(col==='latency')      { av=a.latency||9999;  bv=b.latency||9999; }
+    if(col==='gpus_needed')  { av=a._gpuBase||9999; bv=b._gpuBase||9999; }
+    return asc ? av-bv : bv-av;
   });
-  h += '<tr><td colspan="5"><button class="add-prov" onclick="addPerfProvider()">+ add provider / instance</button></td></tr>';
-  tbl.innerHTML = h;
-  PROVIDERS.forEach(function(p,i){
-    var s = document.getElementById('pprov-gpu-' + i);
-    if(s) s.value = p.gpu;
-  });
-  // Sync live badge
-  var badge = document.getElementById('perf-live-badge');
-  var advBadge = document.getElementById('live-badge-adv');
-  if(badge && advBadge) badge.textContent = advBadge.textContent;
 }
 
-function selectPerfProvider(i){
-  PROVIDERS.forEach(function(p,j){ p.active = j===i; });
-  S.cloudRate = PROVIDERS[i].rate;
-  renderPerfProviderTable();
-  renderProviderTable(); // keep Capacity tab in sync
-  recalcPerfTargets();
-  updatePerfCostSummary();
+function setPerfSort(col, btn){
+  if(PERF_STATE.sortCol===col) PERF_STATE.sortAsc = !PERF_STATE.sortAsc;
+  else { PERF_STATE.sortCol=col; PERF_STATE.sortAsc=false; }
+  document.querySelectorAll('.perf-sort').forEach(function(b){ b.classList.remove('active'); });
+  if(btn) btn.classList.add('active');
+  if(PERF_STATE.lastResult) renderPerfV2Result(PERF_STATE.lastResult, true);
 }
 
-function PERF_PROVIDERS_updateRate(i, v){
-  PROVIDERS[i].rate = v;
-  if(PROVIDERS[i].active){ S.cloudRate = v; recalcPerfTargets(); }
-}
-
-function updatePerfProvGpu(i, gpu){
-  // delegate to existing updateProvGpu which handles live prices
-  updateProvGpu(i, gpu);
-  renderPerfProviderTable();
-  recalcPerfTargets();
-}
-
-function addPerfProvider(){
-  addProvider(); // reuse Capacity function
-  renderPerfProviderTable();
-}
-
-function deletePerfProv(i){
-  delProv(i); // reuse Capacity function
-  renderPerfProviderTable();
-  recalcPerfTargets();
-}
-
-// duplicate selectPerfProvider removed
-function updatePerfCostSummary(){
-  var p = PROVIDERS.find(function(x){ return x.active; }) || PROVIDERS[0];
-  var disc = PERF_DISC > 0 ? ' · '+(PERF_DISC*100)+'% disc' : ' · no discount';
-  var el = document.getElementById('pps-cost-sum');
-  if(el) el.textContent = 'Cloud · '+p.name+' $'+p.rate+'/hr'+disc;
-}
-
-function setPerfDisc(d, btn){
-  PERF_DISC = d;
-  document.querySelectorAll('#perf-disc-0,#perf-disc-30,#perf-disc-50').forEach(function(b){ b.classList.remove('on'); });
-  if(btn) btn.classList.add('on');
-  recalcPerfTargets();
-  updatePerfCostSummary();
-}
-
-function getPerfCloudRate(){
-  var p = PROVIDERS.find(function(x){ return x.active; }) || PROVIDERS[0];
-  return (p ? p.rate : 3.20) * (1 - PERF_DISC);
-}
-
-function getPerfOnpremUnit(){
-  var slider = document.getElementById('perf-hw-slider');
-  return slider ? parseInt(slider.value) * 1000 : 30000;
-}
-
-// getPerfAmortMonths defined above
-
-function recalcPerfTargets(){
-  // Re-render hero cards + cost + sizing math from stored result without re-calling API
-  var r = PERF_STATE.lastResult;
-  if(!r || document.getElementById('perf-results').style.display === 'none') return;
-  var reqDay  = parseInt((document.getElementById('perf-req-day')||{}).value)||100000000;
-  var tokSec  = parseInt((document.getElementById('perf-tok-sec')||{}).value)||5000;
-  var bufPct  = parseInt((document.getElementById('perf-buffer')||{}).value)||30;
-  var gpuKey  = (document.getElementById('perf-gpu')||{}).value||'h100_sxm';
-  var tp      = r.tp_size || parseInt((document.getElementById('perf-tp')||{}).value)||4;
-  var seqS    = r.seq_s;
-  var tpsGpu  = r.tokens_s_gpu;
-  var fmt     = function(v,dp){ return v!=null?(dp!=null?parseFloat(v).toFixed(dp):Math.round(v).toLocaleString()):'—'; };
-
-  // GPU counts
-  var gpuReqDay=null, gpuTokSec=null, gpuReqDayBuf=null, gpuTokSecBuf=null, reqDayCap=null;
-  if(seqS && seqS > 0){
-    var rConfigGpus = r.num_gpus || r.tp_size || tp;
-    var rdConfig    = seqS * 86400;
-    var rdPerGpu    = rdConfig / rConfigGpus;
-    gpuReqDay    = Math.ceil(reqDay / rdPerGpu);
-    gpuReqDayBuf = Math.ceil(gpuReqDay * (1 + bufPct/100));
-    reqDayCap    = rdConfig;
-  }
-  if(tpsGpu && tpsGpu > 0){
-    gpuTokSec    = Math.ceil(tokSec / tpsGpu);
-    gpuTokSecBuf = Math.ceil(gpuTokSec * (1 + bufPct/100));
-  }
-
-  // Update hero cards
-  var heroGrid = document.getElementById('perf-hero-cards');
-  if(heroGrid){
-    var heroCard = function(label, val, sub, color){
-      return '<div style="background:var(--bg2);border:1px solid '+(color||'var(--border)')+';border-radius:var(--r);padding:14px;text-align:center">'
-        +'<div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">'+label+'</div>'
-        +'<div style="font-size:26px;font-weight:700;color:'+(color||'var(--text1)')+';margin-bottom:2px">'+val+'</div>'
-        +'<div style="font-size:11px;color:var(--text3)">'+sub+'</div>'
-        +'</div>';
-    };
-    heroGrid.innerHTML =
-      heroCard('GPUs for '+fmt(reqDay/1000000)+'M req/day',
-        gpuReqDay!=null?gpuReqDay:'—',
-        gpuReqDay!=null?'with '+bufPct+'% buffer: '+gpuReqDayBuf+' · '+(PERF_GPU_LABELS[gpuKey]||gpuKey):'need seq/s data',
-        'var(--blue)')
-    + heroCard('GPUs for '+fmt(tokSec)+' tok/s',
-        gpuTokSec!=null?gpuTokSec:'—',
-        gpuTokSec!=null?'with '+bufPct+'% buffer: '+gpuTokSecBuf:'need tok/s/gpu data',
-        'var(--green)')
-    + heroCard('Req/day capacity',
-        reqDayCap!=null?Math.round(reqDayCap/1000000).toLocaleString()+'M':'—',
-        reqDayCap!=null ? 'entire config · '+(PERF_GPU_LABELS[gpuKey]||gpuKey) : '',
-        'var(--border)');
-  }
-
-  // Update cost card
-  var costCard = document.getElementById('perf-cost-card');
-  if(costCard && gpuReqDay!=null){
-    var priceHr   = getPerfCloudRate();
-    var opUnit    = getPerfOnpremUnit();
-    var amortMo   = getPerfAmortMonths();
-    var cloudMo   = gpuReqDay * priceHr * 24 * 30;
-    var cloud5yr  = cloudMo * 60;
-    var opTotal   = gpuReqDay * opUnit;
-    var opMo      = opTotal / amortMo;
-    var savings   = cloudMo - opMo;
-    var fmtK = function(v){ return v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+(v/1000).toFixed(0)+'K':'$'+Math.round(v); };
-    costCard.innerHTML =
-      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px">'
-      +'<div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Monthly cost · '+gpuReqDay+' '+(PERF_GPU_LABELS[gpuKey]||gpuKey)+'</div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">'
-      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px">'
-      +'<div style="font-size:10px;color:var(--text4);margin-bottom:4px">☁ CLOUD</div>'
-      +'<div style="font-size:22px;font-weight:700;color:#ef4444">'+fmtK(cloudMo)+'/mo</div>'
-      +'<div style="font-size:11px;color:var(--text3)">'+fmtK(cloud5yr)+' over 5yr · '+fmtK(priceHr)+'/hr/GPU</div>'
-      +'</div>'
-      +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px">'
-      +'<div style="font-size:10px;color:var(--text4);margin-bottom:4px">■ ON-PREM</div>'
-      +'<div style="font-size:22px;font-weight:700;color:var(--green)">'+fmtK(opMo)+'/mo</div>'
-      +'<div style="font-size:11px;color:var(--text3)">5yr amort · '+fmtK(opTotal)+' total</div>'
-      +'</div>'
-      +'</div>'
-      +(savings>0?'<div style="font-size:12px;color:var(--green);font-weight:600">On-prem saves '+fmtK(savings)+'/mo</div>':'')
+function renderPerfV2Hero(bestOverall, bestAgg, bestDisagg, bestMode, gpuLabel, rd, buf){
+  var g = document.getElementById('perf-hero-v2');
+  if(!g) return;
+  var fmt = function(v){ return v!=null?Math.round(v).toLocaleString():'—'; };
+  var oc = function(label, val, sub, color, badge){
+    return '<div style="background:var(--bg2);border:1px solid '+(color||'var(--border)')+';border-radius:var(--r);padding:14px">'
+      +'<div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">'+label+'</div>'
+      +'<div style="font-size:28px;font-weight:700;font-family:var(--mono);color:'+(color||'var(--text1)')+';margin-bottom:2px">'+val+'</div>'
+      +'<div style="font-size:11px;color:var(--text2)">'+sub+'</div>'
+      +(badge?'<span style="display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-top:6px;background:rgba(59,130,246,.15);color:var(--blue)">'+badge+'</span>':'')
       +'</div>';
-  }
-
-  // Update sizing math
-  renderSizingMath(r, reqDay, tokSec, bufPct, gpuKey);
+  };
+  g.innerHTML =
+    oc('GPUs needed (best config)',
+      bestOverall ? bestOverall._gpuBase : '—',
+      bestOverall ? gpuLabel+' · '+bestMode.toUpperCase()+' · no buffer' : 'Run estimate first',
+      'var(--blue)',
+      bestOverall ? (bestOverall.tok_s_gpu||0).toFixed(1)+' tok/s/GPU' : null)
+  + oc('With '+buf+'% buffer',
+      bestOverall ? bestOverall._gpuBuf : '—',
+      'Recommended for production',
+      'var(--green)')
+  + oc('Req/day capacity (this config)',
+      bestOverall && bestOverall.seq_s_gpu ? Math.round(bestOverall.seq_s_gpu * bestOverall.num_gpus * 86400 / 1000000).toLocaleString()+'M' : '—',
+      bestOverall ? 'at '+gpuLabel+(bestOverall.num_gpus?' · '+bestOverall.num_gpus+' GPUs':'') : '',
+      'var(--border)');
 }
 
-function getPerfErrorTips(msg){
-  var mode    = PERF_STATE.mode;
-  var gpu     = (document.getElementById('perf-gpu')||{}).value||'';
-  var backend = (document.getElementById('perf-backend')||{}).value||'';
-  var tp      = (document.getElementById('perf-tp')||{}).value||'4';
-  var tips = [];
-  var m = (msg||'').toLowerCase();
+function renderPerfV2Table(tblId, configs, mode, bestRow){
+  var tbl = document.getElementById(tblId);
+  if(!tbl) return;
+  var isDisagg = mode === 'disagg';
+  var cols = isDisagg
+    ? ['Rank','conc','TTFT','TPOT','Latency','seq/s/GPU','tok/s/GPU','(p)workers','(d)workers','GPUs','GPU needed','+ buf','SLA']
+    : ['Rank','conc','TTFT','TPOT','Latency','seq/s/GPU','tok/s/GPU','GPUs','GPU needed','+ buf','SLA'];
 
-  if(m.indexOf('cold start') >= 0 || m.indexOf('starting up') >= 0){
-    tips.push('⏳ AIC API woke from sleep — wait 30 seconds and click Retry');
-  }
-  if(m.indexOf('moe quant') >= 0 || m.indexOf('w4a16') >= 0){
-    tips.push('MoE quant error: scroll down in Hardware section → set MoE quant = <strong>float16</strong>, backend ver = <strong>0.14.0</strong>');
-  }
-  if(m.indexOf('no valid experiment') >= 0 || m.indexOf('no valid') >= 0){
-    if(mode === 'query'){
-      tips.push('Disagg mode needs ≥16 GPUs — switch to <strong>TP=8</strong> (currently TP='+tp+')');
-      tips.push('Or use <strong>Static estimate</strong> mode which works with TP=4');
-    }
-    tips.push('Try <strong>H200 SXM</strong> GPU (more pareto data available than H100)');
-  }
-  if(m.indexOf('unexpected token') >= 0 || m.indexOf('invalid response') >= 0){
-    tips.push('⏳ AIC API may be starting up — wait 30 seconds and click Retry');
-    tips.push('If it persists, check the Render dashboard at aic-api-8hmb.onrender.com');
-  }
-  if(!tips.length){
-    if(mode === 'query'){
-      tips.push('Try switching to <strong>Static estimate</strong> mode first to verify the combo works');
-      tips.push('For Agg vs Disagg: use <strong>TP=8</strong> and <strong>H200 SXM</strong>');
-    }
-    tips.push('Try switching to <strong>HYBRID</strong> database mode');
-    tips.push('Try <strong>TRT-LLM</strong> backend (broader hardware support)');
-  }
-  return tips.map(function(t){ return '• '+t; }).join('<br>');
+  var thead = '<tr style="background:var(--bg3);border-bottom:2px solid var(--border2)">'
+    +cols.map(function(c){ return '<th style="padding:7px 9px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);white-space:nowrap">'+c+'</th>'; }).join('')
+    +'</tr>';
+
+  var tbody = configs.length === 0
+    ? '<tr><td colspan="'+cols.length+'" style="padding:20px;text-align:center;color:var(--text3);font-size:12px">No configs returned — try HYBRID mode or different GPU/backend</td></tr>'
+    : configs.map(function(r, i){
+        var isBest = bestRow && r._idx === bestRow._idx;
+        var bg = isBest ? 'background:rgba(59,130,246,.06)' : '';
+        var dot = r._pass
+          ? '<span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;margin-right:3px"></span>'
+          : '<span style="width:6px;height:6px;border-radius:50%;background:var(--red);display:inline-block;margin-right:3px"></span>';
+        var rowStyle = 'border-bottom:1px solid var(--border);'+bg+(r._pass?'':';opacity:.45');
+        var best = isBest ? '<span style="font-size:9px;font-weight:700;background:var(--blue);color:#fff;padding:1px 5px;border-radius:3px;margin-left:3px">BEST</span>' : '';
+        var cells;
+        if(isDisagg){
+          cells = [
+            '<td style="padding:6px 9px;font-size:11px;font-weight:600;color:var(--text3)">'+(i+1)+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px">'+(r.concurrency!=null?r.concurrency:'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px">'+(r.ttft!=null?r.ttft.toFixed(0)+'ms':'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px">'+(r.tpot!=null?r.tpot.toFixed(1)+'ms':'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px">'+(r.latency!=null?r.latency.toFixed(0)+'ms':'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px;color:var(--cyan)">'+(r.seq_s_gpu!=null?r.seq_s_gpu.toFixed(3):'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--blue)">'+(r.tok_s_gpu!=null?r.tok_s_gpu.toFixed(1):'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px">'+(r.p_workers!=null?r.p_workers:'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px">'+(r.d_workers!=null?r.d_workers:'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px;color:var(--text3)">'+(r.num_gpus!=null?r.num_gpus:'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--green)">'+(r._gpuBase!=null?r._gpuBase:'—')+best+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px;color:var(--amber)">'+(r._gpuBuf!=null?r._gpuBuf:'—')+'</td>',
+            '<td style="padding:6px 9px">'+dot+'</td>',
+          ];
+        } else {
+          cells = [
+            '<td style="padding:6px 9px;font-size:11px;font-weight:600;color:var(--text3)">'+(i+1)+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px">'+(r.concurrency!=null?r.concurrency:'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px">'+(r.ttft!=null?r.ttft.toFixed(0)+'ms':'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px">'+(r.tpot!=null?r.tpot.toFixed(1)+'ms':'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px">'+(r.latency!=null?r.latency.toFixed(0)+'ms':'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px;color:var(--cyan)">'+(r.seq_s_gpu!=null?r.seq_s_gpu.toFixed(3):'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--blue)">'+(r.tok_s_gpu!=null?r.tok_s_gpu.toFixed(1):'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px;color:var(--text3)">'+(r.num_gpus!=null?r.num_gpus:'—')+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--green)">'+(r._gpuBase!=null?r._gpuBase:'—')+best+'</td>',
+            '<td style="padding:6px 9px;font-family:var(--mono);font-size:11px;color:var(--amber)">'+(r._gpuBuf!=null?r._gpuBuf:'—')+'</td>',
+            '<td style="padding:6px 9px">'+dot+'</td>',
+          ];
+        }
+        return '<tr style="'+rowStyle+'">'+cells.join('')+'</tr>';
+      }).join('');
+
+  tbl.innerHTML = thead + tbody;
 }
 
-function showPerfError(msg){
-  // Show empty state with error — don't show stale results
-  document.getElementById('perf-empty').style.display   = 'flex';
-  document.getElementById('perf-results').style.display = 'none';
-  var emptyEl = document.getElementById('perf-empty');
-  if(emptyEl){
-    var tips = getPerfErrorTips(msg);
-    emptyEl.innerHTML = 
-      '<div style="text-align:center;max-width:480px">' +
-      '<div style="font-size:32px;margin-bottom:12px">⚠️</div>' +
-      '<div style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text1)">Estimate failed</div>' +
-      '<div style="font-size:12px;color:var(--red);background:rgba(239,68,68,0.08);border:1px solid var(--red);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;text-align:left">' + msg + '</div>' +
-      '<div style="font-size:12px;color:var(--text3);line-height:1.6;text-align:left">' + tips + '</div>' +
-      '<div id="perf-retry-wrap" style="margin-top:12px"></div>' +
-      '</div>';
-    // If cold-start, add auto-countdown retry button
-    var isCold = msg && (msg.indexOf('starting up') >= 0 || msg.indexOf('Unexpected token') >= 0);
-    var wrapEl = document.getElementById('perf-retry-wrap');
-    if(wrapEl){
-      if(isCold){
-        var secs = 35;
-        wrapEl.innerHTML = '<button class="btn btn-primary" id="perf-retry-countdown" onclick="runPerfEstimate(true)" disabled>↻ Retrying in '+secs+'s...</button>';
-        var btn = document.getElementById('perf-retry-countdown');
-        var iv = setInterval(function(){
-          secs--;
-          if(btn && secs > 0){
-            btn.textContent = '↻ Retrying in '+secs+'s...';
-          } else {
-            clearInterval(iv);
-            if(btn){ btn.textContent = '↻ Retry now'; btn.disabled = false; }
-            // Auto-click retry
-            runPerfEstimate(true);
-          }
-        }, 1000);
-      } else {
-        wrapEl.innerHTML = '<button class="btn btn-primary" onclick="runPerfEstimate(true)">↻ Retry with current settings</button>';
-      }
-    }
-  }
-}
+function renderPerfV2CompareTable(result, bestAgg, bestDisagg){
+  var tbl = document.getElementById('perf-compare-tbl');
+  if(!tbl) return;
+  var allTp  = result.allTp  || {};
+  var allLat = result.allLat || {};
+  var modes  = ['agg','disagg'];
+  var thead = '<tr style="background:var(--bg3);border-bottom:2px solid var(--border2)">'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">Mode</th>'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">Best tok/s/GPU</th>'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">TTFT</th>'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">TPOT</th>'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">Latency</th>'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">GPUs needed</th>'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">Winner</th>'
+    +'</tr>';
 
-function savePerfResult(){
-  if(!PERF_STATE.lastResult && !PERF_STATE.sweepResults) return;
-  var r = Object.assign({id: Date.now()}, PERF_STATE.lastResult || PERF_STATE.sweepResults);
-  PERF_STATE.savedRuns.push(r);
-  try{ localStorage.setItem('perf_saved', JSON.stringify(PERF_STATE.savedRuns)); }catch(e){}
-  renderPerfSaved();
-}
+  var aggTp    = parseFloat(allTp['agg']||0)||null;
+  var disaggTp = parseFloat(allTp['disagg']||0)||null;
+  var winner   = disaggTp && aggTp ? (disaggTp >= aggTp ? 'disagg' : 'agg') : (disaggTp ? 'disagg' : 'agg');
 
-function deletePerfRun(id){
-  PERF_STATE.savedRuns = PERF_STATE.savedRuns.filter(function(r){ return r.id !== id; });
-  try{ localStorage.setItem('perf_saved', JSON.stringify(PERF_STATE.savedRuns)); }catch(e){}
-  renderPerfSaved();
-}
-
-function clearPerfSaved(){
-  PERF_STATE.savedRuns = [];
-  try{ localStorage.removeItem('perf_saved'); }catch(e){}
-  renderPerfSaved();
-}
-
-function renderPerfSaved(){
-  var comp  = document.getElementById('perf-comparison');
-  var tbody = document.getElementById('perf-saved-tbody');
-  if(!comp || !tbody) return;
-  if(!PERF_STATE.savedRuns.length){ comp.style.display='none'; return; }
-  comp.style.display = 'block';
-  var reqDay = parseInt((document.getElementById('perf-req-day')||{}).value)||100000000;
-  var tp     = parseInt((document.getElementById('perf-tp')||{}).value)||4;
-  tbody.innerHTML = PERF_STATE.savedRuns.map(function(r){
-    var gpuLabel = PERF_GPU_LABELS[r.system||(r.cfg&&r.cfg.payload&&r.cfg.payload.system)||''] || '—';
-    var gpus = r.seq_s ? Math.ceil(reqDay/(r.seq_s*86400))*tp : '—';
-    return '<tr style="border-bottom:1px solid var(--border)">'
-      +'<td style="padding:5px 8px;font-weight:500;font-size:12px">'+(r.cfg&&r.cfg.payload?r.cfg.payload.model_path||PERF_STATE.modelLabel:PERF_STATE.modelLabel)+'</td>'
-      +'<td style="padding:5px 8px;font-size:12px;color:var(--text2)">'+gpuLabel+'</td>'
-      +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px;color:var(--blue)">'+gpus+'</td>'
-      +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px">'+(r.latency!=null?Math.round(r.latency)+'ms':'—')+'</td>'
-      +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px">'+(r.ttft!=null?Math.round(r.ttft)+'ms':'—')+'</td>'
-      +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:12px">'+(r.tokens_s_gpu!=null?parseFloat(r.tokens_s_gpu).toFixed(1):'—')+'</td>'
-      +'<td style="padding:5px 8px"><button onclick="deletePerfRun('+r.id+')" style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3)">✕</button></td>'
+  var tbody = modes.map(function(m){
+    var lat  = allLat[m] || {};
+    var best = m==='agg' ? bestAgg : bestDisagg;
+    var tp   = m==='agg' ? aggTp   : disaggTp;
+    var isW  = m === winner;
+    var bg   = isW ? 'background:rgba(34,197,94,.05)' : '';
+    return '<tr style="border-bottom:1px solid var(--border);'+bg+'">'
+      +'<td style="padding:7px 10px;font-weight:600;font-size:12px;color:'+(m==='disagg'?'var(--blue)':'var(--green)')+'">'+m.toUpperCase()+'</td>'
+      +'<td style="padding:7px 10px;font-family:var(--mono);font-size:12px">'+(tp!=null?tp.toFixed(1):'—')+'</td>'
+      +'<td style="padding:7px 10px;font-family:var(--mono);font-size:12px">'+(lat.ttft!=null?parseFloat(lat.ttft).toFixed(0)+'ms':'—')+'</td>'
+      +'<td style="padding:7px 10px;font-family:var(--mono);font-size:12px">'+(lat.tpot!=null?parseFloat(lat.tpot).toFixed(1)+'ms':'—')+'</td>'
+      +'<td style="padding:7px 10px;font-family:var(--mono);font-size:12px">'+(lat.request_latency!=null?parseFloat(lat.request_latency).toFixed(0)+'ms':'—')+'</td>'
+      +'<td style="padding:7px 10px;font-family:var(--mono);font-weight:700;color:var(--blue)">'+(best&&best._gpuBase!=null?best._gpuBase:'—')+'</td>'
+      +'<td style="padding:7px 10px">'+(isW?'<span style="color:var(--green);font-weight:700;font-size:12px">✓ Better</span>':'')+'</td>'
       +'</tr>';
   }).join('');
+
+  if(disaggTp && aggTp){
+    var speedup = Math.max(disaggTp,aggTp)/Math.min(disaggTp,aggTp);
+    tbody += '<tr style="border-top:2px solid var(--border);background:var(--bg3)"><td colspan="7" style="padding:6px 10px;font-size:11px;color:var(--text2)">'
+      +winner.toUpperCase()+' is <strong>'+speedup.toFixed(2)+'×</strong> better throughput per GPU than '+(winner==='disagg'?'agg':'disagg')
+      +'</td></tr>';
+  }
+
+  tbl.innerHTML = thead + tbody;
 }
 
-function copyPerfAsJSON(){
-  var data = PERF_STATE.lastRaw || PERF_STATE.sweepResults;
-  if(!data){ alert('Run an estimate first.'); return; }
-  navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+function renderPerfV2SizingMath(best, mode, meta, rd, buf, gpuLabel){
+  var el = document.getElementById('perf-sizing-v2');
+  if(!el || !best) { if(el) el.innerHTML = '<div style="color:var(--text3);font-size:12px">Run estimate to see sizing math</div>'; return; }
+  var rps  = rd / 86400;
+  var seqG = best.seq_s_gpu;
+  var gpuB = best._gpuBase;
+  var gpuW = best._gpuBuf;
+  var eff  = Math.round(meta.isl * (1 - meta.pct/100));
+
+  var line = function(n, formula, result, note){
+    return '<div style="display:flex;align-items:baseline;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'
+      +'<span style="font-size:10px;color:var(--text3);min-width:50px;flex-shrink:0">Step '+n+'</span>'
+      +'<span style="font-size:12px;font-family:var(--mono);color:var(--text2);flex:1">'+formula+'</span>'
+      +'<span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--green);white-space:nowrap">= '+result+'</span>'
+      +(note?'<span style="font-size:10px;color:var(--text3);margin-left:8px;white-space:nowrap">'+note+'</span>':'')
+      +'</div>';
+  };
+  el.innerHTML =
+    line(1, rd.toLocaleString()+' req/day ÷ 86,400', rps.toFixed(2)+' req/sec', 'demand')
+   +line(2, 'ISL='+meta.isl+' × (1−'+meta.pct+'%) prefix', eff.toLocaleString()+' eff. tokens', 'prefill cost')
+   +line(3, 'AIC '+mode+' best seq/s/GPU', seqG!=null?seqG.toFixed(3)+' req/sec/GPU':'—', 'from pareto table')
+   +line(4, 'ceil('+rps.toFixed(2)+' ÷ '+(seqG!=null?seqG.toFixed(3):'?')+')', gpuB!=null?gpuB+' '+gpuLabel+'s':'—', 'base GPUs')
+   +line(5, 'ceil('+gpuB+' × '+(1+buf/100).toFixed(2)+')', gpuW!=null?gpuW+' '+gpuLabel+'s':'—', buf+'% buffer');
 }
 
-function exportPerfToSheets(){
-  var r = PERF_STATE.lastResult;
-  if(!r){ alert('Run an estimate first before exporting.'); return; }
+function renderPerfV2Range(aggTagged, disaggTagged, bestOverall, gpuLabel, rd, buf){
+  var rg = document.getElementById('perf-range-grid');
+  var rt = document.getElementById('perf-range-title');
+  var rn = document.getElementById('perf-range-note');
+  if(!rg) return;
 
-  var reqDay  = parseInt((document.getElementById('perf-req-day')||{}).value)||100000000;
-  var tokSec  = parseInt((document.getElementById('perf-tok-sec')||{}).value)||5000;
-  var bufPct  = parseInt((document.getElementById('perf-buffer')||{}).value)||30;
-  var gpuKey  = (document.getElementById('perf-gpu')||{}).value||'h100_sxm';
-  var gpuLabel= PERF_GPU_LABELS[gpuKey]||gpuKey;
-  var tp      = r.tp_size||(r.cfg&&r.cfg.payload&&r.cfg.payload.tp_size)||4;
-  var priceHr = PERF_GPU_CLOUD_PRICE[gpuKey]||3.20;
-  var opUnit  = PERF_GPU_ONPREM_PRICE[gpuKey]||30000;
-
-  var seqS    = r.seq_s;
-  var tpsGpu  = r.tokens_s_gpu;
-  var gpuRD   = seqS  ? Math.ceil(reqDay/(seqS*86400))*tp    : '';
-  var gpuTS   = tpsGpu? Math.ceil(tokSec/tpsGpu)              : '';
-  var gpuRDBuf= gpuRD ? Math.ceil(gpuRD*(1+bufPct/100))       : '';
-  var gpuTSBuf= gpuTS ? Math.ceil(gpuTS*(1+bufPct/100))       : '';
-
-  // ── Tab 1: Summary ──
-  var summary = [
-    ['GPU Sizing Summary — gpu.calc Performance'],
-    ['Generated', new Date().toLocaleString()],
-    [''],
-    ['INPUTS','','VALUE'],
-    ['Model','',PERF_STATE.modelLabel],
-    ['GPU','',gpuLabel],
-    ['Backend','',(r.backend||'').toUpperCase()],
-    ['ISL (original)','',(r.cfg&&r.cfg.meta&&r.cfg.meta.isl_original)||''],
-    ['Prefix reuse %','',(r.cfg&&r.cfg.meta&&r.cfg.meta.prefix_pct)||0],
-    ['Effective ISL','',(r.cfg&&r.cfg.meta&&r.cfg.meta.eff_isl)||''],
-    ['OSL','',(r.cfg&&r.cfg.payload&&r.cfg.payload.osl)||''],
-    ['Batch size','',(r.cfg&&r.cfg.payload&&r.cfg.payload.batch_size)||''],
-    ['TP size','',tp],
-    ['DB mode','',(r.cfg&&r.cfg.payload&&r.cfg.payload.database_mode)||''],
-    [''],
-    ['SCALING TARGETS','','VALUE'],
-    ['Requests/day target','',reqDay],
-    ['Tokens/sec target','',tokSec],
-    ['Infra buffer %','',bufPct],
-    [''],
-    ['ANSWERS','','VALUE'],
-    ['GPUs for req/day target (no buffer)','',gpuRD],
-    ['GPUs for req/day target (with buffer)','',gpuRDBuf],
-    ['GPUs for tok/sec target (no buffer)','',gpuTS],
-    ['GPUs for tok/sec target (with buffer)','',gpuTSBuf],
-    [''],
-    ['AIC PERFORMANCE RESULTS','','VALUE'],
-    ['TTFT (ms)','',r.ttft!=null?parseFloat(r.ttft).toFixed(2):''],
-    ['TPOT (ms)','',r.tpot!=null?parseFloat(r.tpot).toFixed(2):''],
-    ['Request latency (ms)','',r.latency!=null?parseFloat(r.latency).toFixed(1):''],
-    ['Tokens/s','',r.tokens_s!=null?Math.round(r.tokens_s):''],
-    ['Tokens/s/GPU','',r.tokens_s_gpu!=null?parseFloat(r.tokens_s_gpu).toFixed(2):''],
-    ['Seq/s','',r.seq_s!=null?parseFloat(r.seq_s).toFixed(4):''],
-    ['Tokens/day','',r.tokens_day!=null?Math.round(r.tokens_day):''],
-    ['Memory GiB','',r.memory_gib!=null?parseFloat(r.memory_gib).toFixed(2):''],
-  ];
-
-  // ── Tab 2: Sizing Math ──
-  var math = [
-    ['SIZING MATH — Step by step','','',''],
-    ['Step','Formula','Value','Notes'],
-    ['1. Effective ISL','ISL × (1 - prefix%)',((r.cfg&&r.cfg.meta&&r.cfg.meta.eff_isl)||''),'After prefix cache'],
-    ['2. Tokens/request','ISL + OSL',(parseInt((r.cfg&&r.cfg.meta&&r.cfg.meta.eff_isl)||0)+parseInt((r.cfg&&r.cfg.payload&&r.cfg.payload.osl)||0)),'Total tokens per request'],
-    ['3. seq/s from AIC','Direct measurement',r.seq_s!=null?parseFloat(r.seq_s).toFixed(4):'',' requests/sec per unit'],
-    ['4. req/day per unit','seq/s × 86400',r.seq_s!=null?Math.round(r.seq_s*86400):'',' per '+tp+'-GPU unit'],
-    ['5. Units for target','ceil(req_day ÷ req_day_per_unit)',seqS?Math.ceil(reqDay/(seqS*86400)):'',' GPU units needed'],
-    ['6. Total GPUs','units × tp_size',gpuRD,''],
-    ['7. With buffer','GPUs × (1 + buffer%)',gpuRDBuf,'Production-ready count'],
-    ['8. tok/s/GPU from AIC','Direct measurement',r.tokens_s_gpu!=null?parseFloat(r.tokens_s_gpu).toFixed(2):'',' tokens/s per GPU'],
-    ['9. GPUs for tok/sec','ceil(target ÷ tok/s/gpu)',gpuTS,''],
-    ['10. With buffer','GPUs × (1 + buffer%)',gpuTSBuf,''],
-    [''],
-    ['COST CALCULATION','','',''],
-    ['Cloud $/hr/GPU','',priceHr,''],
-    ['On-prem $/GPU','',opUnit,''],
-    ['Cloud monthly (req/day sizing)','GPUs × $/hr × 24 × 30',gpuRD?Math.round(gpuRD*priceHr*24*30):'',''],
-    ['On-prem total (req/day sizing)','GPUs × $/GPU',gpuRD?gpuRD*opUnit:'',''],
-    ['On-prem monthly (5yr amort)','total ÷ 60',gpuRD?Math.round(gpuRD*opUnit/60):'',''],
-  ];
-
-  // ── Tab 3: Per-op latency ──
-  var perOp = [['PER-OP LATENCY BREAKDOWN'],['Operation','Type','Latency (ms)']];
-  if(r.per_op){
-    Object.keys(r.per_op.context||{}).forEach(function(k){ perOp.push([k,'context',parseFloat(r.per_op.context[k]).toFixed(3)]); });
-    Object.keys(r.per_op.generation||{}).forEach(function(k){ perOp.push([k,'generation',parseFloat(r.per_op.generation[k]).toFixed(3)]); });
-  }
-  if(r.scheduling){
-    perOp.push([''],['SCHEDULING STATS','','']);
-    perOp.push(['Num mix steps','',r.scheduling.num_mix_steps||'']);
-    perOp.push(['Num genonly steps','',r.scheduling.num_genonly_steps||'']);
-    perOp.push(['Mix step latency ms','',r.scheduling.mix_step_latency_ms!=null?parseFloat(r.scheduling.mix_step_latency_ms).toFixed(3):'']);
-    perOp.push(['Genonly step latency ms','',r.scheduling.genonly_step_latency_ms!=null?parseFloat(r.scheduling.genonly_step_latency_ms).toFixed(3):'']);
+  var allPassing = aggTagged.concat(disaggTagged).filter(function(r){ return r._pass && r._gpuBase; });
+  if(!allPassing.length){
+    rg.innerHTML = '<div style="grid-column:1/-1;color:var(--amber);font-size:12px">⚠ No configs pass the SLA filter. Relax the threshold to see range.</div>';
+    return;
   }
 
-  // ── Tab 4: Disagg configs ──
-  var disaggTab = [['DISAGGREGATED TOP CONFIGS']];
-  if(r.type === 'query' && r.disagg_configs && r.disagg_configs.length){
-    var dCols = ['tokens/s/gpu','tokens/s/user','ttft','tpot','request_latency','num_total_gpus','(p)workers','(p)tp','(p)pp','(p)bs','(p)parallel','(p)memory','(d)workers','(d)tp','(d)pp','(d)bs','(d)parallel','(d)memory'];
-    disaggTab.push(dCols);
-    r.disagg_configs.forEach(function(c){ disaggTab.push(dCols.map(function(k){ return c[k]!=null?c[k]:''; })); });
-  } else { disaggTab.push(['No disagg data — run in Agg vs Disagg mode']); }
+  var gpus = allPassing.map(function(r){ return r._gpuBase; });
+  var gpusBuf = allPassing.map(function(r){ return r._gpuBuf; });
+  var minG = Math.min.apply(null, gpus);
+  var maxG = Math.max.apply(null, gpus);
+  var maxBuf = Math.max.apply(null, gpusBuf);
+  var recG = bestOverall ? bestOverall._gpuBuf : Math.min.apply(null, gpusBuf);
 
-  // ── Tab 5: Agg configs ──
-  var aggTab = [['AGGREGATED TOP CONFIGS']];
-  if(r.type === 'query' && r.agg_configs && r.agg_configs.length){
-    var aCols = ['tokens/s/gpu','tokens/s/user','ttft','tpot','request_latency','num_total_gpus','tp','pp','bs','parallel','memory'];
-    aggTab.push(aCols);
-    r.agg_configs.forEach(function(c){ aggTab.push(aCols.map(function(k){ return c[k]!=null?c[k]:''; })); });
-  } else { aggTab.push(['No agg data — run in Agg vs Disagg mode']); }
+  if(rt) rt.textContent = 'GPU SIZING RANGE · '+(rd/1000000).toFixed(0)+'M req/day · '+gpuLabel;
 
-  // ── Tab 6: Batch sweep ──
-  var sweepTab = [['BATCH SWEEP RESULTS']];
-  if(PERF_STATE.sweepResults && PERF_STATE.sweepResults.batches){
-    sweepTab.push(['Batch','seq/s','latency_ms','ttft_ms','tpot_ms','memory_gib','GPUs_for_req_day','SLA_1s','SLA_2s','SLA_3s']);
-    PERF_STATE.sweepResults.batches.forEach(function(b){
-      if(b.error){ sweepTab.push([b.batch_size,'ERROR: '+b.error]); return; }
-      var p   = b.data.performance||{};
-      var mem = (b.data.memory_gib||{}).total;
-      var seq = p.seq_per_s;
-      var lat = p.request_latency_ms;
-      var gpus= seq ? Math.ceil(reqDay/(seq*86400))*tp : '';
-      sweepTab.push([b.batch_size,
-        seq!=null?parseFloat(seq).toFixed(4):'',
-        lat!=null?parseFloat(lat).toFixed(0):'',
-        p.ttft_ms!=null?parseFloat(p.ttft_ms).toFixed(0):'',
-        p.tpot_ms!=null?parseFloat(p.tpot_ms).toFixed(1):'',
-        mem!=null?parseFloat(mem).toFixed(2):'',
-        gpus,
-        lat!=null&&lat<=1000?'YES':'NO',
-        lat!=null&&lat<=2000?'YES':'NO',
-        lat!=null&&lat<=3000?'YES':'NO'
-      ]);
-    });
-  } else { sweepTab.push(['Run with Auto-sweep enabled to get batch sweep data']); }
+  var bar = function(val, max, color){
+    return '<div style="height:4px;border-radius:2px;background:var(--border);margin-top:6px;overflow:hidden"><div style="height:100%;border-radius:2px;background:'+color+';width:'+Math.round(val/max*100)+'%"></div></div>';
+  };
+  rg.innerHTML =
+    '<div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Minimum (best config, no buffer)</div>'
+    +'<div style="font-size:24px;font-weight:700;font-family:var(--mono);color:var(--green)">'+minG+'</div>'
+    +'<div style="font-size:10px;color:var(--text2);margin-top:2px">'+gpuLabel+'s</div>'
+    +bar(minG,maxBuf,'var(--green)')+'</div>'
+    +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Recommended (best + '+buf+'% buffer)</div>'
+    +'<div style="font-size:24px;font-weight:700;font-family:var(--mono);color:var(--blue)">'+recG+'</div>'
+    +'<div style="font-size:10px;color:var(--text2);margin-top:2px">'+gpuLabel+'s</div>'
+    +bar(recG,maxBuf,'var(--blue)')+'</div>'
+    +'<div><div style="font-size:10px;color:var(--text3);margin-bottom:4px">Conservative (worst passing + '+buf+'% buffer)</div>'
+    +'<div style="font-size:24px;font-weight:700;font-family:var(--mono);color:var(--amber)">'+maxBuf+'</div>'
+    +'<div style="font-size:10px;color:var(--text2);margin-top:2px">'+gpuLabel+'s</div>'
+    +bar(maxBuf,maxBuf,'var(--amber)')+'</div>';
 
-  // ── Saved runs ──
-  var savedTab = [['SAVED RUNS']];
-  if(PERF_STATE.savedRuns.length){
-    savedTab.push(['Model','GPU','Backend','TTFT','TPOT','Latency','tok/s/gpu','GPUs(req/day)','Timestamp']);
-    PERF_STATE.savedRuns.forEach(function(sr){
-      var gpus2 = sr.seq_s ? Math.ceil(reqDay/(sr.seq_s*86400))*(sr.tp_size||tp) : '';
-      savedTab.push([
-        sr.cfg&&sr.cfg.payload?sr.cfg.payload.model_path:PERF_STATE.modelLabel,
-        PERF_GPU_LABELS[sr.system||'']||'',
-        (sr.backend||'').toUpperCase(),
-        sr.ttft!=null?parseFloat(sr.ttft).toFixed(0):'',
-        sr.tpot!=null?parseFloat(sr.tpot).toFixed(1):'',
-        sr.latency!=null?parseFloat(sr.latency).toFixed(0):'',
-        sr.tokens_s_gpu!=null?parseFloat(sr.tokens_s_gpu).toFixed(2):'',
-        gpus2,
-        new Date(sr.ts).toLocaleString()
-      ]);
-    });
-  }
+  if(rn) rn.textContent = 'Range based on '+allPassing.length+' SLA-passing configs across agg and disagg. '
+    +'Minimum = most efficient single config. Conservative = least efficient passing config. '
+    +'Note: AIC TTFT is measured at low load — production TTFT under full load will be higher.';
+}
 
-  // ── Build multi-sheet CSV (tab-delimited for Sheets paste) ──
-  // We export as a single CSV with section headers since js can't write multi-tab xlsx natively
-  var allTabs = [
-    {name:'Summary', rows: summary},
-    {name:'Sizing Math', rows: math},
-    {name:'Per-Op Latency', rows: perOp},
-    {name:'Disagg Configs', rows: disaggTab},
-    {name:'Agg Configs', rows: aggTab},
-    {name:'Batch Sweep', rows: sweepTab},
-    {name:'Saved Runs', rows: savedTab}
-  ];
+function renderPerfV2Cost(best, gpuLabel, gpuKey, rd, buf){
+  var el = document.getElementById('perf-cost-v2');
+  if(!el || !best || !best._gpuBuf) return;
+  var gpuCount = best._gpuBuf;
+  var priceHr  = getPerfCloudRate ? getPerfCloudRate() : (PERF_GPU_CLOUD[gpuKey]||3.20);
+  var opUnit   = getPerfOnpremUnit ? getPerfOnpremUnit() : (PERF_GPU_ONPREM[gpuKey]||30000);
+  var amortMo  = getPerfAmortMonths ? getPerfAmortMonths() : 60;
+  var cloudMo  = gpuCount * priceHr * 24 * 30;
+  var cloud5yr = cloudMo * amortMo;
+  var opTotal  = gpuCount * opUnit;
+  var opMo     = opTotal / amortMo;
+  var savings  = cloudMo - opMo;
+  var fmtK = function(v){ return v>=1000000?'$'+(v/1000000).toFixed(1)+'M':v>=1000?'$'+(v/1000).toFixed(0)+'K':'$'+Math.round(v); };
 
-  var csvLines = [];
-  allTabs.forEach(function(tab){
-    csvLines.push(['"=== '+tab.name+' ==="']);
-    tab.rows.forEach(function(row){
-      csvLines.push(row.map(function(c){
-        var s = String(c==null?'':c);
-        return '"'+s.replace(/"/g,'""')+'"';
-      }).join(','));
-    });
-    csvLines.push(['']);
+  el.innerHTML = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px">'
+    +'<div style="font-size:10px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Monthly cost · '+gpuCount+' '+gpuLabel+'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">'
+    +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px">'
+    +'<div style="font-size:10px;color:var(--text4);margin-bottom:4px">☁ CLOUD</div>'
+    +'<div style="font-size:22px;font-weight:700;color:#ef4444">'+fmtK(cloudMo)+'/mo</div>'
+    +'<div style="font-size:11px;color:var(--text3)">'+fmtK(cloud5yr)+' over '+Math.round(amortMo/12)+'yr · '+fmtK(priceHr)+'/hr/GPU</div>'
+    +'</div>'
+    +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px">'
+    +'<div style="font-size:10px;color:var(--text4);margin-bottom:4px">■ ON-PREM</div>'
+    +'<div style="font-size:22px;font-weight:700;color:var(--green)">'+fmtK(opMo)+'/mo</div>'
+    +'<div style="font-size:11px;color:var(--text3)">'+Math.round(amortMo/12)+'yr amort · '+fmtK(opTotal)+' total</div>'
+    +'</div>'
+    +'</div>'
+    +(savings>0?'<div style="font-size:12px;color:var(--green);font-weight:600">On-prem saves '+fmtK(savings)+'/mo</div>':'')
+    +'</div>';
+}
+
+// ── RECALC (target/cost changes without re-running API) ───────────────────────
+function recalcPerfV2(){
+  if(!PERF_STATE.lastResult) return;
+  PERF_STATE.slaVal = parseInt((document.getElementById('perf-sla-val')||{value:500}).value)||500;
+  renderPerfV2Result(PERF_STATE.lastResult, true);
+}
+
+// ── SHOW STATES ───────────────────────────────────────────────────────────────
+function showPerfV2State(state){
+  var states = ['empty','loading','error','results'];
+  states.forEach(function(s){
+    var el = document.getElementById('perf-'+s+'-v2');
+    if(el) el.style.display = (s===state) ? (s==='loading'||s==='error'?'flex':'block') : 'none';
   });
+}
 
-  var csv  = csvLines.join('\n');
+function showPerfV2Error(msg){
+  stopQuoteRotation();
+  showPerfV2State('error');
+  var el = document.getElementById('perf-error-msg');
+  if(el) el.textContent = msg;
+  var tips = document.getElementById('perf-error-tips');
+  if(tips){
+    var t = [];
+    var m = (msg||'').toLowerCase();
+    if(m.indexOf('cold start')||m.indexOf('waking up')||m.indexOf('unexpected token')||m.indexOf('<')) t.push('⏳ AIC API is waking up — auto-retrying in 35 seconds');
+    if(m.indexOf('moe quant')>=0||m.indexOf('w4a16')>=0) t.push('• Open Hardware section → set MoE quant = float16, backend ver = 0.14.0');
+    if(m.indexOf('no valid')>=0) t.push('• Increase total GPUs: switch to TP=8\n• H200 SXM has more pareto data than H100');
+    if(!t.length){ t.push('• Try HYBRID database mode'); t.push('• Try TRT-LLM backend (broader support)'); t.push('• Check Render dashboard: aic-api-8hmb.onrender.com'); }
+    tips.innerHTML = t.join('<br>');
+  }
+  // Auto-retry countdown for cold start
+  var isCold = msg && (msg.indexOf('waking')||msg.indexOf('cold')||msg.indexOf('<'));
+  var wrap = document.getElementById('perf-retry-countdown');
+  if(wrap && isCold){
+    var secs = 35;
+    wrap.innerHTML = '<button class="btn btn-sm" id="perf-auto-retry-btn" disabled style="color:var(--text3)">Auto-retry in '+secs+'s</button>';
+    var iv = setInterval(function(){
+      secs--;
+      var btn = document.getElementById('perf-auto-retry-btn');
+      if(btn && secs>0){ btn.textContent='Auto-retry in '+secs+'s'; }
+      else { clearInterval(iv); if(btn){btn.textContent='Retrying...';} runPerfV2(true); }
+    }, 1000);
+  } else if(wrap) {
+    wrap.innerHTML = '';
+  }
+}
+
+// ── TAB SWITCHING ─────────────────────────────────────────────────────────────
+function showPerfTab(tab){
+  PERF_STATE.activeTab = tab;
+  ['disagg','agg','compare','sizing'].forEach(function(t){
+    var btn = document.getElementById('ptab-'+t);
+    var content = document.getElementById('ptab-content-'+t);
+    if(btn) btn.classList.toggle('active', t===tab);
+    if(content) content.style.display = t===tab ? 'block' : 'none';
+  });
+  var toolbar = document.getElementById('perf-toolbar');
+  if(toolbar) toolbar.style.display = (tab==='compare'||tab==='sizing') ? 'none' : 'flex';
+}
+
+// ── EXPORT ────────────────────────────────────────────────────────────────────
+function exportPerfV2CSV(){
+  var r = PERF_STATE.lastResult;
+  if(!r){ alert('Run an estimate first.'); return; }
+  var rd  = parseInt((document.getElementById('perf-req-day')||{value:100000000}).value);
+  var buf = parseInt((document.getElementById('perf-buffer')||{value:30}).value)||0;
+  var meta = r.meta || {};
+
+  var sections = [];
+
+  // Header
+  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.5.0');
+  sections.push('Model: '+PERF_STATE.modelLabel+', GPU: '+(PERF_GPU_LABELS[meta.gpu]||meta.gpu)+', Backend: '+(meta.backend||'').toUpperCase()+', TP='+meta.tp);
+  sections.push('ISL: '+meta.isl+', OSL: '+meta.osl+', Prefix: '+meta.pct+'%, Eff ISL: '+Math.round(meta.isl*(1-meta.pct/100)));
+  sections.push('Target: '+rd.toLocaleString()+' req/day ('+( rd/86400).toFixed(1)+' req/sec), Buffer: '+buf+'%');
+  sections.push('');
+
+  var rowToCSV = function(r, mode){
+    var pass = perfV2SLAPass(r);
+    var gpuBase = perfV2GPUs(r, false);
+    var gpuBuf  = perfV2GPUs(r, true);
+    return [mode, r.concurrency||'', r.ttft!=null?r.ttft.toFixed(0):'', r.tpot!=null?r.tpot.toFixed(1):'',
+            r.latency!=null?r.latency.toFixed(0):'', r.seq_s_gpu!=null?r.seq_s_gpu.toFixed(3):'',
+            r.tok_s_gpu!=null?r.tok_s_gpu.toFixed(1):'', r.num_gpus||'',
+            r.p_workers||'', r.d_workers||'', gpuBase||'', gpuBuf||'', pass?'PASS':'FAIL'].join(',');
+  };
+
+  var hdr = 'mode,concurrency,ttft_ms,tpot_ms,latency_ms,seq_s_gpu,tok_s_gpu,num_gpus,p_workers,d_workers,gpu_needed,gpu_needed_with_buffer,sla';
+  sections.push('DISAGGREGATED CONFIGS');
+  sections.push(hdr);
+  (r.disaggConfigs||[]).forEach(function(row){ sections.push(rowToCSV(row,'disagg')); });
+  sections.push('');
+  sections.push('AGGREGATED CONFIGS');
+  sections.push(hdr);
+  (r.aggConfigs||[]).forEach(function(row){ sections.push(rowToCSV(row,'agg')); });
+
+  var csv  = sections.join('\n');
   var blob = new Blob([csv], {type:'text/csv'});
   var url  = URL.createObjectURL(blob);
   var a    = document.createElement('a');
   a.href   = url;
-  a.download = 'gpu-calc-performance-'+PERF_STATE.modelLabel.replace(/[^a-z0-9]/gi,'_')+'-'+Date.now()+'.csv';
+  a.download = 'gpu-sizing-'+PERF_STATE.modelLabel.replace(/[^a-z0-9]/gi,'_')+'-'+(rd/1000000).toFixed(0)+'Mday-'+Date.now()+'.csv';
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function copyPerfV2JSON(){
+  var r = PERF_STATE.lastResult;
+  if(!r){ alert('Run estimate first.'); return; }
+  navigator.clipboard.writeText(JSON.stringify(r, null, 2));
+}
+
+// ── SAVED RUNS ────────────────────────────────────────────────────────────────
+function savePerfV2Result(){
+  if(!PERF_STATE.lastResult) return;
+  var r = Object.assign({id:Date.now()}, PERF_STATE.lastResult);
+  PERF_STATE.savedRuns.push(r);
+  try{ localStorage.setItem('perf_v2_saved', JSON.stringify(PERF_STATE.savedRuns)); }catch(e){}
+  renderPerfV2Saved();
+}
+function deletePerfV2Run(id){
+  PERF_STATE.savedRuns = PERF_STATE.savedRuns.filter(function(r){ return r.id!==id; });
+  try{ localStorage.setItem('perf_v2_saved', JSON.stringify(PERF_STATE.savedRuns)); }catch(e){}
+  renderPerfV2Saved();
+}
+function clearPerfV2Saved(){
+  PERF_STATE.savedRuns = [];
+  try{ localStorage.removeItem('perf_v2_saved'); }catch(e){}
+  renderPerfV2Saved();
+}
+function renderPerfV2Saved(){
+  var comp  = document.getElementById('perf-saved-v2');
+  var tbody = document.getElementById('perf-saved-tbody-v2');
+  if(!comp || !tbody) return;
+  if(!PERF_STATE.savedRuns.length){ comp.style.display='none'; return; }
+  comp.style.display = 'block';
+  var rd = parseInt((document.getElementById('perf-req-day')||{value:100000000}).value);
+  tbody.innerHTML = PERF_STATE.savedRuns.map(function(r){
+    var meta = r.meta||{};
+    var allConfigs = (r.disaggConfigs||[]).concat(r.aggConfigs||[]);
+    var passing = allConfigs.filter(function(c){ return perfV2SLAPass(c); });
+    var best = passing.length ? passing.reduce(function(a,b){ return (b.seq_s_gpu||0)>(a.seq_s_gpu||0)?b:a; }) : null;
+    var gpuBase = best ? perfV2GPUs(best, false) : null;
+    var gpuBuf  = best ? perfV2GPUs(best, true)  : null;
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      +'<td style="padding:5px 8px;font-weight:500;font-size:11px">'+(PERF_GPU_LABELS[meta.gpu]||meta.gpu||'?')+'</td>'
+      +'<td style="padding:5px 8px;font-size:11px;color:var(--text2)">'+(meta.backend||'').toUpperCase()+' TP='+meta.tp+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--green)">'+(gpuBase!=null?gpuBase:'—')+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--amber)">'+(gpuBuf!=null?gpuBuf:'—')+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:11px">'+(best&&best.ttft!=null?best.ttft.toFixed(0)+'ms':'—')+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;font-family:var(--mono);font-size:11px">'+(best&&best.latency!=null?best.latency.toFixed(0)+'ms':'—')+'</td>'
+      +'<td style="padding:5px 8px"><button onclick="deletePerfV2Run('+r.id+')" style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:3px;background:transparent;cursor:pointer;color:var(--text3)">✕</button></td>'
+      +'</tr>';
+  }).join('');
+}
+
+// ── PROVIDER TABLE (reuse from Capacity tab) ───────────────────────────────────
+function getPerfCloudRate(){ var p=PROVIDERS.find(function(x){return x.active;})||PROVIDERS[0]; return (p?p.rate:3.20)*(1-PERF_DISC); }
+function getPerfOnpremUnit(){ var s=document.getElementById('perf-hw-slider'); return s?parseInt(s.value)*1000:30000; }
+function getPerfAmortMonths(){ var s=document.getElementById('perf-amort-slider'); return s?parseInt(s.value)*12:60; }
+
+function renderPerfProviderTable(){
+  var tbl=document.getElementById('perf-prov-table');
+  if(!tbl) return;
+  var lpm=(typeof _livePriceMap!=='undefined'&&_livePriceMap)?_livePriceMap:{};
+  var h='<tr><th></th><th>Provider</th><th>GPU</th><th>$/hr</th><th></th></tr>';
+  PROVIDERS.forEach(function(p,i){
+    var provGpuKeys=Object.keys(lpm).filter(function(k){return k.split('|')[0]===p.name;});
+    var gpuOpts='';
+    if(provGpuKeys.length>0){provGpuKeys.forEach(function(k){var g=k.split('|')[1];var match=CLOUD_GPU_OPTIONS.find(function(o){return o.toUpperCase().indexOf(g)>=0||g.indexOf(o.toUpperCase())>=0;});gpuOpts+='<option value="'+(match||g)+'">'+(match||g)+'</option>';});gpuOpts+='<option value="Custom">Custom</option>';}
+    else{gpuOpts=CLOUD_GPU_OPTIONS.map(function(g){return'<option value="'+g+'">'+g+'</option>';}).join('');}
+    h+='<tr>'
+      +'<td><input type="radio" name="perf-prov-radio" '+(p.active?'checked':'')+' onchange="selectPerfProvider('+i+')"></td>'
+      +'<td style="font-size:12px;font-weight:'+(p.active?'600':'400')+';color:'+(p.active?'var(--blue)':'var(--text1)')+'">'+p.name+'</td>'
+      +'<td><select id="pprov-gpu-'+i+'" style="padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:10px;font-family:var(--mono)" onchange="updatePerfProvGpu('+i+',this.value)">'+gpuOpts+'</select></td>'
+      +'<td><input type="number" value="'+p.rate.toFixed(2)+'" step="0.01" style="width:58px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-family:var(--mono);font-size:11px" onchange="PERF_updateRate('+i+',+this.value)"></td>'
+      +'<td><button class="prov-del" onclick="deletePerfProv('+i+')">&#215;</button></td>'
+      +'</tr>';
+  });
+  h+='<tr><td colspan="5"><button class="add-prov" onclick="addPerfProvider()">+ add provider / instance</button></td></tr>';
+  tbl.innerHTML=h;
+  PROVIDERS.forEach(function(p,i){var s=document.getElementById('pprov-gpu-'+i);if(s)s.value=p.gpu;});
+  var badge=document.getElementById('perf-live-badge');var advBadge=document.getElementById('live-badge-adv');
+  if(badge&&advBadge)badge.textContent=advBadge.textContent;
+}
+function selectPerfProvider(i){PROVIDERS.forEach(function(p,j){p.active=j===i;});S.cloudRate=PROVIDERS[i].rate;renderPerfProviderTable();renderProviderTable();recalcPerfV2();updatePerfCostSummary();}
+function PERF_updateRate(i,v){PROVIDERS[i].rate=v;if(PROVIDERS[i].active){S.cloudRate=v;recalcPerfV2();}}
+function updatePerfProvGpu(i,gpu){updateProvGpu(i,gpu);renderPerfProviderTable();recalcPerfV2();}
+function addPerfProvider(){addProvider();renderPerfProviderTable();}
+function deletePerfProv(i){delProv(i);renderPerfProviderTable();recalcPerfV2();}
+function setPerfDisc(d,btn){PERF_DISC=d;document.querySelectorAll('#perf-disc-0,#perf-disc-30,#perf-disc-50').forEach(function(b){b.classList.remove('on');});if(btn)btn.classList.add('on');recalcPerfV2();updatePerfCostSummary();}
+function updatePerfCostSummary(){var p=PROVIDERS.find(function(x){return x.active;})||PROVIDERS[0];var disc=PERF_DISC>0?' · '+(PERF_DISC*100)+'% disc':' · no discount';var el=document.getElementById('pps-cost-sum');if(el)el.textContent='Cloud · '+p.name+' $'+p.rate+'/hr'+disc;}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+function initPerfPage(){
+  renderPerfProviderTable();
+  updatePerfCostSummary();
+  updatePerfEffISL();
+  syncPerfQuantDefaults();
+  updatePerfSummaries();
+  renderPerfV2Saved();
+  warmUpAIC();
+  // Init tab styles
+  showPerfTab('disagg');
+}
+
+function warmUpAIC(){
+  fetch(AIC_WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:'systems',payload:{}})}).catch(function(){});
 }
 
 // ===== END CALIBRATED ESTIMATE PAGE =====
