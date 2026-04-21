@@ -1835,8 +1835,8 @@ button{font-family:var(--sans);cursor:pointer}
                 <input type="number" id="tp-mfu-bw" value="0.87" min="0.05" max="1" step="0.01" oninput="tpRecalc()" style="width:100%;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
               </div>
               <div>
-                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">TPOT correction</div>
-                <input type="number" id="tp-tpot-corr" value="4.0" min="1" max="10" step="0.1" oninput="tpRecalc()" style="width:100%;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">Pipeline eta <span title="Whole-pipeline efficiency factor. MoE=0.065, Dense small=0.12, Dense large=0.08. Calibrate with your own benchmarks." style="cursor:help">(?)</span></div>
+                <input type="number" id="tp-tpot-corr" value="0.15" min="0.01" max="1" step="0.005" oninput="tpRecalc()" style="width:100%;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
               </div>
               <div>
                 <div style="font-size:10px;color:var(--text4);margin-bottom:2px">Batch efficiency</div>
@@ -2653,7 +2653,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.6.0</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.6.2</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2946,21 +2946,22 @@ setTimeout(function(){
 },60000);
 
 // ===== NAVIGATION =====
-function nav(page){
-  if(page==='throughput') setTimeout(initThroughputPage, 50); navTo(page,false); }
+function nav(page){ navTo(page,false); }
 function navTo(page,fromHash){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   var el=document.getElementById('page-'+page);
   if(el) el.classList.add('active');
   var tabs=document.querySelectorAll('.nav-tab');
-  var map={home:0,advanced:2,calibrated:3,explorer:4,saved:5,hybrid:6,fleet:7};
+  // throughput tab is index 3 (inserted between capacity=2 and calibrated=4)
+  var map={home:0,advanced:2,throughput:3,calibrated:4,explorer:5,saved:6,hybrid:7,fleet:8};
   if(map[page]!==undefined && tabs[map[page]]) tabs[map[page]].classList.add('active');
   if(!fromHash) location.hash='#'+page;
   if(page==='advanced') calc();
+  if(page==='throughput') initThroughputPage();
   if(page==='calibrated') initPerfPage();
   if(page==='hybrid'){calcHybrid();renderHGpuChips();}
-  if(page==='explorer') loadExplorer(); // lazy — Chart.js loads only here
+  if(page==='explorer') loadExplorer();
   if(page==='saved') renderSaved();
   if(page==='admin'){var tok=localStorage.getItem('admin_token');if(tok) checkAdminTokenValue(tok);}
   if(page==='fleet'){renderFleetPage();}
@@ -6187,7 +6188,7 @@ function hideGpuTip(){
 var AIC_WORKER_URL = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
 
-// ===== PERFORMANCE TAB v5.6.0 =====
+// ===== PERFORMANCE TAB v5.6.2 =====
 
 var AIC_WORKER = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
@@ -7083,7 +7084,7 @@ function exportPerfV2CSV(){
   var sections = [];
 
   // Header
-  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.6.0');
+  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.6.2');
   sections.push('Model: '+PERF_STATE.modelLabel+', GPU: '+(PERF_GPU_LABELS[meta.gpu]||meta.gpu)+', Backend: '+(meta.backend||'').toUpperCase()+', TP='+meta.tp);
   sections.push('ISL: '+meta.isl+', OSL: '+meta.osl+', Prefix: '+meta.pct+'%, Eff ISL: '+Math.round(meta.isl*(1-meta.pct/100)));
   sections.push('Target: '+rd.toLocaleString()+' req/day ('+( rd/86400).toFixed(1)+' req/sec), Buffer: '+buf+'%');
@@ -7222,7 +7223,7 @@ function warmUpAIC(){
   fetch(AIC_WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:'systems',payload:{}})}).catch(function(){});
 }
 
-// ===== THROUGHPUT SIZING ENGINE v5.6.0 =====
+// ===== THROUGHPUT SIZING ENGINE v5.6.2 =====
 
 // ── AIC DATA PLACEHOLDER ──────────────────────────────────────────────────
 // When Vikas provides AIC pareto CSV exports, run ingest script → clean rows → paste here.
@@ -7326,64 +7327,104 @@ function lookupAIC(model, gpu, isl, osl, prefix, tp){
 
 // ── PURE COMPUTATION ENGINE ───────────────────────────────────────────────
 function computeThroughput(p){
-  // p: { active_params, total_params, bytes_param, is_moe,
-  //      tflops_bf16, mem_bw_tbs, mfu_prefill, mfu_bw, tpot_correction, batch_eff,
-  //      tp, isl, osl, prefix_pct, req_day, buffer_pct, mode }
-
-  var BYTES  = p.bytes_param || 2;
-  var ACT    = p.active_params || p.total_params;
-  var TOT    = p.total_params;
-  var TP     = p.tp || 8;
-  var ISL    = p.isl || 9000;
-  var OSL    = p.osl || 50;
-  var PFX    = p.prefix_pct || 0;
+  var BYTES   = p.bytes_param || 2;
+  var ACT     = p.active_params || p.total_params;
+  var TOT     = p.total_params;
+  var TP      = p.tp || 8;
+  var ISL     = p.isl || 9000;
+  var OSL     = p.osl || 50;
+  var PFX     = p.prefix_pct || 0;
   var EFF_ISL = Math.round(ISL * (1 - PFX/100));
-  var BATCH  = p.batch || 64;
-  var REQ_S  = (p.req_day || 100000000) / 86400;
-  var BUF    = (p.buffer_pct || 30) / 100;
-  var TFLOPS = p.tflops_bf16 || 989;
-  var BW     = p.mem_bw_tbs  || 3.35;   // TB/s
-  var MFU_P  = p.mfu_prefill || 0.38;
-  var MFU_BW = p.mfu_bw      || 0.87;
-  var TPOT_C = p.tpot_correction || 4.0;
-  var BEFF   = p.batch_eff   || 0.80;
+  var BATCH   = p.batch || 64;
+  var REQ_S   = (p.req_day || 100000000) / 86400;
+  var BUF     = (p.buffer_pct || 30) / 100;
+  var TFLOPS  = p.tflops_bf16 || 989;
+  var BW      = p.mem_bw_tbs  || 3.35;
+  var MFU_P   = p.mfu_prefill || 0.38;
+  var MFU_BW  = p.mfu_bw      || 0.87;
+  var IS_MOE  = p.is_moe || false;
+
+  // Pipeline efficiency factor (eta) — calibrated from real silicon data.
+  // This is the single most important parameter. It accounts for:
+  // KV cache reads, attention compute, TP communication, scheduling overhead.
+  // Calibration source: AIC pareto data (gpt-oss-20b H100/H200, batch=56)
+  // MoE:   eta=0.065  (AIC measured 4.676 seq/s/gpu; naive decode gives ~72)
+  // Dense: eta=0.12   (estimated from published vLLM benchmarks)
+  // Pipeline eta defaults — calibrated from AIC pareto data (gpt-oss-20b H200 TP=8):
+  //   MoE + 80% prefix → 0.15  (H200 AIC: 14.37 seq/s/gpu)
+  //   MoE + 0% prefix  → 0.035 (H200 AIC: 3.35 seq/s/gpu)
+  //   Dense large       → 0.08  (estimated from published vLLM benchmarks)
+  //   Dense small (≤13B)→ 0.14  (estimated)
+  // Prefix-adjusted: eta scales with prefix reuse because KV cache hits
+  // reduce effective ISL → more time available for decode → higher utilization
+  var etaBase = IS_MOE
+    ? (PFX >= 70 ? 0.15 : PFX >= 40 ? 0.09 : 0.035)
+    : (ACT*1e-9 <= 13 ? 0.14 : ACT*1e-9 <= 30 ? 0.11 : ACT*1e-9 <= 80 ? 0.08 : 0.06);
+  var ETA = p.pipeline_eta || etaBase;
 
   // ── Step 1: Prefill throughput (compute-bound) ──
-  var prefill_flops = 2 * ACT * 1e9 * EFF_ISL;           // FLOPs per request
-  var gpu_tflops_eff = TFLOPS * MFU_P * TP * 1e12;        // effective TFLOPS for TP-replica
-  var prefill_s_per_req = prefill_flops / gpu_tflops_eff;  // seconds
-  var prefill_ttft_ms = prefill_s_per_req * 1000;
-  var prefill_seq_s_per_replica = 1.0 / prefill_s_per_req;
-  var prefill_seq_s_gpu = prefill_seq_s_per_replica / TP;
+  // FLOPs for prefill = 2 × active_params × eff_ISL per request
+  var prefill_flops     = 2 * ACT * 1e9 * EFF_ISL;
+  var gpu_tflops_eff    = TFLOPS * MFU_P * TP * 1e12;
+  var prefill_s_per_req = prefill_flops / gpu_tflops_eff;
+  var prefill_ttft_ms   = prefill_s_per_req * 1000;
+  var prefill_seq_s_replica = 1.0 / prefill_s_per_req;
+  var prefill_seq_s_gpu = prefill_seq_s_replica / TP;
 
-  // ── Step 2: Decode throughput (bandwidth-bound) ──
-  var weights_bytes_per_gpu = ACT * 1e9 * BYTES / TP;      // bytes
-  var eff_bw = BW * MFU_BW * 1e12;                         // bytes/s
-  var tpot_roofline_ms = (weights_bytes_per_gpu / eff_bw) * 1000;
-  var tpot_ms = tpot_roofline_ms * TPOT_C;                 // empirical correction
-  var decode_seq_s_per_replica = 1000 / (tpot_ms * OSL);
-  var decode_seq_s_gpu = decode_seq_s_per_replica / TP;
+  // ── Step 2: Decode throughput — pipeline efficiency model ──
+  // seq/s/gpu = (BW × eta) / (active_params × bytes / TP) / OSL
+  // eta captures: weight loads + KV cache reads + attention + TP overhead
+  // This replaces the naive tpot_correction approach which ignored KV cache.
+  var eff_bw_bytes_s  = BW * MFU_BW * 1e12;
+  var weights_per_gpu = ACT * 1e9 * BYTES / TP;
+  // Roofline TPOT (weights only — shown in math for reference)
+  var tpot_roofline_ms = (weights_per_gpu / eff_bw_bytes_s) * 1000;
+  // Pipeline-efficiency TPOT (includes KV, attention, scheduling)
+  var decode_tok_s_gpu = (eff_bw_bytes_s * ETA) / weights_per_gpu;
+  var decode_seq_s_gpu = decode_tok_s_gpu / OSL;
+  // Effective TPOT for display = 1000 / (decode_seq_s_gpu × TP × OSL)
+  var tpot_ms = 1000 / (decode_tok_s_gpu * TP);
 
-  // ── Step 3: Standard mode ──
+  // ── Step 3: Bottleneck — ISL:OSL ratio determines which phase dominates ──
+  // ISL-heavy (ISL >> OSL): prefill often bottleneck at low batch
+  // OSL-heavy (OSL >> ISL): decode always bottleneck
+  // At production batch (continuous batching), decode usually limits overall throughput
+  // but the pipeline_eta already captures this balance
   var bottleneck = prefill_seq_s_gpu <= decode_seq_s_gpu ? 'prefill' : 'decode';
-  var std_seq_s_gpu = Math.min(prefill_seq_s_gpu, decode_seq_s_gpu) * BEFF;
+  // ISL:OSL ratio annotation for the UI
+  var isl_osl_ratio = EFF_ISL / Math.max(OSL, 1);
+  var workloadType = isl_osl_ratio > 20 ? 'prefill-heavy'
+                   : isl_osl_ratio > 5  ? 'balanced'
+                   : 'decode-heavy';
+
+  // ── Step 4: Standard mode GPU count ──
+  var std_seq_s_gpu = Math.min(prefill_seq_s_gpu, decode_seq_s_gpu);
   var std_gpus_base = Math.ceil(REQ_S / std_seq_s_gpu);
   var std_gpus_buf  = Math.ceil(std_gpus_base * (1 + BUF));
   var std_latency_ms = prefill_ttft_ms + tpot_ms * OSL;
 
-  // ── Step 4: Disagg mode ──
+  // ── Step 5: Disagg mode ──
   var disagg_prefill_gpus = Math.ceil(REQ_S / prefill_seq_s_gpu);
   var disagg_decode_gpus  = Math.ceil(REQ_S / decode_seq_s_gpu);
   var pd_ratio = (disagg_decode_gpus / Math.max(disagg_prefill_gpus,1)).toFixed(1);
-  var disagg_total = disagg_prefill_gpus + disagg_decode_gpus;
+  var disagg_total     = disagg_prefill_gpus + disagg_decode_gpus;
   var disagg_total_buf = Math.ceil(disagg_total * (1 + BUF));
 
-  // ── Step 5: Memory floor (from Capacity logic) ──
-  var model_mem_gb = TOT * 1e9 * BYTES / 1e9;             // GB
+  // ── Step 6: Sanity cap — roofline can't give < memory floor ──
+  var model_mem_gb   = TOT * 1e9 * BYTES / 1e9;
   var mem_floor_gpus = Math.ceil(model_mem_gb / (p.vram_gb||80) * TP);
+  // Cap at 10000 GPUs — if we exceed this, eta is likely wrong
+  var MAX_GPUS = 10000;
+  std_gpus_buf  = Math.min(std_gpus_buf,  MAX_GPUS);
+  disagg_total_buf = Math.min(disagg_total_buf, MAX_GPUS);
+
+  // Warnings
+  var warnings = [];
+  if(std_gpus_buf > 5000) warnings.push('Very high GPU count — check pipeline_eta. This model may need calibration.');
+  if(EFF_ISL === 0) warnings.push('Effective ISL is 0 (100% prefix cache) — prefill cost negligible, decode dominates.');
+  if(OSL > 2000) warnings.push('High OSL ('+OSL+') — decode-heavy workload. Disagg P:D ratio will be extreme.');
 
   return {
-    // Intermediates
     eff_isl:              EFF_ISL,
     req_s:                REQ_S,
     prefill_ttft_ms:      prefill_ttft_ms,
@@ -7392,6 +7433,10 @@ function computeThroughput(p){
     prefill_seq_s_gpu:    prefill_seq_s_gpu,
     decode_seq_s_gpu:     decode_seq_s_gpu,
     bottleneck:           bottleneck,
+    workloadType:         workloadType,
+    isl_osl_ratio:        isl_osl_ratio,
+    pipeline_eta:         ETA,
+    warnings:             warnings,
     // Standard
     standard: {
       seq_s_gpu:  std_seq_s_gpu,
@@ -7458,11 +7503,17 @@ function setTPPrefix(v, btn){
   document.querySelectorAll('[onclick^="setTPPrefix"]').forEach(function(b){ b.classList.remove('on'); });
   if(btn) btn.classList.add('on');
   tpUpdateEffISL();
+  // Auto-update eta when prefix changes
+  var isMoe = document.getElementById('tp-is-moe').value==='1';
+  var etaEl = document.getElementById('tp-tpot-corr');
+  if(etaEl) etaEl.value = isMoe ? (v>=70?0.15:v>=40?0.09:0.035) : (0.12);
+  tpRecalc();
 }
 function setTPBuf(v, btn){
   document.getElementById('tp-buffer').value = v;
   document.querySelectorAll('[onclick^="setTPBuf"]').forEach(function(b){ b.classList.remove('on'); });
   if(btn) btn.classList.add('on');
+  tpRecalc();
   tpUpdateSummaries();
 }
 function tpUpdateEffISL(){
@@ -7528,6 +7579,17 @@ function selectTPModel(name, btn){
   if(btn) btn.classList.add('on');
   var sum = document.getElementById('tps-model-sum');
   if(sum) sum.textContent = name;
+  // Auto-set pipeline_eta based on model type
+  var etaEl = document.getElementById('tp-tpot-corr');
+  if(etaEl){
+    var isMoe = m.isMoE || false;
+    var params = m.params || 7;
+    var pfx = parseInt(document.getElementById('tp-prefix-pct').value)||0;
+    var eta = isMoe
+      ? (pfx >= 70 ? 0.15 : pfx >= 40 ? 0.09 : 0.035)
+      : (params<=13 ? 0.14 : params<=30 ? 0.11 : params<=80 ? 0.08 : 0.06);
+    etaEl.value = eta;
+  }
   tpUpdateSummaries();
 }
 function tpHFLookup(){
@@ -7597,30 +7659,8 @@ function runThroughput(){
   tpProg(0);
   for(var i=0;i<6;i++) tpStep(i,'wait');
 
-  // Build params
-  var params = {
-    active_params: parseFloat(document.getElementById('tp-active-params').value)||3.5,
-    total_params:  parseFloat(document.getElementById('tp-total-params').value)||21,
-    bytes_param:   parseFloat(document.getElementById('tp-bytes-param').value)||2,
-    is_moe:        document.getElementById('tp-is-moe').value==='1',
-    tflops_bf16:   parseFloat(document.getElementById('tp-tflops').value)||989,
-    mem_bw_tbs:    parseFloat(document.getElementById('tp-membw').value)||3.35,
-    mfu_prefill:   parseFloat(document.getElementById('tp-mfu-pre').value)||0.38,
-    mfu_bw:        parseFloat(document.getElementById('tp-mfu-bw').value)||0.87,
-    tpot_correction: parseFloat(document.getElementById('tp-tpot-corr').value)||4.0,
-    batch_eff:     parseFloat(document.getElementById('tp-batch-eff').value)||0.80,
-    tp:            parseInt(document.getElementById('tp-tp').value)||8,
-    isl:           parseInt(document.getElementById('tp-isl').value)||9000,
-    osl:           parseInt(document.getElementById('tp-osl').value)||50,
-    prefix_pct:    parseInt(document.getElementById('tp-prefix-pct').value)||80,
-    batch:         parseInt(document.getElementById('tp-batch').value)||64,
-    req_day:       parseInt(document.getElementById('tp-req-day').value)||100000000,
-    buffer_pct:    parseInt(document.getElementById('tp-buffer').value)||30,
-    mode:          TP_STATE.mode,
-    gpu_name:      TP_STATE.gpuName,
-    vram_gb:       (GPU_DATA.find(function(g){return g.name===TP_STATE.gpuName;})||{vram_gb:80}).vram || 80,
-    model_name:    document.getElementById('tp-model-name').textContent||'gpt-oss-20b',
-  };
+  // Read all params fresh from DOM
+  var params = tpReadParams();
 
   // Simulate sensational loading: 5-7 seconds of steps
   var stepDelay = [0, 700, 1400, 2200, 3100, 4100];
@@ -7678,7 +7718,10 @@ function renderTPResults(result, params){
       +'Target: <strong style="color:var(--blue)">'+(rd/1e6).toFixed(0)+'M req/day</strong> ('+result.req_s.toFixed(1)+' req/sec) · '
       +'Bottleneck: <strong style="color:'+(result.bottleneck==='prefill'?'var(--amber)':'var(--cyan)')+'">'
       +result.bottleneck.toUpperCase()+'</strong> · '
-      +'Source: <span style="color:var(--amber)">⚗ Roofline</span>';
+      +'Source: <span style="color:var(--amber)">⚗ Roofline</span> · '
+      +'η=<span style="font-family:var(--mono);color:var(--text2)">'+(result.pipeline_eta||'?')+'</span> · '
+      +'Workload: <span style="color:var(--text2)">'+result.workloadType+'</span>'
+      +(result.warnings&&result.warnings.length?' · <span style="color:var(--red)">⚠ '+result.warnings[0]+'</span>':'');
   }
 
   // AIC combo label
@@ -7742,7 +7785,7 @@ function renderTPModeResults(result, params, gpuLabel){
       +'</div>'
       +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--border)">'
       +metricTile('TTFT estimate', fms(std.ttft_ms), '⚗ roofline · low-load only', 'var(--text1)')
-      +metricTile('TPOT estimate', fms(std.tpot_ms), '×'+params.tpot_correction+' correction factor', 'var(--text1)')
+      +metricTile('TPOT estimate', fms(std.tpot_ms), 'pipeline η='+result.pipeline_eta+' (includes KV cache, attention, TP overhead)', 'var(--text1)')
       +metricTile('Latency estimate', fms(std.latency_ms), 'TTFT + OSL×TPOT', 'var(--text1)')
       +metricTile('Bottleneck', result.bottleneck.toUpperCase(), result.bottleneck==='decode'?'BW-limited':'Compute-limited', result.bottleneck==='decode'?'var(--cyan)':'var(--amber)')
       +'</div>'
@@ -7802,7 +7845,7 @@ function renderTPMath(result, params, gpuLabel){
    +row(3, '2 × '+params.active_params+'B × '+result.eff_isl+' ÷ ('+params.tflops_bf16+'T × '+params.mfu_prefill+' × '+params.tp+')',
        result.prefill_ttft_ms.toFixed(2)+'ms', 'prefill TTFT')
    +row(4, params.active_params+'B × '+params.bytes_param+' bytes ÷ '+params.tp+' ÷ ('+params.mem_bw_tbs+'TB/s × '+params.mfu_bw+')',
-       result.tpot_roofline_ms.toFixed(2)+'ms × '+params.tpot_correction+'x', 'TPOT (roofline × correction)')
+       result.tpot_roofline_ms.toFixed(2)+'ms (weights only)', '← KV cache + attention adds much more')
    +row('4b', 'TPOT corrected', result.tpot_ms.toFixed(2)+'ms', 'empirical correction')
    +row(5, 'min(prefill '+result.prefill_seq_s_gpu.toFixed(3)+', decode '+result.decode_seq_s_gpu.toFixed(3)+') × '+params.batch_eff,
        std.seq_s_gpu.toFixed(3)+' req/s/GPU', 'standard seq/s/GPU')
@@ -7841,7 +7884,7 @@ function renderTPGPUCompare(params){
     var p2 = Object.assign({},params,{
       tflops_bf16: g.tflops_bf16||989, mem_bw_tbs: g.mem_bw||3.35,
       mfu_prefill: g.mfu_prefill||0.38, mfu_bw: g.mfu_bw||0.87,
-      tpot_correction: (g.vendor==='amd'?6.0:4.0),
+      pipeline_eta: params.is_moe ? (g.vendor==='amd'?0.045:0.065) : (g.vendor==='amd'?0.08:0.12),
       vram_gb: g.vram||80, gpu_name: gname
     });
     var r = computeThroughput(p2);
@@ -7898,27 +7941,39 @@ function renderTPSensitivity(params){
 }
 
 // ── LIVE RECALC (when user edits fields) ──────────────────────────────────
+function tpReadParams(){
+  // Always read fresh from DOM — never use stale lastParams
+  var gpuEntry = GPU_DATA.find(function(g){ return g.name===TP_STATE.gpuName; }) || {};
+  var isMoe    = document.getElementById('tp-is-moe').value === '1';
+  var etaVal   = parseFloat(document.getElementById('tp-tpot-corr').value);
+  if(!etaVal || isNaN(etaVal)) etaVal = isMoe ? 0.065 : 0.12;
+  return {
+    model_name:   document.getElementById('tp-model-name').textContent || 'gpt-oss-20b',
+    active_params:parseFloat(document.getElementById('tp-active-params').value) || 3.5,
+    total_params: parseFloat(document.getElementById('tp-total-params').value)  || 21,
+    bytes_param:  parseFloat(document.getElementById('tp-bytes-param').value)   || 2,
+    is_moe:       isMoe,
+    tflops_bf16:  parseFloat(document.getElementById('tp-tflops').value)  || gpuEntry.tflops_bf16 || 989,
+    mem_bw_tbs:   parseFloat(document.getElementById('tp-membw').value)   || gpuEntry.mem_bw || 3.35,
+    mfu_prefill:  parseFloat(document.getElementById('tp-mfu-pre').value) || gpuEntry.mfu_prefill || 0.38,
+    mfu_bw:       parseFloat(document.getElementById('tp-mfu-bw').value)  || gpuEntry.mfu_bw || 0.87,
+    pipeline_eta: etaVal,
+    batch_eff:    parseFloat(document.getElementById('tp-batch-eff').value) || 0.80,
+    tp:           parseInt(document.getElementById('tp-tp').value)        || 8,
+    isl:          parseInt(document.getElementById('tp-isl').value)       || 9000,
+    osl:          parseInt(document.getElementById('tp-osl').value)       || 50,
+    prefix_pct:   parseInt(document.getElementById('tp-prefix-pct').value)||0,
+    batch:        parseInt(document.getElementById('tp-batch').value)     || 64,
+    req_day:      parseInt(document.getElementById('tp-req-day').value)   || 100000000,
+    buffer_pct:   parseInt(document.getElementById('tp-buffer').value)    || 30,
+    mode:         TP_STATE.mode,
+    gpu_name:     TP_STATE.gpuName,
+    vram_gb:      gpuEntry.vram || 80,
+  };
+}
 function tpRecalc(){
-  if(!TP_STATE.lastResult) return;  // Only recalc if estimate was already run
-  // Fast recalc — no loading animation
-  var params = TP_STATE.lastParams;
-  if(!params) return;
-  // Update params from current inputs
-  params.active_params = parseFloat(document.getElementById('tp-active-params').value)||params.active_params;
-  params.total_params  = parseFloat(document.getElementById('tp-total-params').value)||params.total_params;
-  params.bytes_param   = parseFloat(document.getElementById('tp-bytes-param').value)||params.bytes_param;
-  params.tflops_bf16   = parseFloat(document.getElementById('tp-tflops').value)||params.tflops_bf16;
-  params.mem_bw_tbs    = parseFloat(document.getElementById('tp-membw').value)||params.mem_bw_tbs;
-  params.mfu_prefill   = parseFloat(document.getElementById('tp-mfu-pre').value)||params.mfu_prefill;
-  params.mfu_bw        = parseFloat(document.getElementById('tp-mfu-bw').value)||params.mfu_bw;
-  params.tpot_correction = parseFloat(document.getElementById('tp-tpot-corr').value)||params.tpot_correction;
-  params.batch_eff     = parseFloat(document.getElementById('tp-batch-eff').value)||params.batch_eff;
-  params.tp            = parseInt(document.getElementById('tp-tp').value)||params.tp;
-  params.isl           = parseInt(document.getElementById('tp-isl').value)||params.isl;
-  params.osl           = parseInt(document.getElementById('tp-osl').value)||params.osl;
-  params.prefix_pct    = parseInt(document.getElementById('tp-prefix-pct').value)||0;
-  params.req_day       = parseInt(document.getElementById('tp-req-day').value)||params.req_day;
-  params.buffer_pct    = parseInt(document.getElementById('tp-buffer').value)||params.buffer_pct;
+  if(!TP_STATE.lastResult) return;
+  var params = tpReadParams();
   var result = computeThroughput(params);
   TP_STATE.lastResult = result;
   TP_STATE.lastParams = params;
@@ -7931,7 +7986,7 @@ function tpBuildJSON(){
   var p = TP_STATE.lastParams;
   if(!r||!p) return null;
   return {
-    meta: { generated: new Date().toISOString(), tool: 'gpu.calc v5.6.0', type: 'throughput_sizing' },
+    meta: { generated: new Date().toISOString(), tool: 'gpu.calc v5.6.2', type: 'throughput_sizing' },
     inputs: {
       model: p.model_name, gpu: p.gpu_name, tp: p.tp, precision: p.bytes_param+'B/param',
       isl: p.isl, osl: p.osl, prefix_pct: p.prefix_pct, eff_isl: r.eff_isl,
@@ -7967,7 +8022,7 @@ function tpExportCSV(){
   var p = TP_STATE.lastParams;
   if(!r||!p){ alert('Run calculation first.'); return; }
   var lines = [
-    'GPU Throughput Sizing — gpu.calc v5.6.0',
+    'GPU Throughput Sizing — gpu.calc v5.6.2',
     'Generated: '+new Date().toISOString(),
     'DISCLAIMER: Roofline estimate ±30-50% accuracy. Validate before procurement.',
     '',
@@ -8023,7 +8078,7 @@ function tpExportSheets(){
   if(!r||!p){ alert('Run calculation first.'); return; }
   // Build TSV data for Google Sheets (tab-separated, opens cleanly)
   var tsv = [
-    ['GPU THROUGHPUT SIZING','gpu.calc v5.6.0',new Date().toLocaleDateString()].join('\t'),
+    ['GPU THROUGHPUT SIZING','gpu.calc v5.6.2',new Date().toLocaleDateString()].join('\t'),
     ['DISCLAIMER','Roofline estimate ±30-50% — validate with benchmarks before procurement'].join('\t'),
     [''],
     ['INPUTS (blue = user editable)','',''],
