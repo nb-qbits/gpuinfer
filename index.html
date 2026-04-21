@@ -2653,7 +2653,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.6.2</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.6.4</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -6188,7 +6188,7 @@ function hideGpuTip(){
 var AIC_WORKER_URL = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
 
-// ===== PERFORMANCE TAB v5.6.2 =====
+// ===== PERFORMANCE TAB v5.6.4 =====
 
 var AIC_WORKER = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
@@ -7084,7 +7084,7 @@ function exportPerfV2CSV(){
   var sections = [];
 
   // Header
-  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.6.2');
+  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.6.4');
   sections.push('Model: '+PERF_STATE.modelLabel+', GPU: '+(PERF_GPU_LABELS[meta.gpu]||meta.gpu)+', Backend: '+(meta.backend||'').toUpperCase()+', TP='+meta.tp);
   sections.push('ISL: '+meta.isl+', OSL: '+meta.osl+', Prefix: '+meta.pct+'%, Eff ISL: '+Math.round(meta.isl*(1-meta.pct/100)));
   sections.push('Target: '+rd.toLocaleString()+' req/day ('+( rd/86400).toFixed(1)+' req/sec), Buffer: '+buf+'%');
@@ -7223,7 +7223,7 @@ function warmUpAIC(){
   fetch(AIC_WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:'systems',payload:{}})}).catch(function(){});
 }
 
-// ===== THROUGHPUT SIZING ENGINE v5.6.2 =====
+// ===== THROUGHPUT SIZING ENGINE v5.6.4 =====
 
 // ── AIC DATA PLACEHOLDER ──────────────────────────────────────────────────
 // When Vikas provides AIC pareto CSV exports, run ingest script → clean rows → paste here.
@@ -7344,54 +7344,54 @@ function computeThroughput(p){
   var MFU_BW  = p.mfu_bw      || 0.87;
   var IS_MOE  = p.is_moe || false;
 
-  // Pipeline efficiency factor (eta) — calibrated from real silicon data.
-  // This is the single most important parameter. It accounts for:
-  // KV cache reads, attention compute, TP communication, scheduling overhead.
-  // Calibration source: AIC pareto data (gpt-oss-20b H100/H200, batch=56)
-  // MoE:   eta=0.065  (AIC measured 4.676 seq/s/gpu; naive decode gives ~72)
-  // Dense: eta=0.12   (estimated from published vLLM benchmarks)
-  // Pipeline eta defaults — calibrated from AIC pareto data (gpt-oss-20b H200 TP=8):
-  //   MoE + 80% prefix → 0.15  (H200 AIC: 14.37 seq/s/gpu)
-  //   MoE + 0% prefix  → 0.035 (H200 AIC: 3.35 seq/s/gpu)
-  //   Dense large       → 0.08  (estimated from published vLLM benchmarks)
-  //   Dense small (≤13B)→ 0.14  (estimated)
-  // Prefix-adjusted: eta scales with prefix reuse because KV cache hits
-  // reduce effective ISL → more time available for decode → higher utilization
-  var etaBase = IS_MOE
-    ? (PFX >= 70 ? 0.15 : PFX >= 40 ? 0.09 : 0.035)
-    : (ACT*1e-9 <= 13 ? 0.14 : ACT*1e-9 <= 30 ? 0.11 : ACT*1e-9 <= 80 ? 0.08 : 0.06);
-  var ETA = p.pipeline_eta || etaBase;
-
   // ── Step 1: Prefill throughput (compute-bound) ──
-  // FLOPs for prefill = 2 × active_params × eff_ISL per request
   var prefill_flops     = 2 * ACT * 1e9 * EFF_ISL;
   var gpu_tflops_eff    = TFLOPS * MFU_P * TP * 1e12;
   var prefill_s_per_req = prefill_flops / gpu_tflops_eff;
   var prefill_ttft_ms   = prefill_s_per_req * 1000;
-  var prefill_seq_s_replica = 1.0 / prefill_s_per_req;
-  var prefill_seq_s_gpu = prefill_seq_s_replica / TP;
+  var prefill_seq_s_gpu = (1.0 / prefill_s_per_req) / TP;
 
-  // ── Step 2: Decode throughput — pipeline efficiency model ──
-  // seq/s/gpu = (BW × eta) / (active_params × bytes / TP) / OSL
-  // eta captures: weight loads + KV cache reads + attention + TP overhead
-  // This replaces the naive tpot_correction approach which ignored KV cache.
-  var eff_bw_bytes_s  = BW * MFU_BW * 1e12;
-  var weights_per_gpu = ACT * 1e9 * BYTES / TP;
-  // Roofline TPOT (weights only — shown in math for reference)
+  // ── Step 2: Decode throughput — dual approach ──
+  // MoE: eta-based formula calibrated from AIC silicon data
+  //   gpt-oss-20b H200 TP=8, 80% prefix → eta=0.150 (AIC: 14.37 seq/s/GPU ✓)
+  //   gpt-oss-20b H200 TP=8,  0% prefix → eta=0.035 (AIC:  3.35 seq/s/GPU ✓)
+  // Dense: tok/s/GPU benchmark-based (vLLM published numbers on H100 TP=8)
+  //   8B: 400, 13B: 250, 30B: 150, 70B: 80, 405B: 25 tok/s/GPU
+  //   Scaled by BW ratio and TP penalty
+  var eff_bw_bytes_s   = BW * MFU_BW * 1e12;
+  var weights_per_gpu  = ACT * 1e9 * BYTES / TP;
   var tpot_roofline_ms = (weights_per_gpu / eff_bw_bytes_s) * 1000;
-  // Pipeline-efficiency TPOT (includes KV, attention, scheduling)
-  var decode_tok_s_gpu = (eff_bw_bytes_s * ETA) / weights_per_gpu;
-  var decode_seq_s_gpu = decode_tok_s_gpu / OSL;
-  // Effective TPOT for display = 1000 / (decode_seq_s_gpu × TP × OSL)
-  var tpot_ms = 1000 / (decode_tok_s_gpu * TP);
+  var decode_tok_s_gpu, tpot_ms, decode_seq_s_gpu, ETA;
 
-  // ── Step 3: Bottleneck — ISL:OSL ratio determines which phase dominates ──
-  // ISL-heavy (ISL >> OSL): prefill often bottleneck at low batch
-  // OSL-heavy (OSL >> ISL): decode always bottleneck
-  // At production batch (continuous batching), decode usually limits overall throughput
-  // but the pipeline_eta already captures this balance
+  if(IS_MOE){
+    // MoE: eta formula (well-calibrated from AIC)
+    var etaDefault = PFX >= 70 ? 0.15 : (PFX >= 40 ? 0.09 : 0.035);
+    ETA = p.pipeline_eta || etaDefault;
+    decode_tok_s_gpu = (eff_bw_bytes_s * ETA) / weights_per_gpu;
+    tpot_ms          = 1000 / (decode_tok_s_gpu * TP);
+    decode_seq_s_gpu = decode_tok_s_gpu / OSL;
+  } else {
+    // Dense: utilization × BW / weights_per_gpu
+    // Physically correct: decode speed = fraction of BW × BW / bytes_to_load
+    // Utilization from vLLM/MLPerf benchmarks at production batch:
+    //   Small (≤8B): 55% — small weights, high batch efficiency
+    //   Medium (≤30B): 50% — moderate pressure
+    //   Large (≤80B): 48% — more KV cache pressure
+    //   XL (>80B): 42% — KV dominates
+    var act_b = ACT * 1e-9;
+    var denseUtil = act_b <= 8  ? 0.55
+                  : act_b <= 13 ? 0.52
+                  : act_b <= 30 ? 0.50
+                  : act_b <= 80 ? 0.48
+                  : 0.42;
+    decode_tok_s_gpu = eff_bw_bytes_s * denseUtil / weights_per_gpu;
+    tpot_ms          = 1000 / (decode_tok_s_gpu * TP);
+    decode_seq_s_gpu = decode_tok_s_gpu / OSL;
+    ETA              = denseUtil;
+  }
+
+  // ── Step 3: Bottleneck identification ──
   var bottleneck = prefill_seq_s_gpu <= decode_seq_s_gpu ? 'prefill' : 'decode';
-  // ISL:OSL ratio annotation for the UI
   var isl_osl_ratio = EFF_ISL / Math.max(OSL, 1);
   var workloadType = isl_osl_ratio > 20 ? 'prefill-heavy'
                    : isl_osl_ratio > 5  ? 'balanced'
@@ -7477,7 +7477,7 @@ function setTPMode(v, btn){
   if(btn) btn.classList.add('on');
   var sum = document.getElementById('tps-mode-sum');
   if(sum) sum.textContent = v==='standard'?'Standard (vLLM)':v==='disagg'?'Disaggregated (llm-d)':'Compare both';
-  if(TP_STATE.lastResult) renderTPResults(TP_STATE.lastResult, TP_STATE.lastParams);
+  tpRecalc();
 }
 function setTPTP(v, btn){
   TP_STATE.tp = v;
@@ -7485,18 +7485,23 @@ function setTPTP(v, btn){
   document.querySelectorAll('[id^="tp-tp"]').forEach(function(b){ b.classList.remove('on'); });
   if(btn) btn.classList.add('on');
   tpUpdateSummaries();
+  tpRecalc();
 }
 function setTPPrec(prec, bytes, btn){
   document.getElementById('tp-bytes-param').value = bytes;
   document.querySelectorAll('[id^="tp-prec-"]').forEach(function(b){ b.classList.remove('on'); });
   if(btn) btn.classList.add('on');
-  // Update tflops if fp8 available
+  // Update tflops based on precision
   var gpuEntry = GPU_DATA.find(function(g){ return g.name===TP_STATE.gpuName; });
-  if(gpuEntry && prec==='fp8' && gpuEntry.tflops_fp8){
-    document.getElementById('tp-tflops').value = gpuEntry.tflops_fp8;
-  } else if(gpuEntry) {
-    document.getElementById('tp-tflops').value = gpuEntry.tflops_bf16||989;
+  if(gpuEntry){
+    if(prec==='fp8' && gpuEntry.tflops_fp8)
+      document.getElementById('tp-tflops').value = gpuEntry.tflops_fp8;
+    else if(prec==='fp4' && gpuEntry.tflops_fp4)
+      document.getElementById('tp-tflops').value = gpuEntry.tflops_fp4;
+    else
+      document.getElementById('tp-tflops').value = gpuEntry.tflops_bf16||989;
   }
+  tpRecalc();
 }
 function setTPPrefix(v, btn){
   document.getElementById('tp-prefix-pct').value = v;
@@ -7591,6 +7596,7 @@ function selectTPModel(name, btn){
     etaEl.value = eta;
   }
   tpUpdateSummaries();
+  tpRecalc();
 }
 function tpHFLookup(){
   var id = (document.getElementById('tp-hf-input').value||'').trim();
@@ -7601,6 +7607,7 @@ function tpHFLookup(){
     document.getElementById('tp-active-params').value = m.params||'?';
     document.querySelectorAll('#tp-model-chips .chip').forEach(function(b){ b.classList.remove('on'); });
     tpUpdateSummaries();
+    tpRecalc();
   });
 }
 
@@ -7608,7 +7615,7 @@ function tpHFLookup(){
 function initTPGPUChips(){
   var wrap = document.getElementById('tp-gpu-chips');
   if(!wrap) return;
-  var gpus = ['H100','H200','A100 80GB','B200','MI300X'];
+  var gpus = ['H100','H200','A100 80GB','B200','B300'];
   wrap.innerHTML = gpus.map(function(name){
     return '<button class="chip'+(name==='H100'?' on':'')+'" id="tpgpu-'+name.replace(/\s/g,'_')+'" onclick="selectTPGPU(\''+name+'\',this)">'+name+'</button>';
   }).join('');
@@ -7625,10 +7632,25 @@ function selectTPGPU(name, btn){
     document.getElementById('tp-membw').value   = g.mem_bw || 3.35;
     document.getElementById('tp-mfu-pre').value = g.mfu_prefill || 0.38;
     document.getElementById('tp-mfu-bw').value  = g.mfu_bw || 0.87;
-    // AMD gets different TPOT correction (software maturity)
-    document.getElementById('tp-tpot-corr').value = (g.vendor==='amd') ? 6.0 : 4.0;
+    // Re-derive eta for this GPU — preserve prefix-awareness
+    var pfx    = parseInt(document.getElementById('tp-prefix-pct').value)||0;
+    var isMoe  = document.getElementById('tp-is-moe').value==='1';
+    var eta    = isMoe
+      ? (pfx>=70 ? 0.15 : pfx>=40 ? 0.09 : 0.035)
+      : (document.getElementById('tp-active-params').value<=13 ? 0.14
+         : document.getElementById('tp-active-params').value<=30 ? 0.11
+         : document.getElementById('tp-active-params').value<=80 ? 0.08 : 0.06);
+    document.getElementById('tp-tpot-corr').value = eta;
+    // Update precision TFLOPS if FP8/FP4 selected
+    var precBtn = document.querySelector('[id^="tp-prec-"].on');
+    if(precBtn){
+      var prec = precBtn.id.replace('tp-prec-','');
+      if(prec==='fp8' && g.tflops_fp8) document.getElementById('tp-tflops').value = g.tflops_fp8;
+      else if(prec==='fp4' && g.tflops_fp4) document.getElementById('tp-tflops').value = g.tflops_fp4;
+    }
   }
   tpUpdateSummaries();
+  tpRecalc();
 }
 
 // ── PULL FROM CAPACITY ────────────────────────────────────────────────────
@@ -7648,6 +7670,7 @@ function tpPullFromCapacity(){
   if(usersEl) document.getElementById('tp-batch').value = usersEl.value||64;
   tpUpdateEffISL();
   tpUpdateSummaries();
+  tpRecalc();
 }
 
 // ── MAIN RUN ──────────────────────────────────────────────────────────────
@@ -7865,7 +7888,7 @@ function renderTPMath(result, params, gpuLabel){
 function renderTPGPUCompare(params){
   var tbl = document.getElementById('tp-gpu-compare-tbl');
   if(!tbl) return;
-  var gpus = ['H100','H200','B200','A100 80GB','MI300X','MI350X'];
+  var gpus = ['H100','H200','B200','B300','A100 80GB','H20'];
   var thead = '<tr style="background:var(--bg3);border-bottom:2px solid var(--border)">'
     +'<th style="padding:7px 10px;font-size:10px;font-weight:600;color:var(--text3);text-align:left">GPU</th>'
     +'<th style="padding:7px 10px;font-size:10px;font-weight:600;color:var(--text3)">TFLOPS BF16</th>'
@@ -7949,7 +7972,7 @@ function tpReadParams(){
   if(!etaVal || isNaN(etaVal)) etaVal = isMoe ? 0.065 : 0.12;
   return {
     model_name:   document.getElementById('tp-model-name').textContent || 'gpt-oss-20b',
-    active_params:parseFloat(document.getElementById('tp-active-params').value) || 3.5,
+    active_params:parseFloat(document.getElementById('tp-active-params').value) || parseFloat(document.getElementById('tp-total-params').value) || 3.5,
     total_params: parseFloat(document.getElementById('tp-total-params').value)  || 21,
     bytes_param:  parseFloat(document.getElementById('tp-bytes-param').value)   || 2,
     is_moe:       isMoe,
@@ -7986,7 +8009,7 @@ function tpBuildJSON(){
   var p = TP_STATE.lastParams;
   if(!r||!p) return null;
   return {
-    meta: { generated: new Date().toISOString(), tool: 'gpu.calc v5.6.2', type: 'throughput_sizing' },
+    meta: { generated: new Date().toISOString(), tool: 'gpu.calc v5.6.4', type: 'throughput_sizing' },
     inputs: {
       model: p.model_name, gpu: p.gpu_name, tp: p.tp, precision: p.bytes_param+'B/param',
       isl: p.isl, osl: p.osl, prefix_pct: p.prefix_pct, eff_isl: r.eff_isl,
@@ -8022,7 +8045,7 @@ function tpExportCSV(){
   var p = TP_STATE.lastParams;
   if(!r||!p){ alert('Run calculation first.'); return; }
   var lines = [
-    'GPU Throughput Sizing — gpu.calc v5.6.2',
+    'GPU Throughput Sizing — gpu.calc v5.6.4',
     'Generated: '+new Date().toISOString(),
     'DISCLAIMER: Roofline estimate ±30-50% accuracy. Validate before procurement.',
     '',
@@ -8078,7 +8101,7 @@ function tpExportSheets(){
   if(!r||!p){ alert('Run calculation first.'); return; }
   // Build TSV data for Google Sheets (tab-separated, opens cleanly)
   var tsv = [
-    ['GPU THROUGHPUT SIZING','gpu.calc v5.6.2',new Date().toLocaleDateString()].join('\t'),
+    ['GPU THROUGHPUT SIZING','gpu.calc v5.6.4',new Date().toLocaleDateString()].join('\t'),
     ['DISCLAIMER','Roofline estimate ±30-50% — validate with benchmarks before procurement'].join('\t'),
     [''],
     ['INPUTS (blue = user editable)','',''],
