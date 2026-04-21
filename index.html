@@ -837,6 +837,7 @@ button{font-family:var(--sans);cursor:pointer}
     <button class="nav-tab active" onclick="nav('home')">Overview</button>
     <button class="nav-tab" onclick="nav('advanced')">&#9654; Quick Estimate</button>
     <button class="nav-tab" onclick="nav('advanced')">Capacity<span class="nav-sub">Memory fit, KV cache, concurrency</span></button>
+    <button class="nav-tab" onclick="nav('throughput')">&#128200; Throughput<span class="nav-sub">GPU count for your request volume</span></button>
     <button class="nav-tab" onclick="nav('calibrated')">&#9889; Performance<span class="nav-sub">Throughput, latency, and GPU sizing</span></button>
     <button class="nav-tab" onclick="nav('explorer')">GPU Compare<span class="nav-sub">Compare GPUs by cost &amp; performance</span></button>
     <button class="nav-tab" onclick="nav('saved')">&#128204; Scenarios<span class="nav-sub">Saved configurations</span></button>
@@ -1717,6 +1718,413 @@ button{font-family:var(--sans);cursor:pointer}
 
 <!-- ===== GPU EXPLORER ===== -->
 
+<!-- ===== THROUGHPUT PAGE ===== -->
+<div id="page-throughput" class="page">
+  <div style="display:flex;gap:0;align-items:flex-start;min-height:calc(100vh - 88px)">
+
+    <!-- ══ LEFT PANEL ══ -->
+    <div style="width:272px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);min-height:calc(100vh - 88px);overflow-y:auto">
+
+      <div style="padding:14px 16px 12px;border-bottom:1px solid var(--border)">
+        <div style="font-size:14px;font-weight:700;margin-bottom:2px">📈 Throughput Sizing</div>
+        <div style="font-size:10px;color:var(--text4);line-height:1.5">GPU count for your request volume · roofline estimate</div>
+        <div style="display:flex;gap:6px;margin-top:10px">
+          <button class="btn btn-sm" style="flex:1;font-size:11px;color:var(--blue)" onclick="tpPullFromCapacity()">↑ From Capacity</button>
+          <button class="btn btn-primary" style="flex:2;font-size:12px;font-weight:600" onclick="runThroughput()">⚡ Calculate</button>
+        </div>
+      </div>
+
+      <!-- ① MODEL -->
+      <div class="panel-section open" id="tps-model">
+        <div class="panel-head" onclick="toggleTPS('tps-model')">
+          <div class="panel-head-left">
+            <div class="panel-head-icon">🤖</div>
+            <div class="panel-head-text">
+              <div class="panel-head-title">Model</div>
+              <div class="panel-head-summary" id="tps-model-sum">gpt-oss-20b</div>
+            </div>
+          </div><span class="panel-arrow">&#9658;</span>
+        </div>
+        <div class="panel-body">
+          <div class="panel-label">Preset</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px" id="tp-model-chips"></div>
+          <div class="panel-label">HF model ID</div>
+          <div style="display:flex;gap:6px;margin-bottom:6px">
+            <input id="tp-hf-input" type="text" placeholder="e.g. openai/gpt-oss-20b" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text1);font-size:11px">
+            <button class="btn btn-primary btn-sm" onclick="tpHFLookup()">Go</button>
+          </div>
+          <div id="tp-model-name" style="font-size:12px;font-weight:600;color:var(--blue);margin-bottom:8px">gpt-oss-20b</div>
+
+          <div class="panel-label">Precision</div>
+          <div class="chips-wrap" style="margin-bottom:8px">
+            <button class="chip on" id="tp-prec-bf16" onclick="setTPPrec('bf16',2,this)">BF16</button>
+            <button class="chip" id="tp-prec-fp8"  onclick="setTPPrec('fp8',1,this)">FP8</button>
+            <button class="chip" id="tp-prec-fp4"  onclick="setTPPrec('fp4',0.5,this)">FP4</button>
+          </div>
+
+          <!-- Editable model params -->
+          <details style="margin-top:4px">
+            <summary style="font-size:11px;font-weight:600;color:var(--text4);cursor:pointer;list-style:none">⚙ Model params (editable)</summary>
+            <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <div>
+                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">Total params (B)</div>
+                <input type="number" id="tp-total-params" value="21" min="0.1" step="0.1" oninput="tpRecalc()" style="width:100%;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">Active params (B) <span title="For MoE: active experts only. For dense: same as total." style="cursor:help">(?)</span></div>
+                <input type="number" id="tp-active-params" value="3.5" min="0.1" step="0.1" oninput="tpRecalc()" style="width:100%;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">Is MoE?</div>
+                <select id="tp-is-moe" oninput="tpRecalc()" style="width:100%;padding:3px 4px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px">
+                  <option value="1">Yes</option>
+                  <option value="0">No (dense)</option>
+                </select>
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">Bytes/param</div>
+                <input type="number" id="tp-bytes-param" value="2" min="0.25" step="0.25" oninput="tpRecalc()" style="width:100%;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <!-- ② HARDWARE -->
+      <div class="panel-section open" id="tps-hw">
+        <div class="panel-head" onclick="toggleTPS('tps-hw')">
+          <div class="panel-head-left">
+            <div class="panel-head-icon">⚙️</div>
+            <div class="panel-head-text">
+              <div class="panel-head-title">Hardware</div>
+              <div class="panel-head-summary" id="tps-hw-sum">H100 SXM · TP=8</div>
+            </div>
+          </div><span class="panel-arrow">&#9658;</span>
+        </div>
+        <div class="panel-body">
+          <div class="panel-label">GPU</div>
+          <div class="chips-wrap" id="tp-gpu-chips"></div>
+          <input type="hidden" id="tp-gpu" value="H100">
+          <div class="panel-label" style="margin-top:10px">Tensor parallel</div>
+          <div class="chips-wrap">
+            <button class="chip" id="tp-tp1" onclick="setTPTP(1,this)">TP=1</button>
+            <button class="chip" id="tp-tp2" onclick="setTPTP(2,this)">TP=2</button>
+            <button class="chip" id="tp-tp4" onclick="setTPTP(4,this)">TP=4</button>
+            <button class="chip on" id="tp-tp8" onclick="setTPTP(8,this)">TP=8</button>
+          </div>
+          <input type="hidden" id="tp-tp" value="8">
+
+          <!-- Editable GPU params -->
+          <details style="margin-top:10px">
+            <summary style="font-size:11px;font-weight:600;color:var(--text4);cursor:pointer;list-style:none">⚙ GPU params (editable)</summary>
+            <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <div>
+                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">BF16 TFLOPS</div>
+                <input type="number" id="tp-tflops" value="989" min="1" oninput="tpRecalc()" style="width:100%;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">Mem BW (TB/s)</div>
+                <input type="number" id="tp-membw" value="3.35" min="0.1" step="0.01" oninput="tpRecalc()" style="width:100%;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">MFU prefill</div>
+                <input type="number" id="tp-mfu-pre" value="0.38" min="0.05" max="1" step="0.01" oninput="tpRecalc()" style="width:100%;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">BW util decode</div>
+                <input type="number" id="tp-mfu-bw" value="0.87" min="0.05" max="1" step="0.01" oninput="tpRecalc()" style="width:100%;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">TPOT correction</div>
+                <input type="number" id="tp-tpot-corr" value="4.0" min="1" max="10" step="0.1" oninput="tpRecalc()" style="width:100%;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text4);margin-bottom:2px">Batch efficiency</div>
+                <input type="number" id="tp-batch-eff" value="0.80" min="0.1" max="1" step="0.01" oninput="tpRecalc()" style="width:100%;padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <!-- ③ WORKLOAD -->
+      <div class="panel-section open" id="tps-workload">
+        <div class="panel-head" onclick="toggleTPS('tps-workload')">
+          <div class="panel-head-left">
+            <div class="panel-head-icon">📊</div>
+            <div class="panel-head-text">
+              <div class="panel-head-title">Workload</div>
+              <div class="panel-head-summary" id="tps-wl-sum">ISL=9000 · OSL=50 · 80% prefix</div>
+            </div>
+          </div><span class="panel-arrow">&#9658;</span>
+        </div>
+        <div class="panel-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+            <div>
+              <div style="font-size:10px;color:var(--text4);margin-bottom:3px">Input tokens (ISL)</div>
+              <input type="number" id="tp-isl" value="9000" min="64" max="131072" oninput="tpUpdateEffISL();tpRecalc()" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--text4);margin-bottom:3px">Output tokens (OSL)</div>
+              <input type="number" id="tp-osl" value="50" min="1" max="8192" oninput="tpRecalc()" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+            </div>
+          </div>
+          <div style="margin-bottom:8px">
+            <div style="font-size:10px;color:var(--text4);margin-bottom:3px">Prefix cache hit %</div>
+            <div class="chips-wrap" style="margin-bottom:4px">
+              <button class="chip" onclick="setTPPrefix(0,this)">0%</button>
+              <button class="chip" onclick="setTPPrefix(50,this)">50%</button>
+              <button class="chip on" onclick="setTPPrefix(80,this)">80%</button>
+              <button class="chip" onclick="setTPPrefix(90,this)">90%</button>
+            </div>
+            <input type="number" id="tp-prefix-pct" value="80" min="0" max="99" oninput="tpUpdateEffISL();tpRecalc()" style="width:70px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+          </div>
+          <div id="tp-eff-isl-row" style="font-size:11px;color:var(--blue);font-family:var(--mono);background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);border-radius:4px;padding:4px 8px;margin-bottom:8px">
+            ↳ Eff. ISL: <strong id="tp-eff-isl">1,800</strong> tokens
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text4);margin-bottom:3px">Batch / concurrency</div>
+            <input type="number" id="tp-batch" value="64" min="1" max="1024" oninput="tpRecalc()" style="width:80px;padding:5px 7px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+          </div>
+        </div>
+      </div>
+
+      <!-- ④ SERVING MODE -->
+      <div class="panel-section open" id="tps-mode">
+        <div class="panel-head" onclick="toggleTPS('tps-mode')">
+          <div class="panel-head-left">
+            <div class="panel-head-icon">🔀</div>
+            <div class="panel-head-text">
+              <div class="panel-head-title">Serving mode</div>
+              <div class="panel-head-summary" id="tps-mode-sum">Compare both</div>
+            </div>
+          </div><span class="panel-arrow">&#9658;</span>
+        </div>
+        <div class="panel-body">
+          <div class="chips-wrap" style="flex-direction:column;gap:6px">
+            <button class="chip" id="tpmode-std" onclick="setTPMode('standard',this)" style="text-align:left;width:100%">
+              <strong>Standard</strong> — vLLM / TRT-LLM<br>
+              <span style="font-size:10px;color:var(--text3)">Single GPU for prefill + decode · continuous batching</span>
+            </button>
+            <button class="chip" id="tpmode-disagg" onclick="setTPMode('disagg',this)" style="text-align:left;width:100%">
+              <strong>Disaggregated</strong> — llm-d / Dynamo<br>
+              <span style="font-size:10px;color:var(--text3)">Separate prefill + decode GPUs · independent scaling</span>
+            </button>
+            <button class="chip on" id="tpmode-compare" onclick="setTPMode('compare',this)" style="text-align:left;width:100%">
+              <strong>Compare both</strong><br>
+              <span style="font-size:10px;color:var(--text3)">Side by side · shows winner</span>
+            </button>
+          </div>
+          <input type="hidden" id="tp-mode" value="compare">
+        </div>
+      </div>
+
+      <!-- ⑤ TARGET -->
+      <div class="panel-section open" id="tps-target">
+        <div class="panel-head" onclick="toggleTPS('tps-target')">
+          <div class="panel-head-left">
+            <div class="panel-head-icon">🎯</div>
+            <div class="panel-head-text">
+              <div class="panel-head-title">Target &amp; SLA</div>
+              <div class="panel-head-summary" id="tps-target-sum">100M req/day · 30% buffer</div>
+            </div>
+          </div><span class="panel-arrow">&#9658;</span>
+        </div>
+        <div class="panel-body">
+          <div style="margin-bottom:8px">
+            <div style="font-size:10px;color:var(--text4);margin-bottom:3px">Requests / day</div>
+            <input type="number" id="tp-req-day" value="100000000" min="1000" oninput="tpRecalc();tpUpdateSummaries()" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+            <div id="tp-rps-hint" style="font-size:11px;color:var(--blue);font-family:var(--mono);margin-top:4px">= 1,157.4 req/sec</div>
+          </div>
+          <div style="margin-bottom:8px">
+            <div style="font-size:10px;color:var(--text4);margin-bottom:3px">Infra buffer %</div>
+            <div class="chips-wrap" style="margin-bottom:4px">
+              <button class="chip" onclick="setTPBuf(0,this)">0%</button>
+              <button class="chip" onclick="setTPBuf(20,this)">20%</button>
+              <button class="chip on" onclick="setTPBuf(30,this)">30%</button>
+              <button class="chip" onclick="setTPBuf(50,this)">50%</button>
+            </div>
+            <input type="number" id="tp-buffer" value="30" min="0" max="100" oninput="tpRecalc()" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:11px;font-family:var(--mono)">
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text4);margin-bottom:3px">TTFT SLA (ms, optional)</div>
+            <input type="number" id="tp-sla-ttft" value="500" min="0" placeholder="e.g. 500" oninput="tpRecalc()" style="width:80px;padding:5px 7px;border:1px solid var(--border);border-radius:4px;background:var(--bg2);color:var(--text1);font-size:12px;font-family:var(--mono)">
+            <span style="font-size:10px;color:var(--text3);margin-left:6px">leave 0 = no SLA filter</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ⑥ AIC DATA COVERAGE -->
+      <div class="panel-section" id="tps-aic">
+        <div class="panel-head" onclick="toggleTPS('tps-aic')">
+          <div class="panel-head-left">
+            <div class="panel-head-icon">🔬</div>
+            <div class="panel-head-text">
+              <div class="panel-head-title">Silicon data</div>
+              <div class="panel-head-summary" id="tps-aic-sum">Roofline only · no AIC data</div>
+            </div>
+          </div><span class="panel-arrow">&#9658;</span>
+        </div>
+        <div class="panel-body">
+          <div id="tp-aic-coverage" style="font-size:11px;color:var(--text2);line-height:1.6">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+              <span style="font-size:16px">⚗</span>
+              <span><strong>Roofline only</strong> — no AIC data loaded</span>
+            </div>
+            <div style="font-size:10px;color:var(--text3)">When you have AIC pareto CSV exports, share them and they will be ingested here to improve accuracy from ±40% to ±15%.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:10px 16px 16px;font-size:10px;color:var(--text4);line-height:1.5">
+        Powered by roofline model. Validate with benchmarks before procurement.
+      </div>
+    </div>
+
+    <!-- ══ RIGHT PANEL ══ -->
+    <div style="flex:1;padding:20px 24px;min-width:0;overflow-x:hidden" id="tp-right">
+
+      <!-- TOP BAR -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+        <div>
+          <h1 style="font-size:20px;font-weight:700;margin-bottom:2px">📈 Throughput Sizing</h1>
+          <p style="font-size:12px;color:var(--text3)">How many GPUs to serve your request volume · roofline estimate from first principles</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-sm" id="tp-sheets-btn" style="display:none;color:var(--green)" onclick="tpExportSheets()">📊 Sheets</button>
+          <button class="btn btn-sm" id="tp-json-btn"   style="display:none;color:var(--blue)"  onclick="tpExportJSON()">{ } JSON</button>
+          <button class="btn btn-sm" id="tp-csv-btn"    style="display:none;color:var(--text2)"  onclick="tpExportCSV()">⬇ CSV</button>
+        </div>
+      </div>
+
+      <!-- DISCLAIMER BANNER -->
+      <div style="border:1.5px solid var(--amber);border-radius:var(--r);background:rgba(245,158,11,.06);padding:10px 14px;margin-bottom:16px;display:flex;gap:10px;align-items:flex-start">
+        <span style="font-size:16px;flex-shrink:0">⚠</span>
+        <div style="font-size:11px;color:var(--text2);line-height:1.6">
+          <strong style="color:var(--amber)">Directional estimate only.</strong>
+          Results are derived from published GPU specs and a roofline model — not measured silicon data.
+          Accuracy is typically <strong>±30-50%</strong> vs real benchmarks.
+          TTFT and TPOT estimates use empirical correction factors calibrated against AIC data for gpt-oss-20b.
+          <strong>Do not use for final procurement decisions</strong> — validate with AIC data or your own benchmarks.
+          All editable fields can be overridden with your own measured values.
+        </div>
+      </div>
+
+      <!-- LOADING STATE -->
+      <div id="tp-loading" style="display:none;flex-direction:column;align-items:center;justify-content:center;min-height:420px;padding:20px">
+        <div style="font-size:36px;margin-bottom:16px;animation:tpPulse 1.4s ease-in-out infinite">⚡</div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px;letter-spacing:.02em" id="tp-loading-title">Computing roofline estimate...</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:24px" id="tp-loading-sub">Crunching TFLOPS and bandwidth numbers</div>
+
+        <!-- Progress bar -->
+        <div style="width:360px;height:3px;background:var(--border);border-radius:2px;margin-bottom:24px;overflow:hidden">
+          <div id="tp-prog-bar" style="height:100%;background:linear-gradient(90deg,var(--blue),var(--cyan));border-radius:2px;width:0%;transition:width .4s ease"></div>
+        </div>
+
+        <!-- Step indicators -->
+        <div style="width:360px;margin-bottom:24px" id="tp-steps-wrap">
+          <div class="tp-step" id="tpstep-0"><span class="tp-step-icon">⏳</span><span>Loading model architecture &amp; GPU specs</span></div>
+          <div class="tp-step" id="tpstep-1"><span class="tp-step-icon">⏳</span><span>Computing prefill roofline (compute-bound)</span></div>
+          <div class="tp-step" id="tpstep-2"><span class="tp-step-icon">⏳</span><span>Computing decode roofline (bandwidth-bound)</span></div>
+          <div class="tp-step" id="tpstep-3"><span class="tp-step-icon">⏳</span><span>Deriving GPU count — standard mode</span></div>
+          <div class="tp-step" id="tpstep-4"><span class="tp-step-icon">⏳</span><span>Deriving GPU count — disaggregated mode</span></div>
+          <div class="tp-step" id="tpstep-5"><span class="tp-step-icon">⏳</span><span>Running GPU comparison across generations</span></div>
+        </div>
+
+        <!-- Quote card -->
+        <div style="width:400px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;text-align:center">
+          <div style="font-size:10px;font-weight:700;color:var(--text4);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Did you know?</div>
+          <div id="tp-quote" style="font-size:13px;color:var(--text2);line-height:1.7;font-style:italic;min-height:60px;transition:opacity .5s"></div>
+          <div id="tp-quote-src" style="font-size:10px;color:var(--text4);margin-top:8px"></div>
+        </div>
+      </div>
+
+      <!-- EMPTY STATE -->
+      <div id="tp-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:380px;color:var(--text4);text-align:center">
+        <div style="font-size:48px;margin-bottom:14px;opacity:.4">📈</div>
+        <div style="font-size:16px;font-weight:600;color:var(--text2);margin-bottom:6px">Configure &amp; calculate</div>
+        <div style="font-size:13px;color:var(--text3);max-width:320px;line-height:1.6">Set your model, GPU, workload and request target on the left. Click Calculate to get your GPU count.</div>
+        <button class="btn btn-primary" style="margin-top:16px;padding:10px 24px" onclick="runThroughput()">⚡ Calculate now</button>
+      </div>
+
+      <!-- RESULTS -->
+      <div id="tp-results" style="display:none">
+
+        <!-- Config context bar -->
+        <div id="tp-context-bar" style="font-size:12px;color:var(--text3);background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;margin-bottom:14px;line-height:1.8"></div>
+
+        <!-- HERO CARDS -->
+        <div class="outcome-cards" id="tp-hero-cards" style="margin-bottom:16px"></div>
+
+        <!-- MODE RESULTS -->
+        <div id="tp-mode-results"></div>
+
+        <!-- GPU COMPARISON TABLE -->
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);margin-bottom:14px;overflow:hidden">
+          <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.tgl').textContent=this.nextElementSibling.style.display==='none'?'▶':'▼'">
+            <div>
+              <div style="font-size:13px;font-weight:600">GPU generation comparison</div>
+              <div style="font-size:11px;color:var(--text3)">Same workload across GPU types · helps procurement decision</div>
+            </div>
+            <span class="tgl" style="font-size:10px;color:var(--text3)">▼</span>
+          </div>
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:11px" id="tp-gpu-compare-tbl"></table>
+          </div>
+        </div>
+
+        <!-- SIZING MATH -->
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);margin-bottom:14px;overflow:hidden">
+          <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.tgl').textContent=this.nextElementSibling.style.display==='none'?'▶':'▼'">
+            <div>
+              <div style="font-size:13px;font-weight:600">Step-by-step sizing math</div>
+              <div style="font-size:11px;color:var(--text3)">Every formula · all intermediate values · editable assumptions</div>
+            </div>
+            <span class="tgl" style="font-size:10px;color:var(--text3)">▼</span>
+          </div>
+          <div style="display:none">
+            <div id="tp-math-box" style="padding:14px 16px;font-size:11px;font-family:var(--mono);color:var(--text2);line-height:2.2"></div>
+          </div>
+        </div>
+
+        <!-- SENSITIVITY -->
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);margin-bottom:14px;overflow:hidden">
+          <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.tgl').textContent=this.nextElementSibling.style.display==='none'?'▶':'▼'">
+            <div>
+              <div style="font-size:13px;font-weight:600">Sensitivity analysis</div>
+              <div style="font-size:11px;color:var(--text3)">How does GPU count change as inputs vary?</div>
+            </div>
+            <span class="tgl" style="font-size:10px;color:var(--text3)">▼</span>
+          </div>
+          <div style="display:none;padding:16px" id="tp-sensitivity"></div>
+        </div>
+
+        <!-- AIC PLACEHOLDER -->
+        <div style="background:var(--bg2);border:1.5px dashed var(--border2);border-radius:var(--r);margin-bottom:14px;padding:14px 16px">
+          <div style="font-size:11px;font-weight:600;color:var(--text4);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">🔬 AIC Silicon Data — Placeholder</div>
+          <div id="tp-aic-result-banner" style="font-size:12px;color:var(--text2);line-height:1.7">
+            No AIC data loaded for this combination. Results above are roofline estimates (±30-50%).
+            <br>When AIC pareto data is available for <span id="tp-aic-combo" style="font-family:var(--mono);color:var(--blue)">—</span>, it will appear here and override the roofline estimate.
+          </div>
+          <div style="margin-top:8px;font-size:10px;color:var(--text3)">
+            Data hierarchy: <span style="color:var(--green)">✓ Your benchmarks</span> &gt; <span style="color:var(--blue)">🔬 AIC silicon</span> &gt; <span style="color:var(--amber)">⚗ Roofline (current)</span>
+          </div>
+        </div>
+
+        <!-- ACTIONS -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+          <button class="btn btn-sm" onclick="tpExportSheets()" style="color:var(--green)">📊 Google Sheets</button>
+          <button class="btn btn-sm" onclick="tpExportJSON()"   style="color:var(--blue)">{ } Copy JSON</button>
+          <button class="btn btn-sm" onclick="tpExportCSV()"    style="color:var(--text2)">⬇ Download CSV</button>
+          <button class="btn btn-sm" onclick="tpExportAPI()"    style="color:var(--cyan)">🔗 API call</button>
+        </div>
+
+      </div><!-- /results -->
+    </div><!-- /right -->
+  </div>
+</div>
+<!-- ===== END THROUGHPUT PAGE ===== -->
+
 <!-- ===== CALIBRATED PAGE ===== -->
 <div id="page-calibrated" class="page">
   <div style="display:flex;gap:0;align-items:flex-start;min-height:calc(100vh - 88px)">
@@ -2245,7 +2653,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.5.2</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.6.0</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2393,7 +2801,7 @@ var MODELS = [
   // Mistral
   {name:'Mistral 7B',    org:'mistral',params:7, layers:32,kvHeads:8, headDim:128,attn:'gqa',hfId:'mistralai/Mistral-7B-Instruct-v0.3'},
   {name:'Mistral Nemo',  org:'mistral',params:12,layers:40,kvHeads:8, headDim:128,attn:'gqa',hfId:'mistralai/Mistral-Nemo-Instruct-2407'},
-  {name:'Mixtral 8x7B',activeExperts:2,totalExperts:8,  org:'mistral',params:47,layers:32,kvHeads:8, headDim:128,attn:'gqa',hfId:'mistralai/Mixtral-8x7B-Instruct-v0.1'},
+  {name:'Mixtral 8x7B',activeExperts:2,totalExperts:8,  org:'mistral',params:47,activeParams:13,isMoE:true, layers:32,kvHeads:8, headDim:128,attn:'gqa',hfId:'mistralai/Mixtral-8x7B-Instruct-v0.1'},
   // Google
   // Gemma 4 (released April 2, 2026) — Apache 2.0
   {name:'Gemma 4 E2B',   org:'google',params:2, layers:26, kvHeads:4, headDim:256,attn:'gqa',kvLayers:4, hfId:'google/gemma-4-E2B-it'},
@@ -2424,26 +2832,33 @@ var MODELS = [
   // Phi-4-reasoning: same arch as Phi-4 14B, finetuned for reasoning
   {name:'Phi-4 reasoning',org:'other',params:14,layers:40,kvHeads:8,numHeads:40,headDim:96,attn:'gqa',hfId:'microsoft/Phi-4-reasoning'},
   // gpt-oss-20b: MoE, 4 active / 128 total experts, GQA, sliding window 128
-  {name:'gpt-oss-20b',org:'openai',params:21,layers:36,kvHeads:8,numHeads:64,headDim:64,attn:'gqa',activeExperts:4,totalExperts:128,hfId:'openai/gpt-oss-20b'},
+  {name:'gpt-oss-20b',org:'openai',params:21,activeParams:3.5,isMoE:true,layers:36,kvHeads:8,numHeads:64,headDim:64,attn:'gqa',activeExperts:4,totalExperts:128,hfId:'openai/gpt-oss-20b'},
 ];
 
 // GPU_DATA: mem_bw = memory bandwidth TB/s (published spec)
 // tpp = Planning Throughput Index — heuristic derived from mem_bw + VRAM, for comparative planning only
 var GPU_DATA = [
-  {name:'A100',     vendor:'nvidia', vram:40,  price:10000, mem_bw:2.0,  tpp:6000,  col:'#7ab3e0'},
-  {name:'A100 80GB',vendor:'nvidia', vram:80,  price:15000, mem_bw:2.0,  tpp:10500, col:'#7ab3e0'},
-  {name:'H100',     vendor:'nvidia', vram:80,  price:25000, mem_bw:3.35, tpp:18000, col:'#5b9bd5'},
-  {name:'H200',     vendor:'nvidia', vram:141, price:32000, mem_bw:4.8,  tpp:25000, col:'#5b9bd5'},
-  {name:'B100',     vendor:'nvidia', vram:192, price:35000, mem_bw:6.0,  tpp:28000, col:'#4285c8'},
-  {name:'B200',     vendor:'nvidia', vram:180, price:45000, mem_bw:8.0,  tpp:40000, col:'#3575bc'},
-  {name:'B300',     vendor:'nvidia', vram:288, price:60000, mem_bw:10.0, tpp:60000, col:'#2866b0'},
-  {name:'B30A',     vendor:'nvidia', vram:120, price:20000, mem_bw:4.0,  tpp:18000, col:'#4d8fd4'},
-  {name:'H20',      vendor:'nvidia', vram:96,  price:12000, mem_bw:4.0,  tpp:7000,  col:'#6aa8dc'},
-  {name:'MI250X',   vendor:'amd',    vram:128, price:15000, mem_bw:3.2,  tpp:9000,  col:'#e07878'},
-  {name:'MI300A',   vendor:'amd',    vram:128, price:20000, mem_bw:5.2,  tpp:18000, col:'#d96060'},
-  {name:'MI300X',   vendor:'amd',    vram:192, price:25000, mem_bw:5.3,  tpp:22000, col:'#cc4444'},
-  {name:'MI325X',   vendor:'amd',    vram:256, price:30000, mem_bw:6.0,  tpp:25000, col:'#c03838'},
-  {name:'MI350X',   vendor:'amd',    vram:288, price:40000, mem_bw:8.0,  tpp:34000, col:'#b42020'},
+  // tflops_bf16: dense BF16 TFLOPS (official spec, non-sparse)
+  // tflops_fp8:  dense FP8 TFLOPS
+  // mfu_prefill: practical MFU for compute-bound prefill (from benchmarks)
+  // mfu_bw:      practical memory bandwidth utilisation for decode
+  // tdp_w:       thermal design power watts
+  // arch:        microarchitecture family
+  {name:'A100',     vendor:'nvidia', vram:40,  price:10000, mem_bw:1.56, tpp:6000,  col:'#7ab3e0', tflops_bf16:312,  tflops_fp8:null, mfu_prefill:0.45, mfu_bw:0.87, tdp_w:400,  arch:'ampere'},
+  {name:'A100 80GB',vendor:'nvidia', vram:80,  price:15000, mem_bw:2.0,  tpp:10500, col:'#7ab3e0', tflops_bf16:312,  tflops_fp8:null, mfu_prefill:0.45, mfu_bw:0.87, tdp_w:400,  arch:'ampere'},
+  {name:'H100',     vendor:'nvidia', vram:80,  price:25000, mem_bw:3.35, tpp:18000, col:'#5b9bd5', tflops_bf16:989,  tflops_fp8:1979, mfu_prefill:0.38, mfu_bw:0.87, tdp_w:700,  arch:'hopper'},
+  {name:'H200',     vendor:'nvidia', vram:141, price:32000, mem_bw:4.8,  tpp:25000, col:'#5b9bd5', tflops_bf16:989,  tflops_fp8:1979, mfu_prefill:0.38, mfu_bw:0.87, tdp_w:700,  arch:'hopper'},
+  {name:'H20',      vendor:'nvidia', vram:96,  price:12000, mem_bw:4.0,  tpp:7000,  col:'#6aa8dc', tflops_bf16:148,  tflops_fp8:296,  mfu_prefill:0.35, mfu_bw:0.85, tdp_w:500,  arch:'hopper'},
+  {name:'B100',     vendor:'nvidia', vram:192, price:35000, mem_bw:8.0,  tpp:28000, col:'#4285c8', tflops_bf16:1750, tflops_fp8:3500, mfu_prefill:0.42, mfu_bw:0.85, tdp_w:700,  arch:'blackwell'},
+  {name:'B200',     vendor:'nvidia', vram:192, price:45000, mem_bw:8.0,  tpp:40000, col:'#3575bc', tflops_bf16:2250, tflops_fp8:4500, mfu_prefill:0.44, mfu_bw:0.85, tdp_w:1000, arch:'blackwell'},
+  {name:'B300',     vendor:'nvidia', vram:288, price:60000, mem_bw:10.0, tpp:60000, col:'#2866b0', tflops_bf16:3000, tflops_fp8:6000, mfu_prefill:0.44, mfu_bw:0.83, tdp_w:1400, arch:'blackwell'},
+  {name:'B30A',     vendor:'nvidia', vram:120, price:20000, mem_bw:4.0,  tpp:18000, col:'#4d8fd4', tflops_bf16:1500, tflops_fp8:3000, mfu_prefill:0.40, mfu_bw:0.83, tdp_w:600,  arch:'blackwell'},
+  {name:'L40S',     vendor:'nvidia', vram:48,  price:14000, mem_bw:0.864,tpp:8000,  col:'#7ab3e0', tflops_bf16:733,  tflops_fp8:1457, mfu_prefill:0.35, mfu_bw:0.82, tdp_w:350,  arch:'ada'},
+  {name:'MI250X',   vendor:'amd',    vram:128, price:15000, mem_bw:3.2,  tpp:9000,  col:'#e07878', tflops_bf16:383,  tflops_fp8:null, mfu_prefill:0.22, mfu_bw:0.78, tdp_w:560,  arch:'cdna2'},
+  {name:'MI300X',   vendor:'amd',    vram:192, price:25000, mem_bw:5.3,  tpp:22000, col:'#cc4444', tflops_bf16:1307, tflops_fp8:2615, mfu_prefill:0.20, mfu_bw:0.78, tdp_w:750,  arch:'cdna3'},
+  {name:'MI325X',   vendor:'amd',    vram:256, price:30000, mem_bw:6.0,  tpp:25000, col:'#c03838', tflops_bf16:1307, tflops_fp8:2615, mfu_prefill:0.20, mfu_bw:0.78, tdp_w:750,  arch:'cdna3'},
+  {name:'MI350X',   vendor:'amd',    vram:288, price:40000, mem_bw:8.0,  tpp:34000, col:'#b42020', tflops_bf16:2600, tflops_fp8:4600, mfu_prefill:0.25, mfu_bw:0.80, tdp_w:950,  arch:'cdna4'},
+  {name:'MI300A',   vendor:'amd',    vram:128, price:20000, mem_bw:5.2,  tpp:18000, col:'#d96060', tflops_bf16:1307, tflops_fp8:2615, mfu_prefill:0.20, mfu_bw:0.78, tdp_w:760,  arch:'cdna3'},
 ];
 // Derive cost-efficiency fields in place
 GPU_DATA.forEach(function(g){ g.usdPerTpp = g.price/g.tpp; g.usdPer100Tpp = (g.price/g.tpp)*100; });
@@ -2531,7 +2946,8 @@ setTimeout(function(){
 },60000);
 
 // ===== NAVIGATION =====
-function nav(page){ navTo(page,false); }
+function nav(page){
+  if(page==='throughput') setTimeout(initThroughputPage, 50); navTo(page,false); }
 function navTo(page,fromHash){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
@@ -5771,7 +6187,7 @@ function hideGpuTip(){
 var AIC_WORKER_URL = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
 
-// ===== PERFORMANCE TAB v5.5.2 =====
+// ===== PERFORMANCE TAB v5.6.0 =====
 
 var AIC_WORKER = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
@@ -6667,7 +7083,7 @@ function exportPerfV2CSV(){
   var sections = [];
 
   // Header
-  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.5.2');
+  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.6.0');
   sections.push('Model: '+PERF_STATE.modelLabel+', GPU: '+(PERF_GPU_LABELS[meta.gpu]||meta.gpu)+', Backend: '+(meta.backend||'').toUpperCase()+', TP='+meta.tp);
   sections.push('ISL: '+meta.isl+', OSL: '+meta.osl+', Prefix: '+meta.pct+'%, Eff ISL: '+Math.round(meta.isl*(1-meta.pct/100)));
   sections.push('Target: '+rd.toLocaleString()+' req/day ('+( rd/86400).toFixed(1)+' req/sec), Buffer: '+buf+'%');
@@ -6805,6 +7221,903 @@ function initPerfPage(){
 function warmUpAIC(){
   fetch(AIC_WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:'systems',payload:{}})}).catch(function(){});
 }
+
+// ===== THROUGHPUT SIZING ENGINE v5.6.0 =====
+
+// ── AIC DATA PLACEHOLDER ──────────────────────────────────────────────────
+// When Vikas provides AIC pareto CSV exports, run ingest script → clean rows → paste here.
+// Fields: model, gpu, backend, version, isl, osl, prefix, tp,
+//         seq_s_gpu, ttft_ms, tpot_ms, latency_ms, tok_s_gpu, source
+var AIC_DATA = [
+  // PLACEHOLDER — ingested from AIC pareto exports
+  // Example (from data__3_.csv, H100 vLLM 0.14.0):
+  // {model:'openai/gpt-oss-20b', gpu:'H100', backend:'vllm', version:'0.14.0',
+  //  isl:9000, osl:50, prefix:7200, tp:8,
+  //  seq_s_gpu:4.676, ttft_ms:21.65, tpot_ms:5.96, latency_ms:313.5,
+  //  tok_s_gpu:233.8, source:'aic_2026-04-18'}
+];
+// ── END AIC DATA PLACEHOLDER ──────────────────────────────────────────────
+
+// ── QUOTES ────────────────────────────────────────────────────────────────
+var TP_QUOTES = [
+  // Pool 1: Hard facts
+  {t:'H200 has 43% more memory bandwidth than H100 — but identical compute TFLOPS. For decode-heavy workloads, bandwidth is the only number that matters.',s:'NVIDIA H200 datasheet'},
+  {t:'At FP16, loading a 70B model once takes 140 GB of reads. At H100\'s 3.35 TB/s, that\'s 42ms — your minimum TPOT floor at batch=1.',s:'Roofline analysis'},
+  {t:'80% prefix cache hit rate reduces effective ISL from 9,000 to 1,800 tokens — cutting GPU requirements by 3-4× for the same throughput target.',s:'KV cache reuse research'},
+  {t:'B200 vs H100 at same precision: 2.3× more compute, 2.4× more bandwidth. The "30×" claim compares a 72-GPU rack at FP4 vs a single H100 at FP16.',s:'SemiAnalysis, 2024'},
+  {t:'AMD MI300X has 32% higher paper TFLOPS than H100 but achieves only 37-66% of H100 LLM inference throughput due to software maturity gaps.',s:'arXiv 2510.27583'},
+  // Pool 2: vLLM insights
+  {t:'vLLM\'s PagedAttention manages KV cache like virtual memory — reducing fragmentation by up to 55% vs static allocation and enabling larger effective batches.',s:'Kwon et al., 2023'},
+  {t:'Continuous batching means vLLM never waits for a batch to finish. New requests join mid-flight — this is why GPU utilization stays high under sustained load.',s:'vLLM architecture docs'},
+  {t:'At batch=1, vLLM is purely memory-bandwidth-bound. At batch=256+, it becomes compute-bound. The crossover is your optimal operating point.',s:'LLM serving fundamentals'},
+  {t:'vLLM chunked prefill splits long prompts into smaller chunks interleaved with decode steps — keeping TTFT low even when the system is under decode load.',s:'vLLM v0.4.0 release notes'},
+  // Pool 3: llm-d / disagg insights
+  {t:'Disaggregated prefill-decode separates compute-bound prefill from bandwidth-bound decode onto different GPUs — each can now run at their respective optimal operating point.',s:'llm-d architecture'},
+  {t:'For ISL=9000, OSL=50: prefill takes ~22ms, decode ~75ms. That\'s a 3.4:1 ratio — optimal disagg config is 1 prefill GPU per 3-4 decode GPUs.',s:'gpu.calc analysis'},
+  {t:'KV cache transfer between prefill and decode nodes in llm-d runs over RDMA at ~400 GB/s. For a 9K token context, that\'s under 5ms of transfer overhead.',s:'llm-d design doc'},
+  {t:'Disaggregated serving can improve GPU utilisation by 30-40% for ISL-heavy workloads. Prefill GPUs run near 100% compute utilisation — impossible in aggregated mode.',s:'Disaggregated LLM serving paper'},
+  // Pool 4: Business reality
+  {t:'On-prem H100 at $30K amortised over 5 years = $0.68/hr. Cloud H100 at $3.20/hr is 4.7× more expensive. At 248 GPUs, that\'s ~$6M/year difference.',s:'gpu.calc cost model'},
+  {t:'100M requests/day is 1,157 req/sec. A well-tuned 8-GPU H100 node handles ~37 req/sec. So 100M/day needs roughly 31 nodes — 248 H100s.',s:'Throughput sizing math'},
+  {t:'Prefix caching is the highest-leverage optimisation before buying GPUs. Doubling cache hit rate from 40% to 80% halves your GPU count and your infrastructure bill.',s:'Production LLM serving best practices'},
+  {t:'The difference between TP=1 and TP=8 for per-GPU throughput: at ISL=2000, cemigo benchmarks show TP=1 gives 15.4 req/s/GPU vs TP=8\'s ~4.7 — communication overhead is real.',s:'Red Hat perfscale benchmarks, 2026'},
+];
+
+var _tpQuoteIdx = 0, _tpQuoteTimer = null;
+
+function tpStartQuotes(){
+  _tpQuoteIdx = Math.floor(Math.random()*TP_QUOTES.length);
+  tpShowQuote();
+  _tpQuoteTimer = setInterval(function(){
+    var el = document.getElementById('tp-quote');
+    if(el){ el.style.opacity='0'; }
+    setTimeout(function(){
+      _tpQuoteIdx = (_tpQuoteIdx+1) % TP_QUOTES.length;
+      tpShowQuote();
+      var el2 = document.getElementById('tp-quote');
+      if(el2){ el2.style.opacity='1'; }
+    }, 500);
+  }, 3500);
+}
+function tpStopQuotes(){ if(_tpQuoteTimer){ clearInterval(_tpQuoteTimer); _tpQuoteTimer=null; } }
+function tpShowQuote(){
+  var q = TP_QUOTES[_tpQuoteIdx];
+  var el = document.getElementById('tp-quote');
+  var sr = document.getElementById('tp-quote-src');
+  if(el) el.textContent = '"'+q.t+'"';
+  if(sr) sr.textContent = '— '+q.s;
+}
+
+// ── STEP TICKER ───────────────────────────────────────────────────────────
+function tpStep(idx, state){
+  var el = document.getElementById('tpstep-'+idx);
+  if(!el) return;
+  var ic = el.querySelector('.tp-step-icon');
+  if(!ic) return;
+  if(state==='run')  { ic.textContent='⚡'; el.style.opacity='1'; el.style.color='var(--text1)'; }
+  if(state==='done') { ic.textContent='✅'; el.style.opacity='1'; el.style.color='var(--green)'; }
+  if(state==='wait') { ic.textContent='⏳'; el.style.opacity='.4'; }
+}
+function tpProg(pct){ var b=document.getElementById('tp-prog-bar'); if(b) b.style.width=pct+'%'; }
+
+// ── DATA LOOKUP (3-level hierarchy) ───────────────────────────────────────
+function lookupAIC(model, gpu, isl, osl, prefix, tp){
+  if(!AIC_DATA.length) return null;
+  // Exact match
+  var exact = AIC_DATA.find(function(r){
+    return r.model===model && r.gpu===gpu &&
+           r.isl===isl && r.osl===osl &&
+           Math.abs(r.prefix-prefix)<500 && r.tp===tp;
+  });
+  if(exact) return Object.assign({}, exact, {matchType:'exact'});
+  // Fuzzy: same model+gpu+tp, interpolate
+  var nearby = AIC_DATA.filter(function(r){
+    return r.model===model && r.gpu===gpu && r.tp===tp &&
+           Math.abs(r.isl-isl)<2000 && Math.abs(r.osl-osl)<100;
+  });
+  if(nearby.length>=2){
+    // Interpolate seq_s_gpu by prefix proximity
+    nearby.sort(function(a,b){ return Math.abs(a.prefix-prefix)-Math.abs(b.prefix-prefix); });
+    var best = nearby[0];
+    return Object.assign({}, best, {matchType:'fuzzy'});
+  }
+  return null;
+}
+
+// ── PURE COMPUTATION ENGINE ───────────────────────────────────────────────
+function computeThroughput(p){
+  // p: { active_params, total_params, bytes_param, is_moe,
+  //      tflops_bf16, mem_bw_tbs, mfu_prefill, mfu_bw, tpot_correction, batch_eff,
+  //      tp, isl, osl, prefix_pct, req_day, buffer_pct, mode }
+
+  var BYTES  = p.bytes_param || 2;
+  var ACT    = p.active_params || p.total_params;
+  var TOT    = p.total_params;
+  var TP     = p.tp || 8;
+  var ISL    = p.isl || 9000;
+  var OSL    = p.osl || 50;
+  var PFX    = p.prefix_pct || 0;
+  var EFF_ISL = Math.round(ISL * (1 - PFX/100));
+  var BATCH  = p.batch || 64;
+  var REQ_S  = (p.req_day || 100000000) / 86400;
+  var BUF    = (p.buffer_pct || 30) / 100;
+  var TFLOPS = p.tflops_bf16 || 989;
+  var BW     = p.mem_bw_tbs  || 3.35;   // TB/s
+  var MFU_P  = p.mfu_prefill || 0.38;
+  var MFU_BW = p.mfu_bw      || 0.87;
+  var TPOT_C = p.tpot_correction || 4.0;
+  var BEFF   = p.batch_eff   || 0.80;
+
+  // ── Step 1: Prefill throughput (compute-bound) ──
+  var prefill_flops = 2 * ACT * 1e9 * EFF_ISL;           // FLOPs per request
+  var gpu_tflops_eff = TFLOPS * MFU_P * TP * 1e12;        // effective TFLOPS for TP-replica
+  var prefill_s_per_req = prefill_flops / gpu_tflops_eff;  // seconds
+  var prefill_ttft_ms = prefill_s_per_req * 1000;
+  var prefill_seq_s_per_replica = 1.0 / prefill_s_per_req;
+  var prefill_seq_s_gpu = prefill_seq_s_per_replica / TP;
+
+  // ── Step 2: Decode throughput (bandwidth-bound) ──
+  var weights_bytes_per_gpu = ACT * 1e9 * BYTES / TP;      // bytes
+  var eff_bw = BW * MFU_BW * 1e12;                         // bytes/s
+  var tpot_roofline_ms = (weights_bytes_per_gpu / eff_bw) * 1000;
+  var tpot_ms = tpot_roofline_ms * TPOT_C;                 // empirical correction
+  var decode_seq_s_per_replica = 1000 / (tpot_ms * OSL);
+  var decode_seq_s_gpu = decode_seq_s_per_replica / TP;
+
+  // ── Step 3: Standard mode ──
+  var bottleneck = prefill_seq_s_gpu <= decode_seq_s_gpu ? 'prefill' : 'decode';
+  var std_seq_s_gpu = Math.min(prefill_seq_s_gpu, decode_seq_s_gpu) * BEFF;
+  var std_gpus_base = Math.ceil(REQ_S / std_seq_s_gpu);
+  var std_gpus_buf  = Math.ceil(std_gpus_base * (1 + BUF));
+  var std_latency_ms = prefill_ttft_ms + tpot_ms * OSL;
+
+  // ── Step 4: Disagg mode ──
+  var disagg_prefill_gpus = Math.ceil(REQ_S / prefill_seq_s_gpu);
+  var disagg_decode_gpus  = Math.ceil(REQ_S / decode_seq_s_gpu);
+  var pd_ratio = (disagg_decode_gpus / Math.max(disagg_prefill_gpus,1)).toFixed(1);
+  var disagg_total = disagg_prefill_gpus + disagg_decode_gpus;
+  var disagg_total_buf = Math.ceil(disagg_total * (1 + BUF));
+
+  // ── Step 5: Memory floor (from Capacity logic) ──
+  var model_mem_gb = TOT * 1e9 * BYTES / 1e9;             // GB
+  var mem_floor_gpus = Math.ceil(model_mem_gb / (p.vram_gb||80) * TP);
+
+  return {
+    // Intermediates
+    eff_isl:              EFF_ISL,
+    req_s:                REQ_S,
+    prefill_ttft_ms:      prefill_ttft_ms,
+    tpot_roofline_ms:     tpot_roofline_ms,
+    tpot_ms:              tpot_ms,
+    prefill_seq_s_gpu:    prefill_seq_s_gpu,
+    decode_seq_s_gpu:     decode_seq_s_gpu,
+    bottleneck:           bottleneck,
+    // Standard
+    standard: {
+      seq_s_gpu:  std_seq_s_gpu,
+      gpus:       std_gpus_base,
+      gpus_buf:   std_gpus_buf,
+      latency_ms: std_latency_ms,
+      ttft_ms:    prefill_ttft_ms,
+      tpot_ms:    tpot_ms,
+    },
+    // Disagg
+    disagg: {
+      prefill_gpus:     disagg_prefill_gpus,
+      decode_gpus:      disagg_decode_gpus,
+      total_gpus:       disagg_total,
+      total_gpus_buf:   disagg_total_buf,
+      pd_ratio:         pd_ratio,
+      prefill_seq_s_gpu: prefill_seq_s_gpu,
+      decode_seq_s_gpu:  decode_seq_s_gpu,
+    },
+    mem_floor_gpus: mem_floor_gpus,
+    model_mem_gb:   model_mem_gb,
+    params:         p,
+  };
+}
+
+// ── STATE ─────────────────────────────────────────────────────────────────
+var TP_STATE = { mode:'compare', gpuName:'H100', tp:8, lastResult:null, lastParams:null };
+
+// ── UI HELPERS ────────────────────────────────────────────────────────────
+function toggleTPS(id){
+  var el = document.getElementById(id);
+  if(el) el.classList.toggle('open');
+}
+function setTPMode(v, btn){
+  TP_STATE.mode = v;
+  document.getElementById('tp-mode').value = v;
+  document.querySelectorAll('[id^="tpmode-"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  var sum = document.getElementById('tps-mode-sum');
+  if(sum) sum.textContent = v==='standard'?'Standard (vLLM)':v==='disagg'?'Disaggregated (llm-d)':'Compare both';
+  if(TP_STATE.lastResult) renderTPResults(TP_STATE.lastResult, TP_STATE.lastParams);
+}
+function setTPTP(v, btn){
+  TP_STATE.tp = v;
+  document.getElementById('tp-tp').value = v;
+  document.querySelectorAll('[id^="tp-tp"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  tpUpdateSummaries();
+}
+function setTPPrec(prec, bytes, btn){
+  document.getElementById('tp-bytes-param').value = bytes;
+  document.querySelectorAll('[id^="tp-prec-"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  // Update tflops if fp8 available
+  var gpuEntry = GPU_DATA.find(function(g){ return g.name===TP_STATE.gpuName; });
+  if(gpuEntry && prec==='fp8' && gpuEntry.tflops_fp8){
+    document.getElementById('tp-tflops').value = gpuEntry.tflops_fp8;
+  } else if(gpuEntry) {
+    document.getElementById('tp-tflops').value = gpuEntry.tflops_bf16||989;
+  }
+}
+function setTPPrefix(v, btn){
+  document.getElementById('tp-prefix-pct').value = v;
+  document.querySelectorAll('[onclick^="setTPPrefix"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  tpUpdateEffISL();
+}
+function setTPBuf(v, btn){
+  document.getElementById('tp-buffer').value = v;
+  document.querySelectorAll('[onclick^="setTPBuf"]').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  tpUpdateSummaries();
+}
+function tpUpdateEffISL(){
+  var isl = parseInt(document.getElementById('tp-isl').value)||9000;
+  var pct = parseInt(document.getElementById('tp-prefix-pct').value)||0;
+  var eff = Math.round(isl*(1-pct/100));
+  var span = document.getElementById('tp-eff-isl');
+  if(span) span.textContent = eff.toLocaleString();
+}
+function tpUpdateSummaries(){
+  var rd  = parseInt(document.getElementById('tp-req-day').value)||100000000;
+  var rps = (rd/86400).toFixed(1);
+  var hint = document.getElementById('tp-rps-hint');
+  if(hint) hint.textContent = '= '+rps+' req/sec';
+  var isl = document.getElementById('tp-isl').value||'9000';
+  var osl = document.getElementById('tp-osl').value||'50';
+  var pct = document.getElementById('tp-prefix-pct').value||'80';
+  var wlSum = document.getElementById('tps-wl-sum');
+  if(wlSum) wlSum.textContent = 'ISL='+isl+' · OSL='+osl+' · '+pct+'% prefix';
+  var tgSum = document.getElementById('tps-target-sum');
+  if(tgSum) tgSum.textContent = (rd/1000000).toFixed(0)+'M req/day · '+(document.getElementById('tp-buffer').value||30)+'% buffer';
+  var hwSum = document.getElementById('tps-hw-sum');
+  if(hwSum) hwSum.textContent = TP_STATE.gpuName+' · TP='+TP_STATE.tp;
+  tpUpdateAICCoverage();
+}
+function tpUpdateAICCoverage(){
+  var model  = document.getElementById('tp-model-name').textContent||'';
+  var gpu    = TP_STATE.gpuName;
+  var isl    = parseInt(document.getElementById('tp-isl').value)||9000;
+  var osl    = parseInt(document.getElementById('tp-osl').value)||50;
+  var prefix = Math.round(isl*(parseInt(document.getElementById('tp-prefix-pct').value)||0)/100);
+  var tp     = TP_STATE.tp;
+  var aicMatch = lookupAIC(model, gpu, isl, osl, prefix, tp);
+  var sum = document.getElementById('tps-aic-sum');
+  var cov = document.getElementById('tp-aic-coverage');
+  if(aicMatch){
+    if(sum) sum.textContent = 'AIC data · '+aicMatch.matchType+' match';
+    if(cov) cov.innerHTML = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="font-size:16px">🔬</span><span><strong style="color:var(--blue)">AIC data available</strong> — '+aicMatch.matchType+' match</span></div><div style="font-size:10px;color:var(--text3)">seq/s/GPU: '+aicMatch.seq_s_gpu.toFixed(3)+' · TTFT: '+aicMatch.ttft_ms.toFixed(0)+'ms · Source: '+aicMatch.source+'</div>';
+  } else {
+    if(sum) sum.textContent = 'Roofline only · no AIC data';
+    if(cov) cov.innerHTML = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="font-size:16px">⚗</span><span><strong>Roofline only</strong></span></div><div style="font-size:10px;color:var(--text3)">No AIC data for this combo. Share AIC CSV exports to improve accuracy to ±15%.</div>';
+  }
+}
+
+// ── MODEL SELECTION ───────────────────────────────────────────────────────
+function initTPModelChips(){
+  var wrap = document.getElementById('tp-model-chips');
+  if(!wrap) return;
+  var presets = ['gpt-oss-20b','Llama 3.1 8B','Llama 3.1 70B','Qwen 2.5 72B','Mixtral 8x7B','DeepSeek R1 70B'];
+  wrap.innerHTML = presets.map(function(name){
+    return '<button class="chip'+(name==='gpt-oss-20b'?' on':'')+'" onclick="selectTPModel(\''+name+'\',this)">'+name+'</button>';
+  }).join('');
+}
+function selectTPModel(name, btn){
+  var m = MODELS.find(function(x){ return x.name===name; });
+  if(!m) return;
+  document.getElementById('tp-model-name').textContent = name;
+  document.getElementById('tp-total-params').value = m.params;
+  var active = m.activeParams || m.params;
+  document.getElementById('tp-active-params').value = active;
+  document.getElementById('tp-is-moe').value = m.isMoE?'1':'0';
+  document.querySelectorAll('#tp-model-chips .chip').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  var sum = document.getElementById('tps-model-sum');
+  if(sum) sum.textContent = name;
+  tpUpdateSummaries();
+}
+function tpHFLookup(){
+  var id = (document.getElementById('tp-hf-input').value||'').trim();
+  if(!id) return;
+  fetchHFModel(id, null, function(m){
+    document.getElementById('tp-model-name').textContent = m.name;
+    document.getElementById('tp-total-params').value = m.params||'?';
+    document.getElementById('tp-active-params').value = m.params||'?';
+    document.querySelectorAll('#tp-model-chips .chip').forEach(function(b){ b.classList.remove('on'); });
+    tpUpdateSummaries();
+  });
+}
+
+// ── GPU CHIPS ─────────────────────────────────────────────────────────────
+function initTPGPUChips(){
+  var wrap = document.getElementById('tp-gpu-chips');
+  if(!wrap) return;
+  var gpus = ['H100','H200','A100 80GB','B200','MI300X'];
+  wrap.innerHTML = gpus.map(function(name){
+    return '<button class="chip'+(name==='H100'?' on':'')+'" id="tpgpu-'+name.replace(/\s/g,'_')+'" onclick="selectTPGPU(\''+name+'\',this)">'+name+'</button>';
+  }).join('');
+}
+function selectTPGPU(name, btn){
+  TP_STATE.gpuName = name;
+  document.getElementById('tp-gpu').value = name;
+  document.querySelectorAll('#tp-gpu-chips .chip').forEach(function(b){ b.classList.remove('on'); });
+  if(btn) btn.classList.add('on');
+  // Auto-fill GPU params
+  var g = GPU_DATA.find(function(x){ return x.name===name; });
+  if(g){
+    document.getElementById('tp-tflops').value  = g.tflops_bf16 || 989;
+    document.getElementById('tp-membw').value   = g.mem_bw || 3.35;
+    document.getElementById('tp-mfu-pre').value = g.mfu_prefill || 0.38;
+    document.getElementById('tp-mfu-bw').value  = g.mfu_bw || 0.87;
+    // AMD gets different TPOT correction (software maturity)
+    document.getElementById('tp-tpot-corr').value = (g.vendor==='amd') ? 6.0 : 4.0;
+  }
+  tpUpdateSummaries();
+}
+
+// ── PULL FROM CAPACITY ────────────────────────────────────────────────────
+function tpPullFromCapacity(){
+  // Read from Capacity tab state
+  var modelSel = document.getElementById('model-select');
+  if(modelSel){
+    var mname = modelSel.value;
+    var m = MODELS.find(function(x){ return x.name===mname; });
+    if(m) selectTPModel(mname, null);
+  }
+  var gpuSel = document.getElementById('gpu-select');
+  if(gpuSel) selectTPGPU(gpuSel.value, null);
+  var ctxEl = document.getElementById('ctx');
+  if(ctxEl) document.getElementById('tp-isl').value = Math.round(parseInt(ctxEl.value||4096)*0.75);
+  var usersEl = document.getElementById('users');
+  if(usersEl) document.getElementById('tp-batch').value = usersEl.value||64;
+  tpUpdateEffISL();
+  tpUpdateSummaries();
+}
+
+// ── MAIN RUN ──────────────────────────────────────────────────────────────
+function runThroughput(){
+  document.getElementById('tp-empty').style.display   = 'none';
+  document.getElementById('tp-results').style.display = 'none';
+  document.getElementById('tp-loading').style.display = 'flex';
+  tpStartQuotes();
+  tpProg(0);
+  for(var i=0;i<6;i++) tpStep(i,'wait');
+
+  // Build params
+  var params = {
+    active_params: parseFloat(document.getElementById('tp-active-params').value)||3.5,
+    total_params:  parseFloat(document.getElementById('tp-total-params').value)||21,
+    bytes_param:   parseFloat(document.getElementById('tp-bytes-param').value)||2,
+    is_moe:        document.getElementById('tp-is-moe').value==='1',
+    tflops_bf16:   parseFloat(document.getElementById('tp-tflops').value)||989,
+    mem_bw_tbs:    parseFloat(document.getElementById('tp-membw').value)||3.35,
+    mfu_prefill:   parseFloat(document.getElementById('tp-mfu-pre').value)||0.38,
+    mfu_bw:        parseFloat(document.getElementById('tp-mfu-bw').value)||0.87,
+    tpot_correction: parseFloat(document.getElementById('tp-tpot-corr').value)||4.0,
+    batch_eff:     parseFloat(document.getElementById('tp-batch-eff').value)||0.80,
+    tp:            parseInt(document.getElementById('tp-tp').value)||8,
+    isl:           parseInt(document.getElementById('tp-isl').value)||9000,
+    osl:           parseInt(document.getElementById('tp-osl').value)||50,
+    prefix_pct:    parseInt(document.getElementById('tp-prefix-pct').value)||80,
+    batch:         parseInt(document.getElementById('tp-batch').value)||64,
+    req_day:       parseInt(document.getElementById('tp-req-day').value)||100000000,
+    buffer_pct:    parseInt(document.getElementById('tp-buffer').value)||30,
+    mode:          TP_STATE.mode,
+    gpu_name:      TP_STATE.gpuName,
+    vram_gb:       (GPU_DATA.find(function(g){return g.name===TP_STATE.gpuName;})||{vram_gb:80}).vram || 80,
+    model_name:    document.getElementById('tp-model-name').textContent||'gpt-oss-20b',
+  };
+
+  // Simulate sensational loading: 5-7 seconds of steps
+  var stepDelay = [0, 700, 1400, 2200, 3100, 4100];
+  var progVals  = [10, 28, 46, 64, 80, 96];
+  var titles    = [
+    'Loading model architecture & GPU specs...',
+    'Computing prefill roofline — compute-bound phase...',
+    'Computing decode roofline — bandwidth-bound phase...',
+    'Deriving GPU count — standard serving mode...',
+    'Deriving GPU count — disaggregated P/D mode...',
+    'Running GPU comparison across generations...',
+  ];
+  var result = null;
+  for(var s=0;s<6;s++){
+    (function(step){
+      setTimeout(function(){
+        tpStep(step,'run');
+        tpProg(progVals[step]);
+        var tl = document.getElementById('tp-loading-title');
+        if(tl) tl.textContent = titles[step];
+        if(step===2) result = computeThroughput(params);
+      }, stepDelay[step]);
+    })(s);
+  }
+  // Final: show results after ~5 seconds
+  setTimeout(function(){
+    for(var i=0;i<6;i++) tpStep(i,'done');
+    tpProg(100);
+    setTimeout(function(){
+      tpStopQuotes();
+      document.getElementById('tp-loading').style.display = 'none';
+      if(!result) result = computeThroughput(params);
+      TP_STATE.lastResult = result;
+      TP_STATE.lastParams = params;
+      renderTPResults(result, params);
+      // Show export buttons
+      ['tp-sheets-btn','tp-json-btn','tp-csv-btn'].forEach(function(id){ var b=document.getElementById(id); if(b) b.style.display='inline'; });
+    }, 600);
+  }, 5200);
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────
+function renderTPResults(result, params){
+  document.getElementById('tp-results').style.display = 'block';
+  var gpuLabel = params.gpu_name || 'GPU';
+  var rd = params.req_day;
+  var mode = params.mode;
+
+  // Context bar
+  var ctx = document.getElementById('tp-context-bar');
+  if(ctx){
+    var eff = result.eff_isl;
+    ctx.innerHTML = '<strong>'+params.model_name+'</strong> on <strong>'+gpuLabel+'</strong> · '
+      +'ISL='+params.isl+', OSL='+params.osl+', '+params.prefix_pct+'% prefix → eff ISL=<strong style="color:var(--blue)">'+eff.toLocaleString()+'</strong> · '
+      +'Target: <strong style="color:var(--blue)">'+(rd/1e6).toFixed(0)+'M req/day</strong> ('+result.req_s.toFixed(1)+' req/sec) · '
+      +'Bottleneck: <strong style="color:'+(result.bottleneck==='prefill'?'var(--amber)':'var(--cyan)')+'">'
+      +result.bottleneck.toUpperCase()+'</strong> · '
+      +'Source: <span style="color:var(--amber)">⚗ Roofline</span>';
+  }
+
+  // AIC combo label
+  var aicCombo = document.getElementById('tp-aic-combo');
+  if(aicCombo) aicCombo.textContent = params.model_name+' + '+gpuLabel+' + ISL='+params.isl+' + TP='+params.tp;
+
+  // Hero cards
+  var std  = result.standard;
+  var dis  = result.disagg;
+  var mem  = result.mem_floor_gpus;
+  var hero = document.getElementById('tp-hero-cards');
+  if(hero){
+    var rec = Math.max(mem, Math.min(std.gpus_buf, dis.total_gpus_buf));
+    hero.innerHTML =
+      oc('Standard (vLLM)', std.gpus_buf, gpuLabel+'s · incl. '+params.buffer_pct+'% buffer',
+         std.gpus+' min · '+std.gpus_buf+' with buffer', 'var(--blue)', 'warn',
+         result.bottleneck.toUpperCase()+'-BOUND')
+     +oc('Disaggregated (llm-d)', dis.total_gpus_buf, gpuLabel+'s · '+dis.pd_ratio+':1 decode:prefill ratio',
+         dis.prefill_gpus+'P + '+dis.decode_gpus+'D GPUs', 'var(--green)', 'good', 'P:D = '+dis.pd_ratio)
+     +oc('Memory floor', mem, gpuLabel+'s to hold '+result.model_mem_gb.toFixed(0)+'GB model',
+         'From Capacity tab', 'var(--border)', '', 'USE max(floor, throughput)');
+  }
+
+  // Mode results
+  renderTPModeResults(result, params, gpuLabel);
+  // Math
+  renderTPMath(result, params, gpuLabel);
+  // GPU compare
+  renderTPGPUCompare(params);
+  // Sensitivity
+  renderTPSensitivity(params);
+}
+
+function oc(label, val, sub, sub2, color, badgeType, badgeText){
+  return '<div class="oc" style="border-color:'+(color||'var(--border)')+'">'
+    +'<div class="oc-label">'+label+'</div>'
+    +'<div class="oc-val" style="color:'+(color||'var(--text1)')+'">'+val+'</div>'
+    +'<div class="oc-sub">'+sub+'</div>'
+    +(sub2?'<div class="oc-sub" style="margin-top:2px;font-family:var(--mono);font-size:10px;color:var(--text4)">'+sub2+'</div>':'')
+    +(badgeText?'<span class="oc-badge '+(badgeType||'warn')+'">'+badgeText+'</span>':'')
+    +'</div>';
+}
+
+function renderTPModeResults(result, params, gpuLabel){
+  var wrap = document.getElementById('tp-mode-results');
+  if(!wrap) return;
+  var std = result.standard;
+  var dis = result.disagg;
+  var mode = params.mode;
+  var html = '';
+
+  var fms = function(v){ return v!=null ? v.toFixed(0)+'ms' : '—'; };
+  var f3  = function(v){ return v!=null ? v.toFixed(3) : '—'; };
+
+  // Standard panel
+  if(mode==='standard'||mode==='compare'){
+    html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);margin-bottom:12px;overflow:hidden">'
+      +'<div style="padding:10px 14px;border-bottom:1px solid var(--border);background:rgba(59,130,246,.06)">'
+      +'<div style="font-size:13px;font-weight:600;color:var(--blue)">Standard mode — vLLM / TRT-LLM / SGLang</div>'
+      +'<div style="font-size:11px;color:var(--text3)">Single GPU handles both prefill and decode · continuous batching</div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--border)">'
+      +metricTile('TTFT estimate', fms(std.ttft_ms), '⚗ roofline · low-load only', 'var(--text1)')
+      +metricTile('TPOT estimate', fms(std.tpot_ms), '×'+params.tpot_correction+' correction factor', 'var(--text1)')
+      +metricTile('Latency estimate', fms(std.latency_ms), 'TTFT + OSL×TPOT', 'var(--text1)')
+      +metricTile('Bottleneck', result.bottleneck.toUpperCase(), result.bottleneck==='decode'?'BW-limited':'Compute-limited', result.bottleneck==='decode'?'var(--cyan)':'var(--amber)')
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0">'
+      +metricTile('seq/s/GPU', f3(std.seq_s_gpu), 'after '+Math.round(params.batch_eff*100)+'% batch efficiency', 'var(--blue)')
+      +metricTile('GPUs (no buffer)', std.gpus, gpuLabel+'s', 'var(--green)')
+      +metricTile('GPUs (+'+params.buffer_pct+'% buffer)', std.gpus_buf, 'Recommended', 'var(--green)')
+      +'</div></div>';
+  }
+
+  // Disagg panel
+  if(mode==='disagg'||mode==='compare'){
+    html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);margin-bottom:12px;overflow:hidden">'
+      +'<div style="padding:10px 14px;border-bottom:1px solid var(--border);background:rgba(34,197,94,.05)">'
+      +'<div style="font-size:13px;font-weight:600;color:var(--green)">Disaggregated mode — llm-d / Dynamo</div>'
+      +'<div style="font-size:11px;color:var(--text3)">Separate prefill + decode GPUs · each optimised independently</div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--border)">'
+      +metricTile('Prefill GPUs', dis.prefill_gpus, 'compute-bound · '+f3(dis.prefill_seq_s_gpu)+' req/s/GPU', 'var(--amber)')
+      +metricTile('Decode GPUs', dis.decode_gpus, 'bandwidth-bound · '+f3(dis.decode_seq_s_gpu)+' req/s/GPU', 'var(--cyan)')
+      +metricTile('P:D ratio', '1 : '+dis.pd_ratio, 'decode per prefill GPU', 'var(--text1)')
+      +metricTile('Total GPUs', dis.total_gpus, 'no buffer', 'var(--green)')
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0">'
+      +metricTile('Total (+'+params.buffer_pct+'% buffer)', dis.total_gpus_buf, 'Recommended', 'var(--green)')
+      +metricTile('vs Standard', (std.gpus_buf > dis.total_gpus_buf ? '−'+(std.gpus_buf - dis.total_gpus_buf)+' GPUs' : '+'+(dis.total_gpus_buf - std.gpus_buf)+' GPUs'), std.gpus_buf > dis.total_gpus_buf ? 'Disagg saves GPUs here' : 'Standard is more efficient here', std.gpus_buf > dis.total_gpus_buf ? 'var(--green)' : 'var(--amber)')
+      +'</div></div>';
+  }
+  wrap.innerHTML = html;
+}
+
+function metricTile(label, val, sub, color){
+  return '<div style="padding:12px 14px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)">'
+    +'<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text4);margin-bottom:4px">'+label+'</div>'
+    +'<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:'+(color||'var(--text1)')+';line-height:1">'+val+'</div>'
+    +'<div style="font-size:10px;color:var(--text3);margin-top:3px">'+sub+'</div>'
+    +'</div>';
+}
+
+function renderTPMath(result, params, gpuLabel){
+  var el = document.getElementById('tp-math-box');
+  if(!el) return;
+  var std = result.standard;
+  var dis = result.disagg;
+  var rd  = params.req_day;
+  var row = function(step, formula, val, note){
+    return '<div style="display:grid;grid-template-columns:60px 1fr 140px auto;gap:8px;padding:3px 0;border-bottom:1px solid var(--border);align-items:baseline">'
+      +'<span style="color:var(--text4);font-size:10px">Step '+step+'</span>'
+      +'<span style="color:var(--text2)">'+formula+'</span>'
+      +'<span style="color:var(--green);font-weight:600">= '+val+'</span>'
+      +'<span style="color:var(--text4);font-size:10px">'+note+'</span>'
+      +'</div>';
+  };
+  el.innerHTML =
+    row(1, rd.toLocaleString()+' req/day ÷ 86,400', result.req_s.toFixed(2)+' req/sec', 'demand')
+   +row(2, 'ISL='+params.isl+' × (1−'+params.prefix_pct+'%)', result.eff_isl.toLocaleString()+' tokens', 'eff ISL')
+   +row(3, '2 × '+params.active_params+'B × '+result.eff_isl+' ÷ ('+params.tflops_bf16+'T × '+params.mfu_prefill+' × '+params.tp+')',
+       result.prefill_ttft_ms.toFixed(2)+'ms', 'prefill TTFT')
+   +row(4, params.active_params+'B × '+params.bytes_param+' bytes ÷ '+params.tp+' ÷ ('+params.mem_bw_tbs+'TB/s × '+params.mfu_bw+')',
+       result.tpot_roofline_ms.toFixed(2)+'ms × '+params.tpot_correction+'x', 'TPOT (roofline × correction)')
+   +row('4b', 'TPOT corrected', result.tpot_ms.toFixed(2)+'ms', 'empirical correction')
+   +row(5, 'min(prefill '+result.prefill_seq_s_gpu.toFixed(3)+', decode '+result.decode_seq_s_gpu.toFixed(3)+') × '+params.batch_eff,
+       std.seq_s_gpu.toFixed(3)+' req/s/GPU', 'standard seq/s/GPU')
+   +row(6, 'ceil('+result.req_s.toFixed(2)+' ÷ '+std.seq_s_gpu.toFixed(3)+')',
+       std.gpus+' '+gpuLabel+'s', 'base GPU count')
+   +row(7, 'ceil('+std.gpus+' × '+(1+params.buffer_pct/100).toFixed(2)+')',
+       std.gpus_buf+' '+gpuLabel+'s', '+'+params.buffer_pct+'% buffer')
+   +'<div style="margin-top:10px;padding-top:6px;border-top:2px solid var(--border);color:var(--text4);font-size:10px">DISAGG:</div>'
+   +row('D1', 'ceil('+result.req_s.toFixed(2)+' ÷ '+result.prefill_seq_s_gpu.toFixed(3)+')',
+       dis.prefill_gpus+' '+gpuLabel+'s', 'prefill GPUs')
+   +row('D2', 'ceil('+result.req_s.toFixed(2)+' ÷ '+result.decode_seq_s_gpu.toFixed(3)+')',
+       dis.decode_gpus+' '+gpuLabel+'s', 'decode GPUs')
+   +row('D3', dis.prefill_gpus+' + '+dis.decode_gpus+' × '+(1+params.buffer_pct/100).toFixed(2),
+       dis.total_gpus_buf+' '+gpuLabel+'s', 'total + buffer');
+}
+
+function renderTPGPUCompare(params){
+  var tbl = document.getElementById('tp-gpu-compare-tbl');
+  if(!tbl) return;
+  var gpus = ['H100','H200','B200','A100 80GB','MI300X','MI350X'];
+  var thead = '<tr style="background:var(--bg3);border-bottom:2px solid var(--border)">'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;color:var(--text3);text-align:left">GPU</th>'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;color:var(--text3)">TFLOPS BF16</th>'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;color:var(--text3)">Mem BW</th>'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;color:var(--text3)">Prefill TTFT</th>'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;color:var(--text3)">TPOT</th>'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;color:var(--text3)">seq/s/GPU</th>'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;color:var(--text3)">GPUs needed</th>'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;color:var(--text3)">+buffer</th>'
+    +'<th style="padding:7px 10px;font-size:10px;font-weight:600;color:var(--text3)">vs H100</th>'
+    +'</tr>';
+  var h100Result = null;
+  var rows = gpus.map(function(gname){
+    var g = GPU_DATA.find(function(x){ return x.name===gname; });
+    if(!g) return '';
+    var p2 = Object.assign({},params,{
+      tflops_bf16: g.tflops_bf16||989, mem_bw_tbs: g.mem_bw||3.35,
+      mfu_prefill: g.mfu_prefill||0.38, mfu_bw: g.mfu_bw||0.87,
+      tpot_correction: (g.vendor==='amd'?6.0:4.0),
+      vram_gb: g.vram||80, gpu_name: gname
+    });
+    var r = computeThroughput(p2);
+    if(gname==='H100') h100Result = r;
+    var isSelected = gname===params.gpu_name;
+    var vsH100 = h100Result ? (h100Result.standard.gpus / Math.max(r.standard.gpus,1)).toFixed(2)+'×' : '—';
+    return {r:r, g:g, isSelected:isSelected, vsH100:vsH100};
+  });
+  // Recalc vsH100 now that h100Result is set
+  var tbody = rows.map(function(row){
+    if(!row) return '';
+    var r = row.r, g = row.g;
+    var vsH100 = h100Result ? (h100Result.standard.gpus / Math.max(r.standard.gpus,1)).toFixed(2)+'×' : '—';
+    var bg = row.isSelected ? 'background:rgba(59,130,246,.06)' : '';
+    return '<tr style="border-bottom:1px solid var(--border);'+bg+'">'
+      +'<td style="padding:6px 10px;font-weight:600;font-size:12px">'+(row.isSelected?'▶ ':'')+g.name+'</td>'
+      +'<td style="padding:6px 10px;font-family:var(--mono);font-size:11px;text-align:right">'+(g.tflops_bf16||'—')+'</td>'
+      +'<td style="padding:6px 10px;font-family:var(--mono);font-size:11px;text-align:right">'+(g.mem_bw||'—')+'TB/s</td>'
+      +'<td style="padding:6px 10px;font-family:var(--mono);font-size:11px;text-align:right">'+r.prefill_ttft_ms.toFixed(1)+'ms</td>'
+      +'<td style="padding:6px 10px;font-family:var(--mono);font-size:11px;text-align:right">'+r.standard.tpot_ms.toFixed(1)+'ms</td>'
+      +'<td style="padding:6px 10px;font-family:var(--mono);font-size:11px;text-align:right;color:var(--cyan)">'+r.standard.seq_s_gpu.toFixed(3)+'</td>'
+      +'<td style="padding:6px 10px;font-family:var(--mono);font-size:11px;text-align:right;font-weight:700;color:var(--blue)">'+r.standard.gpus+'</td>'
+      +'<td style="padding:6px 10px;font-family:var(--mono);font-size:11px;text-align:right;color:var(--green)">'+r.standard.gpus_buf+'</td>'
+      +'<td style="padding:6px 10px;font-family:var(--mono);font-size:11px;text-align:right;color:var(--amber)">'+vsH100+'</td>'
+      +'</tr>';
+  }).join('');
+  tbl.innerHTML = thead + tbody;
+}
+
+function renderTPSensitivity(params){
+  var el = document.getElementById('tp-sensitivity');
+  if(!el) return;
+  // Vary req/day and prefix %
+  var reqDays = [1e6, 10e6, 50e6, 100e6, 500e6];
+  var prefixes = [0, 50, 80, 90];
+  var html = '<div style="font-size:12px;font-weight:600;margin-bottom:10px">GPUs needed (standard mode) · rows=req/day · cols=prefix cache %</div>';
+  html += '<table style="border-collapse:collapse;font-size:11px;font-family:var(--mono)">';
+  html += '<tr><th style="padding:5px 10px;text-align:right;color:var(--text4)">req/day</th>'
+    +prefixes.map(function(p){ return '<th style="padding:5px 10px;color:var(--text4)">'+p+'% cache</th>'; }).join('')+'</tr>';
+  reqDays.forEach(function(rd){
+    html += '<tr>';
+    html += '<td style="padding:5px 10px;color:var(--text2);font-weight:600">'+(rd>=1e9?(rd/1e9).toFixed(0)+'B':rd>=1e6?(rd/1e6).toFixed(0)+'M':(rd/1e3).toFixed(0)+'K')+'</td>';
+    prefixes.forEach(function(pfx){
+      var p2 = Object.assign({},params,{req_day:rd, prefix_pct:pfx});
+      var r = computeThroughput(p2);
+      var isBase = (rd===params.req_day && pfx===params.prefix_pct);
+      html += '<td style="padding:5px 10px;text-align:right;'+(isBase?'color:var(--blue);font-weight:700':'color:var(--text2)')+'">'
+        +r.standard.gpus_buf+'</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+
+// ── LIVE RECALC (when user edits fields) ──────────────────────────────────
+function tpRecalc(){
+  if(!TP_STATE.lastResult) return;  // Only recalc if estimate was already run
+  // Fast recalc — no loading animation
+  var params = TP_STATE.lastParams;
+  if(!params) return;
+  // Update params from current inputs
+  params.active_params = parseFloat(document.getElementById('tp-active-params').value)||params.active_params;
+  params.total_params  = parseFloat(document.getElementById('tp-total-params').value)||params.total_params;
+  params.bytes_param   = parseFloat(document.getElementById('tp-bytes-param').value)||params.bytes_param;
+  params.tflops_bf16   = parseFloat(document.getElementById('tp-tflops').value)||params.tflops_bf16;
+  params.mem_bw_tbs    = parseFloat(document.getElementById('tp-membw').value)||params.mem_bw_tbs;
+  params.mfu_prefill   = parseFloat(document.getElementById('tp-mfu-pre').value)||params.mfu_prefill;
+  params.mfu_bw        = parseFloat(document.getElementById('tp-mfu-bw').value)||params.mfu_bw;
+  params.tpot_correction = parseFloat(document.getElementById('tp-tpot-corr').value)||params.tpot_correction;
+  params.batch_eff     = parseFloat(document.getElementById('tp-batch-eff').value)||params.batch_eff;
+  params.tp            = parseInt(document.getElementById('tp-tp').value)||params.tp;
+  params.isl           = parseInt(document.getElementById('tp-isl').value)||params.isl;
+  params.osl           = parseInt(document.getElementById('tp-osl').value)||params.osl;
+  params.prefix_pct    = parseInt(document.getElementById('tp-prefix-pct').value)||0;
+  params.req_day       = parseInt(document.getElementById('tp-req-day').value)||params.req_day;
+  params.buffer_pct    = parseInt(document.getElementById('tp-buffer').value)||params.buffer_pct;
+  var result = computeThroughput(params);
+  TP_STATE.lastResult = result;
+  TP_STATE.lastParams = params;
+  renderTPResults(result, params);
+}
+
+// ── EXPORT ────────────────────────────────────────────────────────────────
+function tpBuildJSON(){
+  var r = TP_STATE.lastResult;
+  var p = TP_STATE.lastParams;
+  if(!r||!p) return null;
+  return {
+    meta: { generated: new Date().toISOString(), tool: 'gpu.calc v5.6.0', type: 'throughput_sizing' },
+    inputs: {
+      model: p.model_name, gpu: p.gpu_name, tp: p.tp, precision: p.bytes_param+'B/param',
+      isl: p.isl, osl: p.osl, prefix_pct: p.prefix_pct, eff_isl: r.eff_isl,
+      batch: p.batch, req_day: p.req_day, buffer_pct: p.buffer_pct
+    },
+    assumptions: {
+      active_params_B: p.active_params, total_params_B: p.total_params,
+      tflops_bf16: p.tflops_bf16, mem_bw_tbs: p.mem_bw_tbs,
+      mfu_prefill: p.mfu_prefill, mfu_bw: p.mfu_bw,
+      tpot_correction: p.tpot_correction, batch_efficiency: p.batch_eff
+    },
+    results: {
+      standard: r.standard,
+      disagg:   r.disagg,
+      mem_floor_gpus: r.mem_floor_gpus,
+      bottleneck: r.bottleneck,
+      prefill_ttft_ms: r.prefill_ttft_ms,
+      tpot_ms: r.tpot_ms
+    },
+    disclaimer: 'Roofline estimate ±30-50% accuracy. Validate with AIC data or benchmarks before procurement.'
+  };
+}
+
+function tpExportJSON(){
+  var j = tpBuildJSON();
+  if(!j){ alert('Run calculation first.'); return; }
+  navigator.clipboard.writeText(JSON.stringify(j, null, 2));
+  alert('JSON copied to clipboard.');
+}
+
+function tpExportCSV(){
+  var r = TP_STATE.lastResult;
+  var p = TP_STATE.lastParams;
+  if(!r||!p){ alert('Run calculation first.'); return; }
+  var lines = [
+    'GPU Throughput Sizing — gpu.calc v5.6.0',
+    'Generated: '+new Date().toISOString(),
+    'DISCLAIMER: Roofline estimate ±30-50% accuracy. Validate before procurement.',
+    '',
+    'INPUTS',
+    'model,'+p.model_name,
+    'gpu,'+p.gpu_name,
+    'tp,'+p.tp,
+    'isl,'+p.isl,
+    'osl,'+p.osl,
+    'prefix_pct,'+p.prefix_pct,
+    'eff_isl,'+r.eff_isl,
+    'req_day,'+p.req_day,
+    'buffer_pct,'+p.buffer_pct,
+    '',
+    'ASSUMPTIONS',
+    'active_params_B,'+p.active_params,
+    'total_params_B,'+p.total_params,
+    'bytes_per_param,'+p.bytes_param,
+    'tflops_bf16,'+p.tflops_bf16,
+    'mem_bw_tbs,'+p.mem_bw_tbs,
+    'mfu_prefill,'+p.mfu_prefill,
+    'mfu_bw_decode,'+p.mfu_bw,
+    'tpot_correction,'+p.tpot_correction,
+    'batch_efficiency,'+p.batch_eff,
+    '',
+    'RESULTS',
+    'metric,value',
+    'prefill_ttft_ms,'+r.prefill_ttft_ms.toFixed(2),
+    'tpot_ms,'+r.tpot_ms.toFixed(2),
+    'bottleneck,'+r.bottleneck,
+    'standard_seq_s_gpu,'+r.standard.seq_s_gpu.toFixed(4),
+    'standard_gpus_min,'+r.standard.gpus,
+    'standard_gpus_buffered,'+r.standard.gpus_buf,
+    'disagg_prefill_gpus,'+r.disagg.prefill_gpus,
+    'disagg_decode_gpus,'+r.disagg.decode_gpus,
+    'disagg_total_gpus,'+r.disagg.total_gpus,
+    'disagg_total_buffered,'+r.disagg.total_gpus_buf,
+    'pd_ratio,'+r.disagg.pd_ratio,
+    'memory_floor_gpus,'+r.mem_floor_gpus,
+  ];
+  var blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href   = url;
+  a.download = 'throughput-sizing-'+p.model_name.replace(/[^a-z0-9]/gi,'_')+'-'+p.gpu_name+'-'+Date.now()+'.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function tpExportSheets(){
+  var r = TP_STATE.lastResult;
+  var p = TP_STATE.lastParams;
+  if(!r||!p){ alert('Run calculation first.'); return; }
+  // Build TSV data for Google Sheets (tab-separated, opens cleanly)
+  var tsv = [
+    ['GPU THROUGHPUT SIZING','gpu.calc v5.6.0',new Date().toLocaleDateString()].join('\t'),
+    ['DISCLAIMER','Roofline estimate ±30-50% — validate with benchmarks before procurement'].join('\t'),
+    [''],
+    ['INPUTS (blue = user editable)','',''],
+    ['Model',p.model_name,''],
+    ['GPU',p.gpu_name,''],
+    ['Tensor Parallel (TP)',p.tp,''],
+    ['Input tokens (ISL)',p.isl,''],
+    ['Output tokens (OSL)',p.osl,''],
+    ['Prefix cache %',p.prefix_pct,''],
+    ['Effective ISL',r.eff_isl,'= ISL × (1 - prefix%)'],
+    ['Requests / day',p.req_day,''],
+    ['req/sec target',r.req_s.toFixed(2),'= req_day / 86400'],
+    ['Buffer %',p.buffer_pct,''],
+    [''],
+    ['ASSUMPTIONS (amber = can override)','',''],
+    ['Active params (B)',p.active_params,'For MoE: active experts only'],
+    ['Total params (B)',p.total_params,'For memory floor calc'],
+    ['Bytes per param',p.bytes_param,'BF16=2, FP8=1, FP4=0.5'],
+    ['BF16 TFLOPS',p.tflops_bf16,'GPU spec'],
+    ['Mem BW (TB/s)',p.mem_bw_tbs,'GPU spec'],
+    ['MFU prefill',p.mfu_prefill,'Practical compute utilisation'],
+    ['BW util decode',p.mfu_bw,'Practical bandwidth utilisation'],
+    ['TPOT correction factor',p.tpot_correction,'Empirical: accounts for KV cache + attention overhead'],
+    ['Batch efficiency',p.batch_eff,'Continuous batching effectiveness'],
+    [''],
+    ['CALCULATION STEPS','Formula','Result'],
+    ['1. Demand',p.req_day+' / 86400',r.req_s.toFixed(2)+' req/sec'],
+    ['2. Effective ISL',p.isl+' × (1-'+p.prefix_pct+'%)',r.eff_isl+' tokens'],
+    ['3. Prefill TTFT','2 × '+p.active_params+'B × '+r.eff_isl+' / ('+p.tflops_bf16+'T × '+p.mfu_prefill+' × '+p.tp+')',r.prefill_ttft_ms.toFixed(2)+'ms'],
+    ['4. TPOT (roofline)',p.active_params+'B × '+p.bytes_param+' / '+p.tp+' / ('+p.mem_bw_tbs+' × '+p.mfu_bw+')',r.tpot_roofline_ms.toFixed(2)+'ms'],
+    ['4b. TPOT (corrected)','roofline × '+p.tpot_correction,r.tpot_ms.toFixed(2)+'ms'],
+    ['5. Prefill seq/s/GPU','1 / (prefill_time × TP)',r.prefill_seq_s_gpu.toFixed(4)],
+    ['6. Decode seq/s/GPU','1000 / (TPOT × OSL × TP)',r.decode_seq_s_gpu.toFixed(4)],
+    ['7. Bottleneck','min(prefill, decode)',r.bottleneck.toUpperCase()],
+    ['8. Standard seq/s/GPU','min(p,d) × batch_eff',r.standard.seq_s_gpu.toFixed(4)],
+    ['9. GPUs (standard)','ceil(req_s / seq_s_gpu)',r.standard.gpus],
+    ['10. GPUs + buffer','ceil(gpus × (1+buf%))',r.standard.gpus_buf],
+    ['11. Disagg prefill GPUs','ceil(req_s / prefill_seq_s_gpu)',r.disagg.prefill_gpus],
+    ['12. Disagg decode GPUs','ceil(req_s / decode_seq_s_gpu)',r.disagg.decode_gpus],
+    ['13. Disagg total + buffer','(P+D) × (1+buf%)',r.disagg.total_gpus_buf],
+    [''],
+    ['RESULTS (green = final answer)',''],
+    ['Standard GPUs (recommended)',r.standard.gpus_buf,''],
+    ['Disagg GPUs (recommended)',r.disagg.total_gpus_buf,'P:D = '+r.disagg.pd_ratio],
+    ['Memory floor GPUs',r.mem_floor_gpus,'From model weights only'],
+    ['FINAL RECOMMENDATION','max(memory, min(std, disagg))',Math.max(r.mem_floor_gpus, Math.min(r.standard.gpus_buf, r.disagg.total_gpus_buf))],
+  ].map(function(row){ return Array.isArray(row)?row.join('\t'):row; }).join('\n');
+
+  // Copy TSV to clipboard — user pastes into Google Sheets
+  navigator.clipboard.writeText(tsv).then(function(){
+    alert('Copied! Open Google Sheets → new sheet → click cell A1 → Ctrl+V (Cmd+V on Mac) → all data pastes with formatting.\n\nOr open: https://docs.google.com/spreadsheets/create');
+  }).catch(function(){
+    // Fallback: open data URL
+    var url = 'data:text/tab-separated-values;charset=utf-8,' + encodeURIComponent(tsv);
+    var a = document.createElement('a'); a.href=url; a.download='throughput-sizing.tsv'; a.click();
+  });
+}
+
+function tpExportAPI(){
+  var p = TP_STATE.lastParams;
+  if(!p){ alert('Run calculation first.'); return; }
+  var example = JSON.stringify({
+    model_name: p.model_name, gpu: p.gpu_name, tp: p.tp,
+    active_params_B: p.active_params, total_params_B: p.total_params,
+    bytes_per_param: p.bytes_param, tflops_bf16: p.tflops_bf16,
+    mem_bw_tbs: p.mem_bw_tbs, mfu_prefill: p.mfu_prefill, mfu_bw: p.mfu_bw,
+    tpot_correction: p.tpot_correction, batch_efficiency: p.batch_eff,
+    isl: p.isl, osl: p.osl, prefix_pct: p.prefix_pct, batch: p.batch,
+    req_day: p.req_day, buffer_pct: p.buffer_pct
+  }, null, 2);
+  navigator.clipboard.writeText('POST https://billowing-scene-eb2c.vikasgrover2004.workers.dev/throughput\nContent-Type: application/json\n\n'+example);
+  alert('API call template copied to clipboard.\n\nEndpoint: /throughput (coming soon — currently pure client-side)');
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+function initThroughputPage(){
+  initTPModelChips();
+  initTPGPUChips();
+  tpUpdateEffISL();
+  tpUpdateSummaries();
+}
+
+// CSS for loading animation (injected once)
+(function(){
+  var style = document.createElement('style');
+  style.textContent = `
+    @keyframes tpPulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.15);opacity:.7} }
+    .tp-step { display:flex;align-items:center;gap:10px;padding:5px 0;font-size:12px;color:var(--text2);opacity:.4;transition:opacity .3s,color .3s }
+    .tp-step-icon { font-size:15px;width:22px;text-align:center;flex-shrink:0 }
+  `;
+  document.head.appendChild(style);
+})();
+
+// ===== END THROUGHPUT SIZING ENGINE =====
 
 // ===== END CALIBRATED ESTIMATE PAGE =====
 
