@@ -7459,7 +7459,7 @@ function tpReadParams(){
     kv_heads:      parseInt(document.getElementById('tp-kv-heads').value)||8,
     head_dim:      parseInt(document.getElementById('tp-head-dim').value)||64,
     hidden_dim:    parseInt(document.getElementById('tp-hidden-dim').value)||4096,
-    bytes_param:   parseFloat(document.getElementById('tp-bytes-param-val')||{value:'2'}).value||2,
+    bytes_param:   (function(){ var el=document.getElementById('tp-bytes-param-val'); return el?parseFloat(el.value)||2:2; })(),
     bytes_kv:      (function(){ var el=document.getElementById('tp-bytes-kv-val'); return el?parseFloat(el.value)||2:2; })(),
     // gpu
     flops:         parseFloat(document.getElementById('tp-tflops').value)*1e12||989e12,
