@@ -1748,10 +1748,11 @@ button{font-family:var(--sans);cursor:pointer}
           <div class="panel-label">Preset</div>
           <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px" id="tp-model-chips"></div>
           <div class="panel-label">HF model ID</div>
-          <div style="display:flex;gap:6px;margin-bottom:8px">
-            <input id="tp-hf-id" type="text" placeholder="e.g. openai/gpt-oss-20b" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text1);font-size:11px">
+          <div style="display:flex;gap:6px;margin-bottom:4px">
+            <input id="tp-hf-id" type="text" placeholder="e.g. meta-llama/Llama-3.1-8B" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text1);font-size:11px">
             <button class="btn btn-sm btn-primary" onclick="tpHFLookup()">Go</button>
           </div>
+          <div id="tp-hf-status" class="hf-status" style="margin-bottom:8px;font-size:11px"></div>
 
           <div class="panel-label">Precision</div>
           <div class="chips-wrap" style="margin-bottom:10px">
@@ -2606,7 +2607,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.7.1</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.7.2</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -3692,15 +3693,16 @@ function hfLookup(){
   });
 }
 function fetchHFModel(id,statusId,cb){
-  var st=document.getElementById(statusId);
-  if(!id){st.textContent='Enter a model ID first';st.className='hf-status err';return;}
+  var st=statusId?document.getElementById(statusId):null;
+  function setStatus(msg,cls){ if(st){ st.textContent=msg; if(cls) st.className=cls; } }
+  if(!id){ setStatus('Enter a model ID first','hf-status err'); return; }
   // Validate format: must contain org/model
   if(id.indexOf('/')<1){
-    st.innerHTML='✗ Missing org prefix — try <b>org/model-name</b><br>'
+    if(st) st.innerHTML='✗ Missing org prefix — try <b>org/model-name</b><br>'
       +'<span style="font-size:10px;color:var(--text4)">e.g. meta-llama/Llama-3.1-8B, deepseek-ai/DeepSeek-R1-Distill-Qwen-32B</span>';
-    st.className='hf-status err';return;
+    setStatus('','hf-status err'); return;
   }
-  st.textContent='Fetching from HuggingFace...';st.className='hf-status';
+  setStatus('Fetching from HuggingFace...','hf-status');
   var hfToken=localStorage.getItem('hf_token')||'';
   var url,useDirectHF=false;
   if(HF_PROXY){
@@ -6141,7 +6143,7 @@ function hideGpuTip(){
 var AIC_WORKER_URL = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
 
-// ===== PERFORMANCE TAB v5.7.1 =====
+// ===== PERFORMANCE TAB v5.7.2 =====
 
 var AIC_WORKER = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
@@ -7037,7 +7039,7 @@ function exportPerfV2CSV(){
   var sections = [];
 
   // Header
-  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.7.1');
+  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.7.2');
   sections.push('Model: '+PERF_STATE.modelLabel+', GPU: '+(PERF_GPU_LABELS[meta.gpu]||meta.gpu)+', Backend: '+(meta.backend||'').toUpperCase()+', TP='+meta.tp);
   sections.push('ISL: '+meta.isl+', OSL: '+meta.osl+', Prefix: '+meta.pct+'%, Eff ISL: '+Math.round(meta.isl*(1-meta.pct/100)));
   sections.push('Target: '+rd.toLocaleString()+' req/day ('+( rd/86400).toFixed(1)+' req/sec), Buffer: '+buf+'%');
@@ -7176,7 +7178,7 @@ function warmUpAIC(){
   fetch(AIC_WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:'systems',payload:{}})}).catch(function(){});
 }
 
-// ===== THROUGHPUT SIZING ENGINE v5.7.1 =====
+// ===== THROUGHPUT SIZING ENGINE v5.7.2 =====
 // Spec: https://gpu.calc / throughput-spec
 // Formulas locked after validation against AIC silicon data (gpt-oss-20b H100/H200 TP=8)
 
@@ -7271,20 +7273,13 @@ function tpEngine(p) {
   var batch_capped  = batch_cap_raw < p.batch;
   var batch_fragged = eff_batch < batch_cap_raw;
 
-  // F2: Three-component queue model
-  // Component 1: batch fill time (arrival rate based)
+  // F2: Queue model — batch fill time (primary signal)
+  // M/D/1 head-of-line is too noisy without knowing final replica count
+  // Use simple batch accumulation as primary, with a modest load factor
   var queue_batch_fill = eff_batch / req_per_sec;
-  // Component 2: head-of-line blocking (M/D/1 approximation)
-  // Requests arriving while replicas are decoding wait ~1 decode cycle
-  var est_tpot_s   = TTFT_compute * 0.15;  // rough estimate before TP known
-  var est_decode_s = est_tpot_s * p.osl;
-  var est_e2e_s    = TTFT_compute + est_decode_s;
-  var est_seq_s    = 1.0 / Math.max(est_e2e_s, 0.001);
-  var est_replicas = Math.max(1, Math.ceil(req_per_sec / (est_seq_s * (p.tput_eff||0.85))));
-  var utilization  = Math.min(req_per_sec / (est_replicas * est_seq_s), 0.95);
-  var queue_hol    = TTFT_compute * utilization / (2 * Math.max(1 - utilization, 0.05));
-  // Final queue: max of batch fill and head-of-line
-  var TTFT_queue   = Math.max(queue_batch_fill, queue_hol);
+  // Modest load adjustment: at higher req/s relative to capacity, queue grows
+  // Use a conservative factor rather than M/D/1 which blows up near utilization=1
+  var TTFT_queue   = queue_batch_fill;  // primary: time to fill a batch
   var TTFT_total   = TTFT_compute + TTFT_queue;
 
   // ── Per-TP TPOT function ──────────────────────────────────
@@ -7324,11 +7319,11 @@ function tpEngine(p) {
     var gpus_tput = Math.ceil((req_per_sec / (seq_s * tput_eff)) * TP_HEADROOM);
     // Concurrency floor: enough GPU-replicas to process `concurrency` parallel prefills
     // within the TTFT budget
-    var pf_time_s  = TTFT_compute / 1000;
-    var ttft_bgt_s = Math.max(TTFT_total / 1000, pf_time_s * 1.1);
-    var gpus_conc  = Math.max(1, Math.ceil((p.concurrency * pf_time_s) / ttft_bgt_s));
-    gpus_conc      = Math.ceil(gpus_conc / tp) * tp;  // round up to TP boundary
-    var gpus       = Math.max(gpus_tput, gpus_conc);
+    var pf_time_s   = TTFT_compute / 1000;
+    var pf_budget_s = Math.max(pf_time_s * 3.0, 0.5);  // budget = 3× single prefill
+    var gpus_conc   = Math.max(1, Math.ceil((p.concurrency * pf_time_s) / pf_budget_s));
+    gpus_conc       = Math.ceil(gpus_conc / tp) * tp;
+    var gpus        = Math.max(gpus_tput, gpus_conc);
     var reps       = Math.ceil(gpus / tp);
 
     // Memory
@@ -7386,11 +7381,11 @@ function tpEngine(p) {
     var tput_eff   = p.tput_eff || TP_THROUGHPUT_EFF;
     // F1: throughput-based floor
     var gpus_tput  = Math.ceil((req_per_sec / (rps_rep * tput_eff)) * TP_HEADROOM);
-    // F1: concurrency floor — enough GPUs to serve `concurrency` parallel prefills
-    // within TTFT_total budget
-    var target_ttft_s = TTFT_total / 1000;
-    var gpus_conc  = Math.ceil((p.concurrency * time_s) / Math.max(target_ttft_s, 0.001));
-    gpus_conc = Math.ceil(gpus_conc / tp) * tp;  // round up to TP multiple
+    // F1: concurrency floor — enough prefill GPUs for concurrent load
+    // Budget = 3× single prefill time (gives reasonable headroom)
+    var pf_budget_s = Math.max(time_s * 3.0, 0.5);
+    var gpus_conc   = Math.max(1, Math.ceil((p.concurrency * time_s) / pf_budget_s));
+    gpus_conc = Math.ceil(gpus_conc / tp) * tp;
     return Math.max(gpus_tput, gpus_conc);
   }
   // Best prefill TP: minimize prefill GPUs
@@ -7451,7 +7446,7 @@ function tpEngine(p) {
 function tpReadParams(){
   var g = GPU_DATA.find(function(x){ return x.name===document.getElementById('tp-gpu-name').value; }) || {};
   var isMoe = document.getElementById('tp-is-moe').value==='1';
-  return {
+  var out = {
     // model
     total_params:  parseFloat(document.getElementById('tp-total-params').value)||21,
     active_params: parseFloat(document.getElementById('tp-active-params').value)||3.5,
@@ -7465,7 +7460,7 @@ function tpReadParams(){
     head_dim:      parseInt(document.getElementById('tp-head-dim').value)||64,
     hidden_dim:    parseInt(document.getElementById('tp-hidden-dim').value)||4096,
     bytes_param:   parseFloat(document.getElementById('tp-bytes-param-val')||{value:'2'}).value||2,
-    bytes_kv:      2,
+    bytes_kv:      (function(){ var el=document.getElementById('tp-bytes-kv-val'); return el?parseFloat(el.value)||2:2; })(),
     // gpu
     flops:         parseFloat(document.getElementById('tp-tflops').value)*1e12||989e12,
     bandwidth:     parseFloat(document.getElementById('tp-bw').value)*1e12||4.8e12,
@@ -7479,7 +7474,7 @@ function tpReadParams(){
     osl:           parseInt(document.getElementById('tp-osl').value)||50,
     batch:         parseInt(document.getElementById('tp-batch').value)||64,
     concurrency:   parseInt(document.getElementById('tp-concurrency').value)||100,
-    prefix_pct:    parseFloat(document.getElementById('tp-prefix').value)||0,
+    prefix_pct:    (function(){ var v=parseFloat(document.getElementById('tp-prefix').value); return isNaN(v)?80:v; })(),
     req_day:       parseFloat(document.getElementById('tp-req-day').value)||100e6,
     // tp
     tp_mode:       document.getElementById('tp-tp-mode').value||'auto',
@@ -7494,6 +7489,13 @@ function tpReadParams(){
     tput_eff:      parseFloat(document.getElementById('tp-tput-eff').value)||0.85,
     batch_frag_factor: 0.70,  // F4: scheduler fragmentation
   };
+  // Scale model params from Billions to actual values HERE
+  // so both runThroughput() and tpLiveRecalc() use same path
+  out.total_params        *= 1e9;
+  out.active_params       *= 1e9;
+  out.dense_params        *= 1e9;
+  out.total_expert_params *= 1e9;
+  return out;
 }
 
 // Converts model params B → actual params bytes (e.g. 3.5B → 3.5e9)
@@ -8054,12 +8056,7 @@ function runThroughput(){
     [3400,95, 'Comparing vLLM vs llm-d sizing...'],
   ];
 
-  var params = tpReadParams();
-  // Scale params from B to actual
-  params.total_params   *= 1e9;
-  params.active_params  *= 1e9;
-  params.dense_params   *= 1e9;
-  params.total_expert_params *= 1e9;
+  var params = tpReadParams();  // already scaled ×1e9 inside tpReadParams
 
   stepData.forEach(function(s, i){
     setTimeout(function(){
@@ -8094,11 +8091,7 @@ function runThroughput(){
 // ── LIVE RECALC (field changes after first run) ───────────────
 function tpLiveRecalc(){
   if(!TP_STATE.lastResult) return;
-  var params = tpReadParams();
-  params.total_params        *= 1e9;
-  params.active_params       *= 1e9;
-  params.dense_params        *= 1e9;
-  params.total_expert_params *= 1e9;
+  var params = tpReadParams();  // already scaled ×1e9 inside tpReadParams
   var result = tpEngine(params);
   TP_STATE.lastResult = result;
   TP_STATE.lastParams = params;
@@ -8123,15 +8116,24 @@ function tpUpdateRPS(){
 function tpSetPrec(prec, bytes, btn){
   document.querySelectorAll('[id^="tp-prec-"]').forEach(function(b){ b.classList.remove('on'); });
   if(btn) btn.classList.add('on');
-  // Store bytes_param as hidden
+  // Store bytes_param as hidden input
   var hi = document.getElementById('tp-bytes-param-val');
   if(!hi){ hi=document.createElement('input'); hi.type='hidden'; hi.id='tp-bytes-param-val'; document.body.appendChild(hi); }
-  hi.value = bytes;
-  // Update TFLOPS if FP8
+  hi.value = String(bytes);
+  // Also update bytes_kv (KV cache precision follows model precision by default)
+  var hkv = document.getElementById('tp-bytes-kv-val');
+  if(!hkv){ hkv=document.createElement('input'); hkv.type='hidden'; hkv.id='tp-bytes-kv-val'; document.body.appendChild(hkv); }
+  hkv.value = String(bytes);
+  // Update TFLOPS: FP8 = 2× BF16, FP4 = 4× BF16
   var g = GPU_DATA.find(function(x){ return x.name===document.getElementById('tp-gpu-name').value; });
   if(g){
     var fl = document.getElementById('tp-tflops');
-    if(fl) fl.value = prec==='fp8' && g.tflops_fp8 ? g.tflops_fp8 : (g.tflops_bf16||989);
+    if(fl){
+      if(prec==='fp8' && g.tflops_fp8) fl.value = g.tflops_fp8;
+      else if(prec==='fp4' && g.tflops_fp4) fl.value = g.tflops_fp4;
+      else if(prec==='fp4') fl.value = Math.round((g.tflops_bf16||989)*4);  // estimate FP4 ≈ 4×
+      else fl.value = g.tflops_bf16||989;
+    }
   }
   tpLiveRecalc();
 }
@@ -8258,19 +8260,35 @@ function tpSelectModel(name, btn){
 
 function tpHFLookup(){
   var id = (document.getElementById('tp-hf-id').value||'').trim();
-  if(!id) return;
-  fetchHFModel(id, null, function(m){
+  if(!id){ alert('Enter a HuggingFace model ID (e.g. meta-llama/Llama-3.1-8B)'); return; }
+  // Show loading state
+  var btn = document.querySelector('[onclick="tpHFLookup()"]');
+  if(btn){ btn.textContent='...'; btn.disabled=true; }
+  fetchHFModel(id, 'tp-hf-status', function(m){
+    if(btn){ btn.textContent='Go'; btn.disabled=false; }
     document.querySelectorAll('#tp-model-chips .chip').forEach(function(b){ b.classList.remove('on'); });
-    var set=function(id,v){var e=document.getElementById(id);if(e&&v!=null)e.value=v;};
-    set('tp-total-params',  m.params||7);
-    set('tp-active-params', m.params||7);
-    set('tp-layers',        m.layers||32);
-    set('tp-kv-heads',      m.kvHeads||8);
-    set('tp-head-dim',      m.headDim||128);
+    var set=function(fid,v){var e=document.getElementById(fid);if(e&&v!=null)e.value=v;};
+    set('tp-total-params',   m.params||7);
+    set('tp-active-params',  m.activeParams||m.params||7);
+    set('tp-dense-params',   m.denseParams||m.params||7);
+    set('tp-expert-params',  m.totalExpertParams||0);
+    set('tp-num-experts',    m.totalExperts||1);
+    set('tp-active-experts', m.activeExperts||0);
+    set('tp-layers',         m.layers||32);
+    set('tp-kv-heads',       m.kvHeads||8);
+    set('tp-head-dim',       m.headDim||128);
+    set('tp-hidden-dim',     m.hiddenDim||(m.params<=8?4096:m.params<=30?5120:8192));
+    var isMoe = (m.totalExperts>1||m.activeExperts>0)?'1':'0';
+    var moeEl = document.getElementById('tp-is-moe');
+    if(moeEl) moeEl.value = isMoe;
     var disp=document.getElementById('tp-model-name-display');
     if(disp) disp.textContent=m.name||id;
+    var sum=document.getElementById('tph-model');
+    if(sum) sum.textContent=m.name||id;
     tpLiveRecalc();
   });
+  // Restore button on error after timeout
+  setTimeout(function(){ if(btn&&btn.disabled){ btn.textContent='Go'; btn.disabled=false; } }, 8000);
 }
 
 function tpSyncFromCapacity(){
@@ -8291,7 +8309,7 @@ function tpExportSheets(){
   if(!r||!p){alert('Run calculation first.');return;}
   var sel=r.selected;
   var lines=[
-    'GPU THROUGHPUT SIZING\tgpu.calc v5.7.1\t'+new Date().toLocaleDateString(),
+    'GPU THROUGHPUT SIZING\tgpu.calc v5.7.2\t'+new Date().toLocaleDateString(),
     'DISCLAIMER\tDirectional estimate ±30-50%. Validate before procurement.',
     '',
     'INPUTS','model\t'+document.getElementById('tp-model-name-display').textContent,
@@ -8336,7 +8354,7 @@ function tpExportSheets(){
 function tpExportJSON(){
   var r=TP_STATE.lastResult; if(!r){alert('Run first.');return;}
   var out={
-    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.7.1'},
+    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.7.2'},
     inputs:TP_STATE.lastParams,
     kv:{kv_per_token:r.kv_per_token,kv_per_request_mb:r.kv_per_request_mb,kv_ratio:r.kv_ratio,eta_kv:r.eta_kv},
     ttft:{compute_ms:r.ttft_compute_ms,queue_ms:r.ttft_queue_ms,total_ms:r.ttft_total_ms},
@@ -8366,25 +8384,37 @@ function tpExportCSV(){
 })();
 
 // ── INIT ──────────────────────────────────────────────────────
+var _tpPageInited = false;
 function initThroughputPage(){
-  initTPModelChips();
-  initTPGPUChips();
-  // Ensure model name display element exists
-  var nameWrap=document.getElementById('tp-model-chips');
-  if(nameWrap && !document.getElementById('tp-model-name-display')){
-    var d=document.createElement('div'); d.id='tp-model-name-display'; d.textContent='gpt-oss-20b';
-    d.style.cssText='font-size:12px;font-weight:600;color:var(--blue);padding:2px 0 6px';
-    nameWrap.parentNode.insertBefore(d, nameWrap.nextSibling);
+  // Guard: only fully init once — prevents chip state reset on re-navigation
+  if(!_tpPageInited){
+    initTPModelChips();
+    initTPGPUChips();
+    // Model name display element
+    var nameWrap=document.getElementById('tp-model-chips');
+    if(nameWrap && !document.getElementById('tp-model-name-display')){
+      var d=document.createElement('div'); d.id='tp-model-name-display'; d.textContent='gpt-oss-20b';
+      d.style.cssText='font-size:12px;font-weight:600;color:var(--blue);padding:2px 0 6px';
+      nameWrap.parentNode.insertBefore(d, nameWrap.nextSibling);
+    }
+    // bytes_param hidden input
+    if(!document.getElementById('tp-bytes-param-val')){
+      var hi=document.createElement('input'); hi.type='hidden'; hi.id='tp-bytes-param-val'; hi.value='2';
+      document.body.appendChild(hi);
+    }
+    // bytes_kv hidden input
+    if(!document.getElementById('tp-bytes-kv-val')){
+      var hkv=document.createElement('input'); hkv.type='hidden'; hkv.id='tp-bytes-kv-val'; hkv.value='2';
+      document.body.appendChild(hkv);
+    }
+    tpUpdateISLDisplay();
+    tpUpdateRPS();
+    _tpPageInited = true;
   }
-  // bytes_param hidden
-  if(!document.getElementById('tp-bytes-param-val')){
-    var hi=document.createElement('input'); hi.type='hidden'; hi.id='tp-bytes-param-val'; hi.value='2';
-    document.body.appendChild(hi);
-  }
-  tpUpdateISLDisplay();
-  tpUpdateRPS();
+  // Always re-render if we have a result (page may have been hidden)
+  if(TP_STATE.lastResult) tpRender(TP_STATE.lastResult);
 }
-// ===== END THROUGHPUT SIZING ENGINE v5.7.1 =====
+// ===== END THROUGHPUT SIZING ENGINE v5.7.2 =====
 
 
 
