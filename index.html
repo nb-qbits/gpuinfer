@@ -2607,7 +2607,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.7.2</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.7.3</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -6143,7 +6143,7 @@ function hideGpuTip(){
 var AIC_WORKER_URL = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
 
-// ===== PERFORMANCE TAB v5.7.2 =====
+// ===== PERFORMANCE TAB v5.7.3 =====
 
 var AIC_WORKER = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
@@ -7039,7 +7039,7 @@ function exportPerfV2CSV(){
   var sections = [];
 
   // Header
-  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.7.2');
+  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.7.3');
   sections.push('Model: '+PERF_STATE.modelLabel+', GPU: '+(PERF_GPU_LABELS[meta.gpu]||meta.gpu)+', Backend: '+(meta.backend||'').toUpperCase()+', TP='+meta.tp);
   sections.push('ISL: '+meta.isl+', OSL: '+meta.osl+', Prefix: '+meta.pct+'%, Eff ISL: '+Math.round(meta.isl*(1-meta.pct/100)));
   sections.push('Target: '+rd.toLocaleString()+' req/day ('+( rd/86400).toFixed(1)+' req/sec), Buffer: '+buf+'%');
@@ -7178,7 +7178,7 @@ function warmUpAIC(){
   fetch(AIC_WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:'systems',payload:{}})}).catch(function(){});
 }
 
-// ===== THROUGHPUT SIZING ENGINE v5.7.2 =====
+// ===== THROUGHPUT SIZING ENGINE v5.7.3 =====
 // Spec: https://gpu.calc / throughput-spec
 // Formulas locked after validation against AIC silicon data (gpt-oss-20b H100/H200 TP=8)
 
@@ -7230,19 +7230,31 @@ function tpShowQuote(){
   if(s) s.textContent='— '+q.s;
 }
 
-// ── PURE COMPUTE ENGINE ───────────────────────────────────────
-// No DOM access. All inputs from p object. Returns result object.
+// ── PURE COMPUTE ENGINE v5.7.3 ────────────────────────────────
+// Formula changes vs v5.7.3:
+//   avg_ctx = ISL + OSL/2  (KV grows during decode)
+//   kv_ratio uses avg_ctx + eff_batch (not ISL + batch)
+//   kv_gpu   uses avg_ctx + eff_batch (not ISL + batch)
+//   seq_per_sec = eff_batch / (TPOT × OSL)  ← batch amortisation
+//   GPU count   = req_s × TPOT × OSL / (eff_batch × tput_eff) × headroom
 function tpEngine(p) {
-  // STEP 1: NORMALIZATION
+
+  // ── STEP 1: NORMALIZATION ─────────────────────────────────
   var prefix_frac = p.prefix_pct / 100.0;
-  var isl_eff     = p.isl * (1 - prefix_frac);
+  var isl_eff     = p.isl * (1 - prefix_frac);   // prefill compute tokens
   var req_per_sec = p.req_day / 86400.0;
 
-  // STEP 2: KV CACHE — full ISL always (prefix skips compute not storage)
+  // ── STEP 2: AVERAGE CONTEXT LENGTH ───────────────────────
+  // KV cache grows from ISL at step 0 to ISL+OSL at step OSL.
+  // Average over the decode phase = ISL + OSL/2.
+  // Prefill still uses full ISL (KV must store all input tokens).
+  var avg_ctx        = p.isl + p.osl / 2;          // average decode context
   var kv_per_token   = 2 * p.layers * p.kv_heads * p.head_dim * p.bytes_kv;
-  var kv_per_request = kv_per_token * p.isl;  // FULL ISL
+  var kv_per_request = kv_per_token * avg_ctx;      // avg KV per request during decode
 
-  // STEP 3: EFFECTIVE PARAMS FOR PREFILL
+  // ── STEP 3: EFFECTIVE PARAMS FOR PREFILL ─────────────────
+  // MoE: attention (dense) + active expert FFN only
+  // Dense: use total params
   var eff_params;
   if(p.is_moe && p.total_expert_params > 0){
     var act_exp = (p.total_expert_params / p.num_experts) * p.active_experts;
@@ -7251,9 +7263,18 @@ function tpEngine(p) {
     eff_params = p.total_params;
   }
 
-  // STEP 4: KV RATIO + ETA_KV (TP-independent)
+  // ── STEP 4: BATCH CAP (F4) ───────────────────────────────
+  // Two constraints: max_batched_tokens budget + scheduler fragmentation
+  var max_bt        = p.max_batch_tokens || TP_MAX_BATCH_TOKENS;
+  var batch_frag    = p.batch_frag_factor || 0.70;
+  var batch_cap_raw = Math.min(p.batch, Math.floor(max_bt / Math.max(isl_eff, 1)));
+  var eff_batch     = Math.max(1, Math.round(Math.min(batch_cap_raw, p.concurrency) * batch_frag));
+  var batch_capped  = batch_cap_raw < p.batch;
+
+  // ── STEP 5: KV RATIO + ETA_KV (TP-independent) ───────────
+  // Uses avg_ctx (not ISL) and eff_batch (not configured batch)
   var active_bytes = p.active_params * p.bytes_param;
-  var kv_ratio     = (kv_per_request * p.batch) / active_bytes;
+  var kv_ratio     = (kv_per_token * avg_ctx * eff_batch) / active_bytes;
   var eta_kv_base  = p.mfu_bw_base;
   var eta_kv;
   if      (kv_ratio > 10) eta_kv = eta_kv_base * 0.70;
@@ -7261,88 +7282,77 @@ function tpEngine(p) {
   else                    eta_kv = eta_kv_base;
   eta_kv = Math.max(eta_kv, 0.22);
 
-  // STEP 5: TTFT (TP-independent)
+  // ── STEP 6: TTFT (TP-independent) ────────────────────────
+  // Compute: uses isl_eff (prefix saves compute, not storage)
+  // Queue:   time to accumulate eff_batch requests at arrival rate
   var TTFT_compute = (isl_eff * 2 * eff_params) / (p.flops * p.mfu_prefill);
-
-  // F4: Batch cap with scheduler fragmentation
-  // max_batched_tokens cap + 0.70 utilization factor (fragmentation + arrival variance)
-  var max_bt        = p.max_batch_tokens || TP_MAX_BATCH_TOKENS;
-  var batch_frag    = p.batch_frag_factor || 0.70;
-  var batch_cap_raw = Math.min(p.batch, Math.floor(max_bt / Math.max(isl_eff, 1)));
-  var eff_batch     = Math.max(1, Math.round(Math.min(batch_cap_raw, p.concurrency) * batch_frag));
-  var batch_capped  = batch_cap_raw < p.batch;
-  var batch_fragged = eff_batch < batch_cap_raw;
-
-  // F2: Queue model — batch fill time (primary signal)
-  // M/D/1 head-of-line is too noisy without knowing final replica count
-  // Use simple batch accumulation as primary, with a modest load factor
-  var queue_batch_fill = eff_batch / req_per_sec;
-  // Modest load adjustment: at higher req/s relative to capacity, queue grows
-  // Use a conservative factor rather than M/D/1 which blows up near utilization=1
-  var TTFT_queue   = queue_batch_fill;  // primary: time to fill a batch
+  var TTFT_queue   = eff_batch / req_per_sec;
   var TTFT_total   = TTFT_compute + TTFT_queue;
 
-  // ── Per-TP TPOT function ──────────────────────────────────
+  // ── STEP 7: PER-TP TPOT + SIZING ─────────────────────────
   function tpot_for_tp(tp){
-    // F3: Graduated interconnect penalty
-    // TP=1: no comm  TP=2-4: NVLink small  TP=8: NVLink notable  TP=16: cross-node IB
+    // F3: Graduated NVLink/IB interconnect penalty
     var ib_pen;
     if      (tp <= 1)  ib_pen = 1.00;
     else if (tp <= 2)  ib_pen = 1.05;
     else if (tp <= 4)  ib_pen = 1.08;
     else if (tp <= 8)  ib_pen = 1.10;
-    else               ib_pen = (p.ib_penalty || TP_IB_PENALTY);  // 1.20 for TP=16
-    var cal    = p.is_moe ? (p.cal_moe || TP_CAL_MOE) : (p.cal_dense || TP_CAL_DENSE);
-    var eta_w  = p.eta_weights || TP_ETA_WEIGHTS;
+    else               ib_pen = (p.ib_penalty || TP_IB_PENALTY);  // 1.20 TP=16
+    var cal   = p.is_moe ? (p.cal_moe || TP_CAL_MOE) : (p.cal_dense || TP_CAL_DENSE);
+    var eta_w = p.eta_weights || TP_ETA_WEIGHTS;
 
-    // Memory reads — NEVER multiply bandwidth by TP
-    // F5: use eff_batch (scheduler-limited) not configured batch
+    // Memory reads per decode step — NEVER multiply bandwidth by TP
+    // Weights: active params sharded across TP GPUs
+    // KV:      avg_ctx tokens × eff_batch requests, sharded across TP GPUs
     var w_gpu  = p.active_params * p.bytes_param / tp;
-    var kv_gpu = kv_per_token * p.isl * eff_batch / tp;  // FULL ISL, eff_batch
+    var kv_gpu = kv_per_token * avg_ctx * eff_batch / tp;
     var t_w    = w_gpu  / (p.bandwidth * eta_w);
     var t_kv   = kv_gpu / (p.bandwidth * eta_kv);
-    var t_comp = Math.max(t_w, t_kv);  // pipelined — not sum
+    var t_comp = Math.max(t_w, t_kv);           // pipelined — NOT summed
 
-    // Communication
-    var ibw   = (p.nvlink_bw > 0) ? p.nvlink_bw : p.pcie_bw;
-    var ar_b  = 2 * p.hidden_dim * p.batch * p.bytes_param;
-    var tf    = Math.min((tp - 1) / tp, 0.65);
-    var t_ar  = (ar_b / ibw) * tf * (p.allreduce_eff || TP_ALLREDUCE_EFF);
-    var t_sync= p.layers * (p.sync_us || TP_SYNC_US) * 1e-6 * (p.sync_overlap || TP_SYNC_OVERLAP);
-    var oh    = Math.max(0.6e-3, 0.1 * t_comp);
+    // Communication overhead (all-reduce + sync barriers)
+    var ibw    = (p.nvlink_bw > 0) ? p.nvlink_bw : p.pcie_bw;
+    var ar_b   = 2 * p.hidden_dim * eff_batch * p.bytes_param;
+    var tf     = Math.min((tp - 1) / tp, 0.65);
+    var t_ar   = (ar_b / ibw) * tf * (p.allreduce_eff || TP_ALLREDUCE_EFF);
+    var t_sync = p.layers * (p.sync_us || TP_SYNC_US) * 1e-6 * (p.sync_overlap || TP_SYNC_OVERLAP);
+    var oh     = Math.max(0.6e-3, 0.1 * t_comp);
 
-    var tpot  = (t_comp + t_ar + t_sync + oh) * ib_pen * cal;
+    var tpot   = (t_comp + t_ar + t_sync + oh) * ib_pen * cal;
 
-    // Sizing — F1: apply concurrency floor alongside throughput floor
-    var seq_s     = (1.0 / tpot) / p.osl;
-    var tput_eff  = p.tput_eff || TP_THROUGHPUT_EFF;
-    var gpus_tput = Math.ceil((req_per_sec / (seq_s * tput_eff)) * TP_HEADROOM);
-    // Concurrency floor: enough GPU-replicas to process `concurrency` parallel prefills
-    // within the TTFT budget
-    var pf_time_s   = TTFT_compute / 1000;
-    var pf_budget_s = Math.max(pf_time_s * 3.0, 0.5);  // budget = 3× single prefill
+    // ── THROUGHPUT (batch amortisation) ──────────────────────
+    // Continuous batching processes eff_batch requests per decode step.
+    // tokens_per_sec = eff_batch / TPOT  (per replica)
+    // seq_per_sec    = tokens_per_sec / OSL = eff_batch / (TPOT × OSL)
+    var tput_eff   = p.tput_eff || TP_THROUGHPUT_EFF;
+    var seq_per_sec = eff_batch / (tpot * p.osl);         // ← THE FIX: was 1/(TPOT×OSL)
+    var gpus_tput  = Math.ceil((req_per_sec / (seq_per_sec * tput_eff)) * TP_HEADROOM);
+
+    // Concurrency floor (F1): enough replicas for concurrent prefill load
+    var pf_time_s   = TTFT_compute;                       // seconds
+    var pf_budget_s = Math.max(pf_time_s * 3.0, 0.5);
     var gpus_conc   = Math.max(1, Math.ceil((p.concurrency * pf_time_s) / pf_budget_s));
     gpus_conc       = Math.ceil(gpus_conc / tp) * tp;
     var gpus        = Math.max(gpus_tput, gpus_conc);
-    var reps       = Math.ceil(gpus / tp);
+    var reps        = Math.ceil(gpus / tp);
 
-    // Memory
+    // Memory fit check
     var w_gb  = p.total_params * p.bytes_param / tp / 1e9;
-    var kv_gb = kv_per_token * (p.concurrency / tp) / 1e9;
+    var kv_gb = kv_per_token * avg_ctx * (p.concurrency / tp) / 1e9;
     var fits  = (w_gb + kv_gb) < 0.9 * p.vram_gb;
 
-    // Explanation
     var explain;
-    if(tp === 1)      explain = 'Full KV on one GPU. No comm overhead. KV-heavy TPOT at large batch.';
-    else if(tp <= 4)  explain = 'KV sharded '+tp+'×. NVLink comm negligible. Balanced trade-off.';
-    else if(tp === 8) explain = 'KV sharded 8×. NVLink within node. Production standard.';
-    else              explain = 'KV sharded 16×. Requires InfiniBand/NVSwitch. +20% TPOT overhead.';
+    if     (tp === 1)  explain = 'Full KV on one GPU. No comm overhead. KV-heavy at large context.';
+    else if(tp <= 4)   explain = 'KV sharded '+tp+'×. NVLink comm negligible. Good balance.';
+    else if(tp === 8)  explain = 'KV sharded 8×. NVLink within node. Production standard.';
+    else               explain = 'KV sharded 16×. Requires InfiniBand/NVSwitch. +20% overhead.';
 
     return {
       tp:tp, fits:fits, tpot_ms:tpot*1000,
       t_w_ms:t_w*1000, t_kv_ms:t_kv*1000,
-      t_comp_ms:t_comp*1000, t_ar_ms:t_ar*1000, t_sync_ms:t_sync*1000,
-      oh_ms:oh*1000, ib_pen:ib_pen,
+      t_comp_ms:t_comp*1000, t_ar_ms:t_ar*1000,
+      t_sync_ms:t_sync*1000, oh_ms:oh*1000,
+      ib_pen:ib_pen, seq_per_sec:seq_per_sec,
       gpus:gpus, replicas:reps,
       kv_gpu_mb:kv_gpu/1e6, w_gb:w_gb, kv_gb:kv_gb,
       kv_bound:t_kv>=t_w,
@@ -7352,92 +7362,83 @@ function tpEngine(p) {
     };
   }
 
-  // STEP 6: TP SWEEP
+  // ── STEP 8: TP SWEEP ─────────────────────────────────────
   var tp_sweep = {};
   TP_OPTIONS.forEach(function(tp){ tp_sweep[tp] = tpot_for_tp(tp); });
 
-  // STEP 7: SELECT TP
+  // ── STEP 9: SELECT TP ────────────────────────────────────
   var selected_tp;
   if(p.tp_mode === 'manual'){
     selected_tp = p.tp_value;
   } else {
-    // Auto: minimize GPUs among memory-fitting candidates
     var valid = TP_OPTIONS.filter(function(tp){ return tp_sweep[tp].fits; });
-    if(valid.length === 0) valid = [8];
+    if(!valid.length) valid = [8];
     selected_tp = valid.reduce(function(best,tp){
       return tp_sweep[tp].gpus < tp_sweep[best].gpus ? tp : best;
     }, valid[0]);
   }
 
-  // STEP 8: DISAGG mode (llm-d)
-  // Prefill pool: compute-bound, dedicated
-  // Decode pool:  bandwidth-bound, dedicated
-  // Each picks own TP independently
+  // ── STEP 10: DISAGG (llm-d) ──────────────────────────────
+  // Prefill pool: sized by compute throughput + concurrency floor
+  // Decode pool:  same as vLLM decode sizing (tp_sweep already computed)
   function disagg_prefill_gpus(tp){
-    var flops_req  = 2 * eff_params * isl_eff;
-    var gpu_flops  = p.flops * p.mfu_prefill * tp;
-    var time_s     = flops_req / gpu_flops;
-    var rps_rep    = 1.0 / time_s;
-    var tput_eff   = p.tput_eff || TP_THROUGHPUT_EFF;
-    // F1: throughput-based floor
-    var gpus_tput  = Math.ceil((req_per_sec / (rps_rep * tput_eff)) * TP_HEADROOM);
-    // F1: concurrency floor — enough prefill GPUs for concurrent load
-    // Budget = 3× single prefill time (gives reasonable headroom)
-    var pf_budget_s = Math.max(time_s * 3.0, 0.5);
-    var gpus_conc   = Math.max(1, Math.ceil((p.concurrency * time_s) / pf_budget_s));
-    gpus_conc = Math.ceil(gpus_conc / tp) * tp;
+    // Prefill throughput: how many prefills per second per replica
+    var flops_req   = 2 * eff_params * isl_eff;
+    var gpu_flops   = p.flops * p.mfu_prefill * tp;
+    var pf_time_s   = flops_req / gpu_flops;           // seconds per prefill
+    var rps_rep     = 1.0 / pf_time_s;
+    var tput_eff    = p.tput_eff || TP_THROUGHPUT_EFF;
+    var gpus_tput   = Math.ceil((req_per_sec / (rps_rep * tput_eff)) * TP_HEADROOM);
+    // Concurrency floor
+    var pf_budget_s = Math.max(pf_time_s * 3.0, 0.5);
+    var gpus_conc   = Math.max(1, Math.ceil((p.concurrency * pf_time_s) / pf_budget_s));
+    gpus_conc       = Math.ceil(gpus_conc / tp) * tp;
     return Math.max(gpus_tput, gpus_conc);
   }
-  // Best prefill TP: minimize prefill GPUs
-  var valid_p = TP_OPTIONS.filter(function(tp){ return tp_sweep[tp].fits; });
-  if(!valid_p.length) valid_p=[8];
+
+  var valid_p  = TP_OPTIONS.filter(function(tp){ return tp_sweep[tp].fits; });
+  if(!valid_p.length) valid_p = [8];
+
   var best_p_tp = valid_p.reduce(function(b,tp){
     return disagg_prefill_gpus(tp) < disagg_prefill_gpus(b) ? tp : b;
   }, valid_p[0]);
   var p_gpus = disagg_prefill_gpus(best_p_tp);
 
-  // Best decode TP: minimize decode GPUs (same as vLLM decode)
   var best_d_tp = valid_p.reduce(function(b,tp){
     return tp_sweep[tp].gpus < tp_sweep[b].gpus ? tp : b;
   }, valid_p[0]);
   var d_gpus = tp_sweep[best_d_tp].gpus;
 
-  var q_factor = p.disagg_q_factor !== undefined ? p.disagg_q_factor : TP_DISAGG_Q_FACTOR;
+  var q_factor          = p.disagg_q_factor !== undefined ? p.disagg_q_factor : TP_DISAGG_Q_FACTOR;
   var TTFT_total_disagg = TTFT_compute + TTFT_queue * q_factor;
 
   var disagg = {
-    prefill_tp:best_p_tp, prefill_gpus:p_gpus,
-    prefill_replicas:Math.ceil(p_gpus/best_p_tp),
-    decode_tp:best_d_tp, decode_gpus:d_gpus,
-    decode_replicas:Math.ceil(d_gpus/best_d_tp),
-    total_gpus:p_gpus+d_gpus,
-    pd_ratio:(d_gpus/Math.max(p_gpus,1)).toFixed(1),
-    ttft_total_ms:TTFT_total_disagg*1000,
-    ttft_compute_ms:TTFT_compute*1000,
-    ttft_queue_ms:TTFT_queue*q_factor*1000,
+    prefill_tp:best_p_tp,       prefill_gpus:p_gpus,
+    prefill_replicas:Math.ceil(p_gpus / best_p_tp),
+    decode_tp:best_d_tp,        decode_gpus:d_gpus,
+    decode_replicas:Math.ceil(d_gpus / best_d_tp),
+    total_gpus:p_gpus + d_gpus,
+    pd_ratio:(d_gpus / Math.max(p_gpus, 1)).toFixed(1),
+    ttft_total_ms:TTFT_total_disagg * 1000,
+    ttft_compute_ms:TTFT_compute * 1000,
+    ttft_queue_ms:TTFT_queue * q_factor * 1000,
     tpot_ms:tp_sweep[best_d_tp].tpot_ms,
   };
 
   return {
-    // Derived values
-    isl_eff:isl_eff, req_per_sec:req_per_sec,
+    isl_eff:isl_eff, avg_ctx:avg_ctx, req_per_sec:req_per_sec,
     eff_params:eff_params,
     kv_per_token:kv_per_token,
-    kv_per_request_mb:kv_per_request/1e6,
+    kv_per_request_mb:kv_per_request / 1e6,
     kv_ratio:kv_ratio, eta_kv:eta_kv,
     eff_batch:eff_batch, batch_capped:batch_capped,
-    // TTFT
-    ttft_compute_ms:TTFT_compute*1000,
-    ttft_queue_ms:TTFT_queue*1000,
-    ttft_total_ms:TTFT_total*1000,
-    // Selected TP
+    ttft_compute_ms:TTFT_compute * 1000,
+    ttft_queue_ms:TTFT_queue * 1000,
+    ttft_total_ms:TTFT_total * 1000,
     selected_tp:selected_tp,
     selected:tp_sweep[selected_tp],
-    // Full sweep
     tp_sweep:tp_sweep,
-    // Disagg
     disagg:disagg,
-    // params echo
     p:p,
   };
 }
@@ -7528,7 +7529,7 @@ function tpRender(result){
     ctxEl.innerHTML =
       '<strong>'+document.getElementById('tp-model-name-display').textContent+'</strong>'
       +' on <strong>'+document.getElementById('tp-gpu-name').value+'</strong>'
-      +' · ISL='+p.isl+' (eff <strong style="color:var(--blue)">'+result.isl_eff.toLocaleString()+'</strong>)'
+      +' · ISL='+p.isl+' (eff <strong style="color:var(--blue)">'+result.isl_eff.toLocaleString()+'</strong> · avg_ctx='+Math.round(result.avg_ctx).toLocaleString()+')'
       +' · OSL='+p.osl+' · batch='+p.batch+capNote
       +' · <strong style="color:var(--blue)">'+(p.req_day/1e6).toFixed(0)+'M/day</strong>'
       +' · TP=<strong>'+result.selected_tp+'</strong>'
@@ -7754,7 +7755,8 @@ function tpRenderDetailsSection(r){
     +tpMetricCell('kv ratio', r.kv_ratio.toFixed(1)+'×', '→ η_kv='+r.eta_kv.toFixed(3), r.kv_ratio>10?'var(--red)':r.kv_ratio>3?'var(--amber)':'var(--text1)')
     +tpMetricCell('eff_batch', r.eff_batch+'', 'after cap+frag (×0.7)', r.batch_capped?'var(--amber)':'var(--text1)')
     +'</div>'
-    +(r.batch_capped?'<div style="margin-top:6px;font-size:11px;color:var(--amber)">⚠ Batch '+p.batch+' capped to '+Math.floor(p.max_batch_tokens/r.isl_eff)+' by max_batched_tokens, then ×0.7 frag → effective batch = '+r.eff_batch+'</div>':'')
+    +'<div style="margin-top:6px;font-size:11px;color:var(--text3)">avg_ctx = ISL+OSL/2 = '+p.isl+'+'+p.osl+'/2 = <strong>'+Math.round(r.avg_ctx)+'</strong> tokens — KV grows during decode</div>'
+    +(r.batch_capped?'<div style="margin-top:4px;font-size:11px;color:var(--amber)">⚠ Batch '+p.batch+' capped to '+Math.floor(p.max_batch_tokens/r.isl_eff)+' by max_batched_tokens, then ×0.7 frag → effective batch = '+r.eff_batch+'</div>':'')
     +'</div>';
 }
 
@@ -8019,7 +8021,8 @@ function tpRenderMath(r){
     row('1a', p.req_day.toLocaleString()+' / 86400', r.req_per_sec.toFixed(2)+' req/s', 'demand')
    +row('1b', p.isl+' × (1−'+p.prefix_pct+'%)', r.isl_eff.toLocaleString()+' tokens', 'eff ISL')
    +row('2',  '2 × '+p.kv_heads+' kv_heads × '+p.head_dim+' head_dim × '+p.layers+' layers × '+p.bytes_kv+'B', (r.kv_per_token/1024).toFixed(1)+' KB/token', 'kv_per_token')
-   +row('2b', 'kv_per_token × '+p.isl.toLocaleString(), r.kv_per_request_mb.toFixed(1)+' MB', 'kv_per_req (full ISL)')
+   +row('2b', 'ISL + OSL/2 = '+p.isl+' + '+p.osl+'/2', r.avg_ctx.toFixed(0)+' tokens', 'avg_ctx (decode phase)')
+   +row('2c', 'kv_per_token × avg_ctx', r.kv_per_request_mb.toFixed(1)+' MB', 'kv_per_req (avg over decode)')
    +row('3',  'dense_params + (expert_params/num_exp × active_exp)', (r.eff_params/1e9).toFixed(3)+'B', 'eff_params for prefill')
    +row('4',  'kv_per_req × batch / active_bytes', r.kv_ratio.toFixed(2)+'×', 'kv_ratio (TP-independent)')
    +row('5',  'η_kv from kv_ratio', r.eta_kv.toFixed(3), 'KV BW efficiency')
@@ -8027,11 +8030,11 @@ function tpRenderMath(r){
    +row('6b', 'min(eff_batch='+r.eff_batch+', conc='+p.concurrency+') / req_s', r.ttft_queue_ms.toFixed(1)+'ms', 'TTFT_queue')
    +row('6c', 'TTFT_compute + TTFT_queue', r.ttft_total_ms.toFixed(1)+'ms', 'TTFT total')
    +row('7a', 'active_params × bytes / TP='+r.selected_tp, sel.t_w_ms.toFixed(3)+'ms', 'time_weights')
-   +row('7b', 'kv_per_token × ISL × batch / TP='+r.selected_tp, sel.t_kv_ms.toFixed(3)+'ms', 'time_kv (FULL ISL)')
+   +row('7b', 'kv_per_token × avg_ctx × eff_batch / TP='+r.selected_tp, sel.t_kv_ms.toFixed(3)+'ms', 'time_kv (avg_ctx + eff_batch)')
    +row('7c', 'max(time_weights, time_kv)', sel.t_comp_ms.toFixed(3)+'ms', 'pipelined — not sum')
    +row('8',  'allreduce + sync + overhead', (sel.t_ar_ms+sel.t_sync_ms+sel.oh_ms).toFixed(3)+'ms', 'communication')
    +row('9',  '(time_compute + comm) × ib_pen × cal_mult', sel.tpot_ms.toFixed(2)+'ms', 'TPOT')
-   +row('10', 'req_s / ((1/TPOT/OSL) × tput_eff) × 1.2', sel.gpus+' GPUs', 'GPU count')
+   +row('10', 'req_s × TPOT × OSL / (eff_batch × tput_eff) × 1.2', sel.gpus+' GPUs', 'GPU count (batch amortised)')
    +row('11', 'ceil(GPUs / TP)', sel.replicas+' replicas', 'replicas');
 }
 
@@ -8309,7 +8312,7 @@ function tpExportSheets(){
   if(!r||!p){alert('Run calculation first.');return;}
   var sel=r.selected;
   var lines=[
-    'GPU THROUGHPUT SIZING\tgpu.calc v5.7.2\t'+new Date().toLocaleDateString(),
+    'GPU THROUGHPUT SIZING\tgpu.calc v5.7.3\t'+new Date().toLocaleDateString(),
     'DISCLAIMER\tDirectional estimate ±30-50%. Validate before procurement.',
     '',
     'INPUTS','model\t'+document.getElementById('tp-model-name-display').textContent,
@@ -8354,7 +8357,7 @@ function tpExportSheets(){
 function tpExportJSON(){
   var r=TP_STATE.lastResult; if(!r){alert('Run first.');return;}
   var out={
-    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.7.2'},
+    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.7.3'},
     inputs:TP_STATE.lastParams,
     kv:{kv_per_token:r.kv_per_token,kv_per_request_mb:r.kv_per_request_mb,kv_ratio:r.kv_ratio,eta_kv:r.eta_kv},
     ttft:{compute_ms:r.ttft_compute_ms,queue_ms:r.ttft_queue_ms,total_ms:r.ttft_total_ms},
@@ -8414,7 +8417,7 @@ function initThroughputPage(){
   // Always re-render if we have a result (page may have been hidden)
   if(TP_STATE.lastResult) tpRender(TP_STATE.lastResult);
 }
-// ===== END THROUGHPUT SIZING ENGINE v5.7.2 =====
+// ===== END THROUGHPUT SIZING ENGINE v5.7.3 =====
 
 
 
