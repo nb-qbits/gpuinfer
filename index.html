@@ -838,7 +838,7 @@ button{font-family:var(--sans);cursor:pointer}
     <button class="nav-tab" onclick="nav('advanced')">&#9654; Quick Estimate</button>
     <button class="nav-tab" onclick="nav('advanced')">Capacity<span class="nav-sub">Memory fit, KV cache, concurrency</span></button>
     <button class="nav-tab" onclick="nav('throughput')">&#128200; Throughput<span class="nav-sub">GPU count for your request volume</span></button>
-    <button class="nav-tab" onclick="nav('calibrated')">&#9889; Performance<span class="nav-sub">Throughput, latency, and GPU sizing</span></button>
+    <!-- Performance tab hidden for now -->
     <button class="nav-tab" onclick="nav('explorer')">GPU Compare<span class="nav-sub">Compare GPUs by cost &amp; performance</span></button>
     <button class="nav-tab" onclick="nav('saved')">&#128204; Scenarios<span class="nav-sub">Saved configurations</span></button>
     <button class="nav-tab" onclick="nav('hybrid')">&#128200; Cost<span class="nav-sub">Cloud vs on-prem modeling</span></button>
@@ -2607,7 +2607,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.7.3</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.7.4</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -6143,7 +6143,7 @@ function hideGpuTip(){
 var AIC_WORKER_URL = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
 
-// ===== PERFORMANCE TAB v5.7.3 =====
+// ===== PERFORMANCE TAB v5.7.4 =====
 
 var AIC_WORKER = 'https://billowing-scene-eb2c.vikasgrover2004.workers.dev/perf';
 
@@ -7039,7 +7039,7 @@ function exportPerfV2CSV(){
   var sections = [];
 
   // Header
-  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.7.3');
+  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.7.4');
   sections.push('Model: '+PERF_STATE.modelLabel+', GPU: '+(PERF_GPU_LABELS[meta.gpu]||meta.gpu)+', Backend: '+(meta.backend||'').toUpperCase()+', TP='+meta.tp);
   sections.push('ISL: '+meta.isl+', OSL: '+meta.osl+', Prefix: '+meta.pct+'%, Eff ISL: '+Math.round(meta.isl*(1-meta.pct/100)));
   sections.push('Target: '+rd.toLocaleString()+' req/day ('+( rd/86400).toFixed(1)+' req/sec), Buffer: '+buf+'%');
@@ -7178,7 +7178,7 @@ function warmUpAIC(){
   fetch(AIC_WORKER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({endpoint:'systems',payload:{}})}).catch(function(){});
 }
 
-// ===== THROUGHPUT SIZING ENGINE v5.7.3 =====
+// ===== THROUGHPUT SIZING ENGINE v5.7.4 =====
 // Spec: https://gpu.calc / throughput-spec
 // Formulas locked after validation against AIC silicon data (gpt-oss-20b H100/H200 TP=8)
 
@@ -7230,8 +7230,8 @@ function tpShowQuote(){
   if(s) s.textContent='— '+q.s;
 }
 
-// ── PURE COMPUTE ENGINE v5.7.3 ────────────────────────────────
-// Formula changes vs v5.7.3:
+// ── PURE COMPUTE ENGINE v5.7.4 ────────────────────────────────
+// Formula changes vs v5.7.4:
 //   avg_ctx = ISL + OSL/2  (KV grows during decode)
 //   kv_ratio uses avg_ctx + eff_batch (not ISL + batch)
 //   kv_gpu   uses avg_ctx + eff_batch (not ISL + batch)
@@ -7321,18 +7321,20 @@ function tpEngine(p) {
     var tpot   = (t_comp + t_ar + t_sync + oh) * ib_pen * cal;
 
     // ── THROUGHPUT (batch amortisation) ──────────────────────
-    // Continuous batching processes eff_batch requests per decode step.
-    // tokens_per_sec = eff_batch / TPOT  (per replica)
-    // seq_per_sec    = tokens_per_sec / OSL = eff_batch / (TPOT × OSL)
-    var tput_eff   = p.tput_eff || TP_THROUGHPUT_EFF;
-    var seq_per_sec = eff_batch / (tpot * p.osl);         // ← THE FIX: was 1/(TPOT×OSL)
-    var gpus_tput  = Math.ceil((req_per_sec / (seq_per_sec * tput_eff)) * TP_HEADROOM);
+    // Continuous batching: one replica processes eff_batch requests per decode step.
+    // seq_per_sec (per replica) = eff_batch / (TPOT × OSL)
+    // replicas needed = req_s / (seq_per_sec × tput_eff) × headroom
+    // GPUs = replicas × TP   ← this was missing, causing 8× undercount
+    var tput_eff    = p.tput_eff || TP_THROUGHPUT_EFF;
+    var seq_per_sec = eff_batch / (tpot * p.osl);
+    var reps_tput   = Math.ceil((req_per_sec / (seq_per_sec * tput_eff)) * TP_HEADROOM);
+    var gpus_tput   = reps_tput * tp;
 
     // Concurrency floor (F1): enough replicas for concurrent prefill load
-    var pf_time_s   = TTFT_compute;                       // seconds
+    var pf_time_s   = TTFT_compute;
     var pf_budget_s = Math.max(pf_time_s * 3.0, 0.5);
-    var gpus_conc   = Math.max(1, Math.ceil((p.concurrency * pf_time_s) / pf_budget_s));
-    gpus_conc       = Math.ceil(gpus_conc / tp) * tp;
+    var reps_conc   = Math.max(1, Math.ceil((p.concurrency * pf_time_s) / pf_budget_s));
+    var gpus_conc   = reps_conc * tp;
     var gpus        = Math.max(gpus_tput, gpus_conc);
     var reps        = Math.ceil(gpus / tp);
 
@@ -8312,7 +8314,7 @@ function tpExportSheets(){
   if(!r||!p){alert('Run calculation first.');return;}
   var sel=r.selected;
   var lines=[
-    'GPU THROUGHPUT SIZING\tgpu.calc v5.7.3\t'+new Date().toLocaleDateString(),
+    'GPU THROUGHPUT SIZING\tgpu.calc v5.7.4\t'+new Date().toLocaleDateString(),
     'DISCLAIMER\tDirectional estimate ±30-50%. Validate before procurement.',
     '',
     'INPUTS','model\t'+document.getElementById('tp-model-name-display').textContent,
@@ -8357,7 +8359,7 @@ function tpExportSheets(){
 function tpExportJSON(){
   var r=TP_STATE.lastResult; if(!r){alert('Run first.');return;}
   var out={
-    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.7.3'},
+    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.7.4'},
     inputs:TP_STATE.lastParams,
     kv:{kv_per_token:r.kv_per_token,kv_per_request_mb:r.kv_per_request_mb,kv_ratio:r.kv_ratio,eta_kv:r.eta_kv},
     ttft:{compute_ms:r.ttft_compute_ms,queue_ms:r.ttft_queue_ms,total_ms:r.ttft_total_ms},
@@ -8417,7 +8419,7 @@ function initThroughputPage(){
   // Always re-render if we have a result (page may have been hidden)
   if(TP_STATE.lastResult) tpRender(TP_STATE.lastResult);
 }
-// ===== END THROUGHPUT SIZING ENGINE v5.7.3 =====
+// ===== END THROUGHPUT SIZING ENGINE v5.7.4 =====
 
 
 
