@@ -2636,7 +2636,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.9.2</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.9.3</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -3043,7 +3043,7 @@ function openLayer(id){
 // ===== CORE MATH =====
 // weightsGB defined in compat layer below
 
-var APP_VERSION = '6.0.2'; var APP_VERSION_COMPAT = '5.9.2'; // gpu.calc v6.0.0
+var APP_VERSION = '6.0.3'; var APP_VERSION_COMPAT = '5.9.3'; // gpu.calc v6.0.0
 // ===== CAPACITY ENGINE v6.0.0 =====
 // Layer-by-layer: weights → KV → GPU specs → memory fit → replicas → cost
 
@@ -3571,13 +3571,13 @@ function capRenderL5(C){
   html += capRow('$/GPU/hr', '$'+costPerHr.toFixed(2), '', 'after discount', 'var(--text1)');
   html += capRow('hours/month', '730', '730 hrs', '24×365/12', 'var(--text3)');
   html += capRow('cloud/month', C.totalGPUs+' × $'+costPerHr.toFixed(2)+' × 730', fmtMo(C.cloudMo), '', 'var(--red)');
-  html += capRow('cloud 5yr', fmtMo(C.cloudMo)+' × 60', fmtK(C.cloudCost5yr), '', 'var(--red)');
+  html += capRow('cloud 5yr', fmtMo(C.cloudMo)+' × 60', fmtSmart(C.cloudCost5yr), '', 'var(--red)');
   html += '<div style="border-top:1px solid var(--border);margin:8px 0"></div>';
   html += capRow('hw cost', C.totalGPUs+' × $'+Math.round((S.hwCost||25000)/1000)+'K', fmtK(C.totalGPUs*(S.hwCost||25000)), '', 'var(--text1)');
   html += capRow('on-prem/month', 'amort '+( S.amort||5)+'yr + power', fmtMo(C.onpremMo), '', 'var(--green)');
   var cheaper = C.onpremMo < C.cloudMo;
   html += '<div style="margin-top:8px;padding:8px 10px;background:rgba(5,122,85,.07);border-radius:var(--r);font-size:12px;font-weight:600;color:var(--'+(cheaper?'green':'red')+'">'
-    +(cheaper?'On-prem saves '+fmtMo(C.cloudMo-C.onpremMo)+'/mo over cloud':'Cloud saves '+fmtMo(C.onpremMo-C.cloudMo)+'/mo at current utilisation')
+    +(cheaper?'On-prem saves '+fmtSmart(C.cloudMo-C.onpremMo)+'/mo over cloud':'Cloud saves '+fmtSmart(C.onpremMo-C.cloudMo)+'/mo at current utilisation')
     +'</div>';
   html += '</div>';
 
@@ -3685,7 +3685,7 @@ function calc(){
   _set('oc-gpus-val', C.totalGPUs+'');
   _set('oc-gpus-sub', S.gpuName+' '+S.gpuVram+'GB · '+C.replicas+' replicas');
   _set('oc-cost-val', fmtMo(C.cloudMo)+'/mo');
-  _set('oc-cost-sub', 'GCP · '+fmtK(C.cloudCost5yr)+' over 5yr');
+  _set('oc-cost-sub', 'GCP · '+fmtSmart(C.cloudCost5yr)+' over 5yr');
   _set('oc-onprem-val', fmtMo(C.onpremMo)+'/mo');
   _set('oc-onprem-sub', (S.amort||5)+'yr amort');
   _set('oc-cost-verdict', C.onpremMo<C.cloudMo?'On-prem saves '+fmtMo(C.cloudMo-C.onpremMo)+'/mo':'Cloud competitive');
@@ -4938,8 +4938,8 @@ function renderSaved(){
   row('On-prem vs cloud',function(r){
     var isBest=r.onpremCost5yr===minOP&&savedResults.length>1;
     var mult=r.onpremCost5yr>0?(r.cost5yr/r.onpremCost5yr).toFixed(1)+'×':'';
-    return '<div style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#057a55;flex-shrink:0"></span>On-prem: <strong>'+fmtK(r.onpremCost5yr||0)+'</strong>'+(isBest?lb('best','#057a55'):'')+pb(r.onpremCost5yr||0,maxCost,'#057a55')+'</div>'
-      +'<div style="display:flex;align-items:center;gap:4px;margin-top:4px"><span style="width:8px;height:8px;border-radius:50%;background:#c81e1e;flex-shrink:0"></span>Cloud: <strong>'+fmtK(r.cost5yr||0)+'</strong>'+(mult?' <span style="color:var(--red);font-size:10px">'+mult+'</span>':'')+pb(r.cost5yr||0,maxCost,'#c81e1e')+'</div>';
+    return '<div style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#057a55;flex-shrink:0"></span>On-prem: <strong>'+fmtSmart(r.onpremCost5yr||0)+'</strong>'+(isBest?lb('best','#057a55'):'')+pb(r.onpremCost5yr||0,maxCost,'#057a55')+'</div>'
+      +'<div style="display:flex;align-items:center;gap:4px;margin-top:4px"><span style="width:8px;height:8px;border-radius:50%;background:#c81e1e;flex-shrink:0"></span>Cloud: <strong>'+fmtSmart(r.cost5yr||0)+'</strong>'+(mult?' <span style="color:var(--red);font-size:10px">'+mult+'</span>':'')+pb(r.cost5yr||0,maxCost,'#c81e1e')+'</div>';
   });
   html+='</table></div>';
   container.innerHTML=html;
@@ -5316,15 +5316,15 @@ function calcHybrid(){
     +'</div>'
     +'<div style="text-align:right">'
     +'<div class="audit-waste-lbl">WASTED / YEAR</div>'
-    +'<div class="audit-waste">'+fmtK(waste)+'</div>'
+    +'<div class="audit-waste">'+fmtSmart(waste)+'</div>'
     +'<div style="font-size:11px;color:var(--red);font-family:var(--mono)">'+idleGpus+' extra GPUs × $'+rate.toFixed(2)+'/hr</div>'
     +'</div>'
     +'</div>'
     +'<div class="audit-bar-wrap">'
-    +'<div class="audit-bar-label"><span>Current ('+(running>gpus?'over-provisioned':running<gpus?'under-provisioned':'right-sized')+')</span><span>'+fmtK(current)+'/yr</span></div>'
-    +'<div class="audit-bar"><div class="audit-bar-fill" style="width:100%;background:#c81e1e">'+fmtK(current)+'</div></div>'
-    +'<div class="audit-bar-label"><span>Right-sized</span><span>'+fmtK(rightsized)+'/yr</span></div>'
-    +'<div class="audit-bar"><div class="audit-bar-fill" style="width:'+Math.round(rightsized/current*100)+'%;background:#057a55">'+fmtK(rightsized)+'</div></div>'
+    +'<div class="audit-bar-label"><span>Current ('+(running>gpus?'over-provisioned':running<gpus?'under-provisioned':'right-sized')+')</span><span>'+fmtSmart(current)+'/yr</span></div>'
+    +'<div class="audit-bar"><div class="audit-bar-fill" style="width:100%;background:#c81e1e">'+fmtSmart(current)+'</div></div>'
+    +'<div class="audit-bar-label"><span>Right-sized</span><span>'+fmtSmart(rightsized)+'/yr</span></div>'
+    +'<div class="audit-bar"><div class="audit-bar-fill" style="width:'+Math.round(rightsized/current*100)+'%;background:#057a55">'+fmtSmart(rightsized)+'</div></div>'
     +'</div>'
     +'</div>'
     // Split — real draggable range input
@@ -5344,23 +5344,23 @@ function calcHybrid(){
     // 4-column cost comparison including dedicated node
     +'<div class="section-title" style="margin-bottom:8px">5-YEAR COST COMPARISON</div>'
     +'<div class="cost-compare">'
-    +'<div class="cc-card'+(bestKey==='cloud'?' recommended':'')+'"><div class="cc-label">Pure cloud</div><div class="cc-price" style="color:var(--red)">'+fmtK(purecloudCost5)+'</div><div class="cc-sub">on-demand · all rented</div>'+(bestKey==='cloud'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
+    +'<div class="cc-card'+(bestKey==='cloud'?' recommended':'')+'"><div class="cc-label">Pure cloud</div><div class="cc-price" style="color:var(--red)">'+fmtSmart(purecloudCost5)+'</div><div class="cc-sub">on-demand · all rented</div>'+(bestKey==='cloud'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
     +'<div class="cc-card'+(bestKey==='ded'?' recommended':'')+'"><div class="cc-label">Dedicated node</div><div class="cc-price" style="color:var(--purple)">'+fmtK(dedCost5)+'</div><div class="cc-sub">'+dedNodes+' node'+(dedNodes>1?'s':'')+' · $'+Math.round(dedRateMo/1000)+'K/mo flat</div>'+(bestKey==='ded'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
-    +'<div class="cc-card'+(bestKey==='hybrid'?' recommended':'')+'"><div class="cc-badge">✦ HYBRID</div><div class="cc-label">Hybrid</div><div class="cc-price" style="color:var(--blue)">'+fmtK(hybridCost5)+'</div><div class="cc-sub">'+hybridSplit+'% own · '+(100-hybridSplit)+'% rent</div>'+(bestKey==='hybrid'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
-    +'<div class="cc-card'+(bestKey==='onprem'?' recommended':'')+'"><div class="cc-label">Pure on-prem</div><div class="cc-price" style="color:var(--green)">'+fmtK(pureonpremCost5)+'</div><div class="cc-sub">'+(S.hGpuName||'H100')+' · $'+(hw/1000).toFixed(0)+'K/GPU · '+amort+'yr amort</div>'+(bestKey==='onprem'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
+    +'<div class="cc-card'+(bestKey==='hybrid'?' recommended':'')+'"><div class="cc-badge">✦ HYBRID</div><div class="cc-label">Hybrid</div><div class="cc-price" style="color:var(--blue)">'+fmtSmart(hybridCost5)+'</div><div class="cc-sub">'+hybridSplit+'% own · '+(100-hybridSplit)+'% rent</div>'+(bestKey==='hybrid'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
+    +'<div class="cc-card'+(bestKey==='onprem'?' recommended':'')+'"><div class="cc-label">Pure on-prem</div><div class="cc-price" style="color:var(--green)">'+fmtSmart(pureonpremCost5)+'</div><div class="cc-sub">'+(S.hGpuName||'H100')+' · $'+(hw/1000).toFixed(0)+'K/GPU · '+amort+'yr amort</div>'+(bestKey==='onprem'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
     +'</div>'
     +'<div style="font-size:11px;color:var(--text4);margin-bottom:12px">★ = cheapest at your current utilisation ('+Math.round(util*100)+'%). Dedicated node wins at 25–65% utilisation. On-prem wins above 65%.</div>'
     // bars including dedicated node
     +'<div class="section-title" style="margin-top:14px;margin-bottom:8px">Annual breakdown (5yr total)</div>'
     +'<div>'
-    +'<div class="audit-bar-label"><span>Pure cloud (on-demand)</span><span>'+fmtK(purecloudCost5)+'</span></div>'
-    +'<div class="audit-bar" style="margin-bottom:6px"><div class="audit-bar-fill" style="width:100%;background:#c81e1e">'+fmtK(purecloudCost5)+'</div></div>'
-    +'<div class="audit-bar-label"><span>Dedicated node ('+dedNodes+' node'+(dedNodes>1?'s':'')+' flat)</span><span>'+fmtK(dedCost5)+'</span></div>'
-    +'<div class="audit-bar" style="margin-bottom:6px"><div class="audit-bar-fill" style="width:'+Math.round(dedCost5/purecloudCost5*100)+'%;background:#534AB7">'+fmtK(dedCost5)+'</div></div>'
-    +'<div class="audit-bar-label"><span>Hybrid ('+hybridSplit+'% on-prem · '+(100-hybridSplit)+'% cloud)</span><span>'+fmtK(hybridCost5)+'</span></div>'
-    +'<div class="audit-bar" style="margin-bottom:6px"><div class="audit-bar-fill" style="width:'+Math.round(hybridCost5/purecloudCost5*100)+'%;background:#185FA5">'+fmtK(hybridCost5)+'</div></div>'
-    +'<div class="audit-bar-label"><span>Pure on-prem</span><span>'+fmtK(pureonpremCost5)+'</span></div>'
-    +'<div class="audit-bar"><div class="audit-bar-fill" style="width:'+Math.round(pureonpremCost5/purecloudCost5*100)+'%;background:#057a55">'+fmtK(pureonpremCost5)+'</div></div>'
+    +'<div class="audit-bar-label"><span>Pure cloud (on-demand)</span><span>'+fmtSmart(purecloudCost5)+'</span></div>'
+    +'<div class="audit-bar" style="margin-bottom:6px"><div class="audit-bar-fill" style="width:100%;background:#c81e1e">'+fmtSmart(purecloudCost5)+'</div></div>'
+    +'<div class="audit-bar-label"><span>Dedicated node ('+dedNodes+' node'+(dedNodes>1?'s':'')+' flat)</span><span>'+fmtSmart(dedCost5)+'</span></div>'
+    +'<div class="audit-bar" style="margin-bottom:6px"><div class="audit-bar-fill" style="width:'+Math.round(dedCost5/purecloudCost5*100)+'%;background:#534AB7">'+fmtSmart(dedCost5)+'</div></div>'
+    +'<div class="audit-bar-label"><span>Hybrid ('+hybridSplit+'% on-prem · '+(100-hybridSplit)+'% cloud)</span><span>'+fmtSmart(hybridCost5)+'</span></div>'
+    +'<div class="audit-bar" style="margin-bottom:6px"><div class="audit-bar-fill" style="width:'+Math.round(hybridCost5/purecloudCost5*100)+'%;background:#185FA5">'+fmtSmart(hybridCost5)+'</div></div>'
+    +'<div class="audit-bar-label"><span>Pure on-prem</span><span>'+fmtSmart(pureonpremCost5)+'</span></div>'
+    +'<div class="audit-bar"><div class="audit-bar-fill" style="width:'+Math.round(pureonpremCost5/purecloudCost5*100)+'%;background:#057a55">'+fmtSmart(pureonpremCost5)+'</div></div>'
     +'</div>';
 }
 
@@ -6156,10 +6156,10 @@ function calcFleet(){
 
   // ── Update outcome cards ───────────────────────────────────────────────────
   var _g=function(id){return document.getElementById(id);};
-  if(_g('fhc-api-cost')){_g('fhc-api-cost').textContent=totalApiCostYr>0?fmtK(totalApiCostYr):'$0';_g('fhc-api-cost').style.color=totalApiCostYr>0?'var(--red)':'var(--text3)';}
-  if(_g('fhc-self-cost')){_g('fhc-self-cost').textContent=onpremYr>0?fmtK(onpremYr):'$0';_g('fhc-self-cost').style.color='var(--green)';}
+  if(_g('fhc-api-cost')){_g('fhc-api-cost').textContent=totalApiCostYr>0?fmtSmart(totalApiCostYr):'$0';_g('fhc-api-cost').style.color=totalApiCostYr>0?'var(--red)':'var(--text3)';}
+  if(_g('fhc-self-cost')){_g('fhc-self-cost').textContent=onpremYr>0?fmtSmart(onpremYr):'$0';_g('fhc-self-cost').style.color='var(--green)';}
   if(_g('fhc-gpus')) _g('fhc-gpus').textContent=totalGPUs||'0';
-  if(_g('fhc-savings')){_g('fhc-savings').textContent=savingsYr>0?fmtK(savingsYr):'API is cheaper';_g('fhc-savings').style.color=savingsYr>0?'var(--green)':'var(--red)';}
+  if(_g('fhc-savings')){_g('fhc-savings').textContent=savingsYr>0?fmtSmart(savingsYr):'API is cheaper';_g('fhc-savings').style.color=savingsYr>0?'var(--green)':'var(--red)';}
 
   // ── ROI verdict ────────────────────────────────────────────────────────────
   var roiEl=document.getElementById('roi-grid');
@@ -6167,17 +6167,17 @@ function calcFleet(){
     var roiHtml='';
     if(savingsYr>0){
       if(verdictEl){verdictEl.textContent='✓ Self-hosting makes financial sense';verdictEl.style.color='var(--green)';}
-      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtK(savingsYr)+'</div><div class="roi-stat-lbl">Annual savings</div></div>';
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtSmart(savingsYr)+'</div><div class="roi-stat-lbl">Annual savings</div></div>';
       roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+(payback<12?payback.toFixed(1)+' mo':(payback/12).toFixed(1)+' yr')+'</div><div class="roi-stat-lbl">Payback period</div></div>';
-      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtK(totalApiCostYr)+'</div><div class="roi-stat-lbl">Current API spend</div></div>';
-      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtK(onpremYr)+'</div><div class="roi-stat-lbl">Self-hosted/yr</div></div>';
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtSmart(totalApiCostYr)+'</div><div class="roi-stat-lbl">Current API spend</div></div>';
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtSmart(onpremYr)+'</div><div class="roi-stat-lbl">Self-hosted/yr</div></div>';
     } else {
       if(verdictEl){verdictEl.textContent='Stay on API — volume too low to justify infrastructure';verdictEl.style.color='var(--amber)';}
-      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtK(Math.abs(savingsYr))+'</div><div class="roi-stat-lbl">API saves vs self-host</div></div>';
-      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtK(totalApiCostYr)+'</div><div class="roi-stat-lbl">Current API spend</div></div>';
-      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtK(onpremYr)+'</div><div class="roi-stat-lbl">Self-hosted cost</div></div>';
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtSmart(Math.abs(savingsYr))+'</div><div class="roi-stat-lbl">API saves vs self-host</div></div>';
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtSmart(totalApiCostYr)+'</div><div class="roi-stat-lbl">Current API spend</div></div>';
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtSmart(onpremYr)+'</div><div class="roi-stat-lbl">Self-hosted cost</div></div>';
       var threshold=onpremYr;
-      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtK(threshold)+'/yr</div><div class="roi-stat-lbl">API spend needed to justify</div></div>';
+      roiHtml+='<div class="roi-stat"><div class="roi-stat-val">'+fmtSmart(threshold)+'/yr</div><div class="roi-stat-lbl">API spend needed to justify</div></div>';
     }
     roiEl.innerHTML=roiHtml;
   }
@@ -6188,7 +6188,7 @@ function calcFleet(){
   updateTierSummaries(results);
 
   // ── Config summary ─────────────────────────────────────────────────────────
-  if(_g('fleet-config-summary')) _g('fleet-config-summary').textContent=SF.tiers.length+' tiers · '+SF.totalUsers.toLocaleString()+' users · '+fmtK(totalApiCostYr)+'/yr API';
+  if(_g('fleet-config-summary')) _g('fleet-config-summary').textContent=SF.tiers.length+' tiers · '+SF.totalUsers.toLocaleString()+' users · '+fmtSmart(totalApiCostYr)+'/yr API';
   var concPctVal=Math.round((SF.concurrencyFactor||0.10)*100);
   if(_g('fleet-concurrency-label')) _g('fleet-concurrency-label').textContent=concPctVal+'%';
   if(_g('fleet-conc-pct-label')) _g('fleet-conc-pct-label').textContent=concPctVal+'%';
@@ -6278,7 +6278,7 @@ function renderFleetBreakdown(results){
     var qpd=Math.round(SF.totalUsers*(t.trafficPct/100)*100);
     var naiveYr=qpd*365*(t.avgInputTok*naiveProv.inputPer1M+t.avgOutputTok*naiveProv.outputPer1M)/1e6;
     var saving=naiveYr-r.apiCostYr;
-    var saveTag=saving>0?'<span style="color:var(--green);font-weight:600">saves '+fmtK(saving)+'</span>':'<span style="color:var(--red)">+'+fmtK(Math.abs(saving))+'</span>';
+    var saveTag=saving>0?'<span style="color:var(--green);font-weight:600">saves '+fmtSmart(saving)+'</span>':'<span style="color:var(--red)">+'+fmtSmart(Math.abs(saving))+'</span>';
     totalApiYr+=r.apiCostYr;
     html+='<tr>'
       +'<td style="color:'+col+';font-weight:600">'+t.name+'</td>'
@@ -6312,8 +6312,8 @@ function renderFleetBreakdown(results){
   },0);
   html+='<tr style="background:var(--bg3);font-weight:600">'
     +'<td colspan="4">TOTAL API SPEND</td>'
-    +'<td style="color:var(--red)">'+fmtK(totalApiYr)+'</td>'
-    +'<td colspan="2" style="font-size:11px;color:var(--text3)">vs naive all-Sonnet: '+fmtK(naiveTotalYr)+'</td>'
+    +'<td style="color:var(--red)">'+fmtSmart(totalApiYr)+'</td>'
+    +'<td colspan="2" style="font-size:11px;color:var(--text3)">vs naive all-Sonnet: '+fmtSmart(naiveTotalYr)+'</td>'
     +'</tr>';
   el.innerHTML=html;
   // Footnote
@@ -6384,7 +6384,7 @@ function renderTrafficFlow(){
     var apiP=API_PROVIDERS.find(function(x){return x.model===t.apiModel;})||{inputPer1M:3,outputPer1M:15};
     var qpd=SF.totalUsers*(t.trafficPct/100)*100;
     var apiYr=qpd*365*(t.avgInputTok*apiP.inputPer1M+t.avgOutputTok*apiP.outputPer1M)/1e6;
-    svg+='<text x="'+(destX+destW-8)+'" y="'+(ty+17)+'" text-anchor="end" font-size="10" font-weight="600" fill="var(--text1)" font-family="inherit">'+fmtK(apiYr)+'/yr</text>';
+    svg+='<text x="'+(destX+destW-8)+'" y="'+(ty+17)+'" text-anchor="end" font-size="10" font-weight="600" fill="var(--text1)" font-family="inherit">'+fmtSmart(apiYr)+'/yr</text>';
     svg+='<text x="'+(destX+destW-8)+'" y="'+(ty+30)+'" text-anchor="end" font-size="9.5" fill="var(--text3)" font-family="inherit">API</text>';
   });
 
@@ -6422,12 +6422,12 @@ function renderFrontierCompare(){
     var p=API_PROVIDERS.find(function(x){return x.model===fm.model;})||{inputPer1M:3,outputPer1M:15};
     var yr=qpd*365*(avgIn*p.inputPer1M+avgOut*p.outputPer1M)/1e6;
     var diff=yr-currentYr;
-    var diffStr=(diff>0?'+':'')+fmtK(diff);
+    var diffStr=(diff>0?'+':'')+fmtSmart(diff);
     var diffCol=diff>0?'var(--red)':'var(--green)';
     html+='<div style="background:var(--bg3);border-radius:var(--r);padding:12px 14px;border-left:3px solid '+fm.color+'">'
       +'<div style="font-size:10px;font-weight:600;color:'+fm.color+';margin-bottom:2px;text-transform:uppercase;letter-spacing:.04em">'+fm.name+'</div>'
       +'<div style="font-size:9px;color:var(--text4);margin-bottom:4px">if 100% traffic routed here</div>'
-      +'<div style="font-size:20px;font-weight:700;font-family:var(--mono)">'+fmtK(yr)+'</div>'
+      +'<div style="font-size:20px;font-weight:700;font-family:var(--mono)">'+fmtSmart(yr)+'</div>'
       +'<div style="font-size:10px;color:'+diffCol+';margin-top:2px">'+diffStr+' vs your mix</div>'
       +'</div>';
   });
@@ -6468,7 +6468,7 @@ function renderFleetCostCompare(totalApiCostYr,onpremYr,totalGPUs,activeProvider
     return '<div class="cc-card'+(best?' recommended':'')+'">'+
       (best?'<div class="cc-badge">★ cheapest</div>':'')+
       '<div class="cc-label">'+s.label+'</div>'+
-      '<div class="cc-price" style="color:'+s.color+'">'+fmtK(s.val)+'</div>'+
+      '<div class="cc-price" style="color:'+s.color+'">'+fmtSmart(s.val)+'</div>'+
       '<div class="cc-sub">5yr · '+s.sub+'</div></div>';
   }).join('');
 }
@@ -6484,7 +6484,7 @@ function renderRoutingROI(savingsYr,totalGPUs,naiveGPUs,totalCostYr,naiveCostYr)
   var verdict=savingsYr<=0?'✗ Not worth it at this scale':paybackMonths<=3?'✓ Strong ROI — build the router':paybackMonths<=12?'✓ Good ROI — worth building':paybackMonths<=24?'~ Marginal — evaluate carefully':'✗ Long payback — reconsider';
   var vc=savingsYr<=0?'var(--red)':paybackMonths<=12?'var(--green)':'var(--amber)';
   el.innerHTML=
-    '<div class="roi-cell"><div class="roi-cell-label">Annual savings</div><div class="roi-cell-val" style="color:var(--green)">'+fmtK(Math.max(0,savingsYr))+'</div></div>'+
+    '<div class="roi-cell"><div class="roi-cell-label">Annual savings</div><div class="roi-cell-val" style="color:var(--green)">'+fmtSmart(Math.max(0,savingsYr))+'</div></div>'+
     '<div class="roi-cell"><div class="roi-cell-label">GPUs saved</div><div class="roi-cell-val" style="color:var(--blue)">'+Math.max(0,gpusSaved)+'</div></div>'+
     '<div class="roi-cell"><div class="roi-cell-label">Payback period</div><div class="roi-cell-val">'+payStr+'</div></div>'+
     '<div class="roi-cell"><div class="roi-cell-label">Traffic to small model</div><div class="roi-cell-val">'+smallModelPct+'%</div></div>'+
@@ -7560,16 +7560,16 @@ function renderPerfV2Cost(best, gpuLabel, gpuKey, rd, buf){
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">'
     +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px">'
     +'<div style="font-size:10px;color:var(--text4);margin-bottom:4px">☁ CLOUD</div>'
-    +'<div style="font-size:22px;font-weight:700;color:#ef4444">'+fmtK(cloudMo)+'/mo</div>'
-    +'<div style="font-size:11px;color:var(--text3)">'+fmtK(cloud5yr)+' over '+Math.round(amortMo/12)+'yr · '+fmtK(priceHr)+'/hr/GPU</div>'
+    +'<div style="font-size:22px;font-weight:700;color:#ef4444">'+fmtSmart(cloudMo)+'/mo</div>'
+    +'<div style="font-size:11px;color:var(--text3)">'+fmtSmart(cloud5yr)+' over '+Math.round(amortMo/12)+'yr · '+fmtSmart(priceHr)+'/hr/GPU</div>'
     +'</div>'
     +'<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px">'
     +'<div style="font-size:10px;color:var(--text4);margin-bottom:4px">■ ON-PREM</div>'
-    +'<div style="font-size:22px;font-weight:700;color:var(--green)">'+fmtK(opMo)+'/mo</div>'
-    +'<div style="font-size:11px;color:var(--text3)">'+Math.round(amortMo/12)+'yr amort · '+fmtK(opTotal)+' total</div>'
+    +'<div style="font-size:22px;font-weight:700;color:var(--green)">'+fmtSmart(opMo)+'/mo</div>'
+    +'<div style="font-size:11px;color:var(--text3)">'+Math.round(amortMo/12)+'yr amort · '+fmtSmart(opTotal)+' total</div>'
     +'</div>'
     +'</div>'
-    +(savings>0?'<div style="font-size:12px;color:var(--green);font-weight:600">On-prem saves '+fmtK(savings)+'/mo</div>':'')
+    +(savings>0?'<div style="font-size:12px;color:var(--green);font-weight:600">On-prem saves '+fmtSmart(savings)+'/mo</div>':'')
     +'</div>';
 }
 
@@ -7645,7 +7645,7 @@ function exportPerfV2CSV(){
   var sections = [];
 
   // Header
-  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.9.2');
+  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.9.3');
   sections.push('Model: '+PERF_STATE.modelLabel+', GPU: '+(PERF_GPU_LABELS[meta.gpu]||meta.gpu)+', Backend: '+(meta.backend||'').toUpperCase()+', TP='+meta.tp);
   sections.push('ISL: '+meta.isl+', OSL: '+meta.osl+', Prefix: '+meta.pct+'%, Eff ISL: '+Math.round(meta.isl*(1-meta.pct/100)));
   sections.push('Target: '+rd.toLocaleString()+' req/day ('+( rd/86400).toFixed(1)+' req/sec), Buffer: '+buf+'%');
@@ -8920,7 +8920,7 @@ function tpExportSheets(){
   if(!r||!p){alert('Run calculation first.');return;}
   var sel=r.selected;
   var lines=[
-    'GPU THROUGHPUT SIZING\tgpu.calc v5.9.2\t'+new Date().toLocaleDateString(),
+    'GPU THROUGHPUT SIZING\tgpu.calc v5.9.3\t'+new Date().toLocaleDateString(),
     'DISCLAIMER\tDirectional estimate ±30-50%. Validate before procurement.',
     '',
     'INPUTS','model\t'+document.getElementById('tp-model-name-display').textContent,
@@ -8965,7 +8965,7 @@ function tpExportSheets(){
 function tpExportJSON(){
   var r=TP_STATE.lastResult; if(!r){alert('Run first.');return;}
   var out={
-    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.9.2'},
+    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.9.3'},
     inputs:TP_STATE.lastParams,
     kv:{kv_per_token:r.kv_per_token,kv_per_request_mb:r.kv_per_request_mb,kv_ratio:r.kv_ratio,eta_kv:r.eta_kv},
     ttft:{compute_ms:r.ttft_compute_ms,queue_ms:r.ttft_queue_ms,total_ms:r.ttft_total_ms},
