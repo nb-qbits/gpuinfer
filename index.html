@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-  <meta name="gpu-calc-version" content="6.0.0">
-  <meta name="version" content="5.9.0">
+  <meta name="gpu-calc-version" content="6.0.1">
+  <meta name="version" content="6.0.1">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>gpu.calc — LLM Inference Sizing & Cost Calculator</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1448,7 +1448,7 @@ button{font-family:var(--sans);cursor:pointer}
           <div class="layer-num">1</div>
           <div class="layer-head-info">
             <div class="layer-name">Model weights</div>
-            <div class="layer-summary" id="l1-sum">8B × 1B FP8 = 8.0 GB</div>
+            <div class="layer-summary" id="l1-sum">calculating...</div>
           </div>
           <span class="layer-consequence" id="l1-con"></span>
           <span class="layer-arrow">&#9658;</span>
@@ -1462,7 +1462,7 @@ button{font-family:var(--sans);cursor:pointer}
           <div class="layer-num">2</div>
           <div class="layer-head-info">
             <div class="layer-name">KV cache</div>
-            <div class="layer-summary" id="l2-sum">72 KB/tok · 294 MB/user · 58 GB total</div>
+            <div class="layer-summary" id="l2-sum">calculating...</div>
           </div>
           <span class="layer-consequence" id="l2-con"></span>
           <span class="layer-arrow">&#9658;</span>
@@ -1496,7 +1496,7 @@ button{font-family:var(--sans);cursor:pointer}
           <div class="layer-num">3</div>
           <div class="layer-head-info">
             <div class="layer-name">GPU capability</div>
-            <div class="layer-summary" id="l3-sum">H200 · 141 GB · 4.8 TB/s · 989 TFLOPS</div>
+            <div class="layer-summary" id="l3-sum">calculating...</div>
           </div>
           <span class="layer-consequence" id="l3-con"></span>
           <span class="layer-arrow">&#9658;</span>
@@ -1510,7 +1510,7 @@ button{font-family:var(--sans);cursor:pointer}
           <div class="layer-num">4</div>
           <div class="layer-head-info">
             <div class="layer-name">Memory fit &amp; replicas</div>
-            <div class="layer-summary" id="l4-sum">391 users/replica · 3 replicas · TP=1</div>
+            <div class="layer-summary" id="l4-sum">calculating...</div>
           </div>
           <span class="layer-consequence" id="l4-con"></span>
           <span class="layer-arrow">&#9658;</span>
@@ -1524,7 +1524,7 @@ button{font-family:var(--sans);cursor:pointer}
           <div class="layer-num">5</div>
           <div class="layer-head-info">
             <div class="layer-name">Cost</div>
-            <div class="layer-summary" id="l5-sum">$2.2K/mo cloud · $468/mo on-prem</div>
+            <div class="layer-summary" id="l5-sum">calculating...</div>
           </div>
           <span class="layer-consequence" id="l5-con"></span>
           <span class="layer-arrow">&#9658;</span>
@@ -2585,7 +2585,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.9.0</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.9.1</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2890,7 +2890,11 @@ function navTo(page,fromHash){
   var map={home:0,advanced:2,throughput:3,calibrated:4,explorer:5,saved:6,hybrid:7,fleet:8};
   if(map[page]!==undefined && tabs[map[page]]) tabs[map[page]].classList.add('active');
   if(!fromHash) location.hash='#'+page;
-  if(page==='advanced') calc();
+  if(page==='advanced'){
+    calc();
+    // Ensure DOM is fully rendered before second pass
+    setTimeout(function(){ if(document.getElementById('hero-num').textContent==='—'||document.getElementById('hero-num').textContent===''){calc();} }, 100);
+  }
   if(page==='throughput') initThroughputPage();
   if(page==='calibrated') initPerfPage();
   if(page==='hybrid'){calcHybrid();renderHGpuChips();}
@@ -2988,7 +2992,7 @@ function openLayer(id){
 // ===== CORE MATH =====
 // weightsGB defined in compat layer below
 
-var APP_VERSION = '6.0.0'; var APP_VERSION_COMPAT = '5.9.0'; // gpu.calc v6.0.0
+var APP_VERSION = '6.0.1'; var APP_VERSION_COMPAT = '5.9.1'; // gpu.calc v6.0.0
 // ===== CAPACITY ENGINE v6.0.0 =====
 // Layer-by-layer: weights → KV → GPU specs → memory fit → replicas → cost
 
@@ -3563,7 +3567,22 @@ function capRenderWhatIf(C){
 
 // ── MAIN CALC (replaces old calc()) ──────────────────────────
 function calc(){
-  var C = capComputeFit();
+  var C;
+  try {
+    C = capComputeFit();
+    if(!C || !isFinite(C.totalGPUs) || C.totalGPUs <= 0){
+      console.error('capComputeFit returned invalid result:', C);
+      C = C || {};
+      C.totalGPUs = C.totalGPUs || 0;
+    }
+  } catch(e) {
+    console.error('capComputeFit failed:', e.message, e.stack);
+    var heroNum = document.getElementById('hero-num');
+    if(heroNum) heroNum.textContent = 'ERR';
+    var heroLabel = document.getElementById('hero-label');
+    if(heroLabel) heroLabel.textContent = 'Error: ' + e.message;
+    return;
+  }
 
   // Keep backward compatibility with old compute() result shape
   // so cost/saved/export functions still work
@@ -3683,11 +3702,11 @@ function calc(){
   var frl=document.getElementById('vbl-free');if(frl)  frl.textContent='Free '+capFmtGB(Math.max(0,totalVram-C.wGB-kvAmt-C.oh))+' GB';
 
   // ── LAYERS ───────────────────────────────────────────────
-  capRenderL1(C);
-  capRenderL2(C);
-  capRenderL3(C);
-  capRenderL4(C);
-  capRenderL5(C);
+  try{ capRenderL1(C); }catch(e){ console.error('capRenderL1:',e.message); }
+  try{ capRenderL2(C); }catch(e){ console.error('capRenderL2:',e.message); }
+  try{ capRenderL3(C); }catch(e){ console.error('capRenderL3:',e.message); }
+  try{ capRenderL4(C); }catch(e){ console.error('capRenderL4:',e.message); }
+  try{ capRenderL5(C); }catch(e){ console.error('capRenderL5:',e.message); }
 
   // ── KV headroom chart ─────────────────────────────────────
   renderKVRows(oldC);
@@ -7476,7 +7495,7 @@ function exportPerfV2CSV(){
   var sections = [];
 
   // Header
-  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.9.0');
+  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.9.1');
   sections.push('Model: '+PERF_STATE.modelLabel+', GPU: '+(PERF_GPU_LABELS[meta.gpu]||meta.gpu)+', Backend: '+(meta.backend||'').toUpperCase()+', TP='+meta.tp);
   sections.push('ISL: '+meta.isl+', OSL: '+meta.osl+', Prefix: '+meta.pct+'%, Eff ISL: '+Math.round(meta.isl*(1-meta.pct/100)));
   sections.push('Target: '+rd.toLocaleString()+' req/day ('+( rd/86400).toFixed(1)+' req/sec), Buffer: '+buf+'%');
@@ -8751,7 +8770,7 @@ function tpExportSheets(){
   if(!r||!p){alert('Run calculation first.');return;}
   var sel=r.selected;
   var lines=[
-    'GPU THROUGHPUT SIZING\tgpu.calc v5.9.0\t'+new Date().toLocaleDateString(),
+    'GPU THROUGHPUT SIZING\tgpu.calc v5.9.1\t'+new Date().toLocaleDateString(),
     'DISCLAIMER\tDirectional estimate ±30-50%. Validate before procurement.',
     '',
     'INPUTS','model\t'+document.getElementById('tp-model-name-display').textContent,
@@ -8796,7 +8815,7 @@ function tpExportSheets(){
 function tpExportJSON(){
   var r=TP_STATE.lastResult; if(!r){alert('Run first.');return;}
   var out={
-    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.9.0'},
+    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.9.1'},
     inputs:TP_STATE.lastParams,
     kv:{kv_per_token:r.kv_per_token,kv_per_request_mb:r.kv_per_request_mb,kv_ratio:r.kv_ratio,eta_kv:r.eta_kv},
     ttft:{compute_ms:r.ttft_compute_ms,queue_ms:r.ttft_queue_ms,total_ms:r.ttft_total_ms},
