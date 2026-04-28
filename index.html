@@ -1224,23 +1224,60 @@ button{font-family:var(--sans);cursor:pointer}
             Chat/API: 10-20% · Batch: 100% · Interactive: 30-50%
           </div>
 
-          <div class="panel-label">Context window</div>
-          <div class="slider-row">
-            <label>Tokens</label>
-            <input type="range" min="0" max="100" step="1" value="20" id="s-ctx" oninput="var v=logCtx(+this.value);S.ctx=v;document.getElementById('sv-ctx').textContent=fmtCtx(v);debouncedCalc()">
-            <span class="slider-val mono" id="sv-ctx">4K</span>
+          <!-- ISL -->
+          <div class="panel-label">Avg input tokens (ISL)
+            <span style="font-size:10px;color:var(--text4);font-weight:400"> — avg prompt length</span>
           </div>
-          <div class="chips-wrap" style="flex-wrap:wrap;margin-bottom:8px">
-            <button class="chip on" onclick="setCtx(4)">4K</button>
-            <button class="chip" onclick="setCtx(8)">8K</button>
-            <button class="chip" onclick="setCtx(16)">16K</button>
-            <button class="chip" onclick="setCtx(32)">32K</button>
-            <button class="chip" onclick="setCtx(64)">64K</button>
-            <button class="chip" onclick="setCtx(128)">128K</button>
-            <button class="chip" onclick="setCtx(256)">256K</button>
-            <button class="chip" onclick="setCtx(1000)">1M</button>
+          <div class="chips-wrap" style="flex-wrap:wrap;margin-bottom:4px">
+            <button class="chip" onclick="setISL(500)">500</button>
+            <button class="chip" onclick="setISL(1000)">1K</button>
+            <button class="chip on" onclick="setISL(2000)">2K</button>
+            <button class="chip" onclick="setISL(4000)">4K</button>
+            <button class="chip" onclick="setISL(8000)">8K</button>
+            <button class="chip" onclick="setISL(32000)">32K</button>
           </div>
-          <input type="number" class="num-input" id="ctx-exact" placeholder="or type K tokens (e.g. 32)" oninput="setCtx(+this.value)">
+          <input type="number" class="num-input" id="isl-exact" value="2000" placeholder="tokens" oninput="setISL(+this.value)">
+
+          <!-- OSL -->
+          <div class="panel-label" style="margin-top:8px">Avg output tokens (OSL)
+            <span style="font-size:10px;color:var(--text4);font-weight:400"> — avg response length</span>
+          </div>
+          <div class="chips-wrap" style="flex-wrap:wrap;margin-bottom:4px">
+            <button class="chip" onclick="setOSL(50)">50</button>
+            <button class="chip" onclick="setOSL(100)">100</button>
+            <button class="chip on" onclick="setOSL(200)">200</button>
+            <button class="chip" onclick="setOSL(500)">500</button>
+            <button class="chip" onclick="setOSL(1000)">1K</button>
+            <button class="chip" onclick="setOSL(2000)">2K</button>
+          </div>
+          <input type="number" class="num-input" id="osl-exact" value="200" placeholder="tokens" oninput="setOSL(+this.value)">
+
+          <!-- avg_ctx derived display -->
+          <div id="avg-ctx-display" style="margin-top:8px;padding:6px 10px;background:var(--bg3);border-radius:var(--r);font-size:11px;color:var(--text2);font-family:var(--mono)">
+            avg_ctx = ISL + OSL/2 = <strong id="avg-ctx-val">2,100</strong> tokens per slot
+            <span style="color:var(--text4);margin-left:6px">≈ <span id="avg-ctx-words">1,575</span> words</span>
+          </div>
+
+          <!-- Max context window (model limit, not for sizing) -->
+          <details style="margin-top:8px">
+            <summary style="font-size:11px;font-weight:600;color:var(--text4);cursor:pointer;list-style:none">⚙ Max context window (model limit)</summary>
+            <div style="font-size:10px;color:var(--text4);margin:4px 0 6px;line-height:1.5">
+              Model's architectural max — NOT used for KV sizing.<br>
+              Using max ctx (e.g. 128K) instead of avg ISL inflates GPU count 10-100×.
+            </div>
+            <div class="chips-wrap" style="flex-wrap:wrap;margin-bottom:4px">
+              <button class="chip" onclick="setCtxMax(4)">4K</button>
+              <button class="chip" onclick="setCtxMax(8)">8K</button>
+              <button class="chip" onclick="setCtxMax(32)">32K</button>
+              <button class="chip on" onclick="setCtxMax(128)">128K</button>
+              <button class="chip" onclick="setCtxMax(256)">256K</button>
+              <button class="chip" onclick="setCtxMax(1000)">1M</button>
+            </div>
+            <input type="number" class="num-input" id="ctx-exact" placeholder="K tokens" oninput="setCtxMax(+this.value)" style="width:80px">
+            <!-- Legacy hidden slider for compat -->
+            <input type="range" id="s-ctx" style="display:none" value="20">
+            <span id="sv-ctx" style="display:none">4K</span>
+          </details>
 
           <!-- Prefix cache -->
           <div class="panel-label" style="margin-top:10px">Prefix cache hit rate</div>
@@ -1406,12 +1443,26 @@ button{font-family:var(--sans);cursor:pointer}
             <div style="font-size:11px;color:var(--text3);margin-top:4px" id="hero-vram-sub">per replica</div>
           </div>
 
-          <!-- Cost -->
-          <div style="padding:14px 16px">
-            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4);margin-bottom:4px">Monthly cost</div>
-            <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--red)" id="hero-cost-cloud">—</div>
-            <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--green)" id="hero-cost-onprem">—</div>
-            <div style="font-size:10px;color:var(--text3);margin-top:2px" id="hero-cost-verdict"></div>
+          <!-- Cost — collapsible -->
+          <div style="padding:0">
+            <div style="padding:10px 16px 8px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="capToggleCost()">
+              <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text4)">Monthly cost</div>
+              <span id="cost-toggle-arrow" style="font-size:10px;color:var(--text4)">▼</span>
+            </div>
+            <div id="cost-tile-summary" style="padding:0 16px 10px">
+              <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--red)" id="hero-cost-cloud">—</div>
+              <div style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--green)" id="hero-cost-onprem">—</div>
+              <div style="font-size:10px;color:var(--text3);margin-top:2px" id="hero-cost-verdict"></div>
+            </div>
+            <div id="cost-tile-detail" style="display:none;padding:0 16px 10px;border-top:1px solid var(--border)">
+              <div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.8">
+                <div>☁ Cloud: <strong id="cost-detail-cloud">—</strong>/mo · <span id="cost-detail-cloud5yr">—</span> over 5yr</div>
+                <div style="margin-top:2px">⬛ On-prem: <strong id="cost-detail-onprem">—</strong>/mo · amort <span id="cost-detail-amort">5</span>yr · <span id="cost-detail-onprem5yr">—</span> total</div>
+                <div style="margin-top:4px;font-size:10px;color:var(--text4)">
+                  On-prem = (GPUs × $<span id="cost-detail-gpu-price">25K</span>) ÷ (<span id="cost-detail-amort2">5</span>yr × 12mo) + power
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2585,7 +2636,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.9.1</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.9.2</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2676,7 +2727,7 @@ var S = {
   kvLoraRank:null,      // MLA: compressed KV dimension (DeepSeek V2/V3)
   qkRopeHeadDim:null,   // MLA: rope head dim added to latent
   // Users
-  users:1000, ctx:4, hitrate:0.0, concRate:0.20, cacheType:'persistent',
+  users:1000, ctx:4, isl:2000, osl:200, ctxMax:128, hitrate:0.0, concRate:0.20, cacheType:'persistent',
   // Inference
   fw:'vllm', mode:'std', tp:1, kvPrec:'fp16',
   pfGpus:1, dcGpus:1,
@@ -2992,7 +3043,7 @@ function openLayer(id){
 // ===== CORE MATH =====
 // weightsGB defined in compat layer below
 
-var APP_VERSION = '6.0.1'; var APP_VERSION_COMPAT = '5.9.1'; // gpu.calc v6.0.0
+var APP_VERSION = '6.0.2'; var APP_VERSION_COMPAT = '5.9.2'; // gpu.calc v6.0.0
 // ===== CAPACITY ENGINE v6.0.0 =====
 // Layer-by-layer: weights → KV → GPU specs → memory fit → replicas → cost
 
@@ -3054,8 +3105,20 @@ function capKVPerToken(){
 }
 
 // ── KV PER USER ───────────────────────────────────────────────
+function capAvgCtx(){
+  // avg_ctx = ISL + OSL/2
+  // KV grows linearly from ISL to ISL+OSL during decode → average is midpoint
+  var isl = S.isl || (S.ctx * 1000);   // tokens (not K)
+  var osl = S.osl || 200;
+  return isl + osl / 2;
+}
+function capPeakCtx(){
+  var isl = S.isl || (S.ctx * 1000);
+  var osl = S.osl || 200;
+  return isl + osl;
+}
 function capKVPerUser(){
-  var ctxTokens = S.ctx * 1000;
+  var ctxTokens = capAvgCtx();         // USE avg_ctx not ctxMax
   var bkv = capBytesKV();
 
   // Category 3: Hybrid sliding — split global vs sliding
@@ -3070,8 +3133,8 @@ function capKVPerUser(){
     var raw = capKVPerToken() * ctxTokens / 1e9; // GB
   }
 
-  // Prefix cache: persistent (default) = no VRAM reduction
-  // Evicting cache = KV freed after hit → reduce by hit rate
+  // Prefix cache: persistent = no VRAM reduction (KV stays resident)
+  // Evicting = KV freed after cache hit → reduce by hit rate
   var prefixReduction = (S.cacheType==='evicting') ? (1 - (S.hitrate||0)) : 1.0;
   return raw * prefixReduction;
 }
@@ -3269,16 +3332,17 @@ function capRenderL2(C){
   // KV/token
   var tokKB = kvTokB/1024;
   document.getElementById('l2-kv-tok').textContent  = tokKB>=1?tokKB.toFixed(0)+' KB':Math.round(kvTokB)+' B';
-  document.getElementById('l2-kv-tok-sub').textContent = '2(K+V) × '+
-    (S.kvLayers||S.numLayers)+'L × '+S.numKvHeads+'H × '+S.headDim+'D × '+bkv+'B';
+  document.getElementById('l2-kv-tok-sub').textContent = '2(K+V) × '+(S.kvLayers||S.numLayers)+'L × '+S.numKvHeads+'H × '+S.headDim+'D × '+bkv+'B';
 
   // KV/user
   document.getElementById('l2-kv-user').textContent  = capFmtGB(kvPerUser);
-  document.getElementById('l2-kv-user-sub').textContent = capFmtBytes(kvTokB)+'/tok × '+(ctxTok/1000).toFixed(0)+'K tokens';
+  var islTok=S.isl||2000, oslTok=S.osl||200;
+  var avgCtxTok=Math.round(capAvgCtx());
+  document.getElementById('l2-kv-user-sub').textContent = capFmtBytes(kvTokB)+'/tok × '+avgCtxTok.toLocaleString()+' avg_ctx';
 
   // KV total
   document.getElementById('l2-kv-total').textContent = capFmtGB(kvTotal);
-  document.getElementById('l2-kv-total-sub').textContent = capFmtGB(kvPerUser)+' × '+activeU+' active ('+S.users+'×'+concRate+'%)';
+  document.getElementById('l2-kv-total-sub').textContent = capFmtGB(kvPerUser)+'/user × '+activeU+' active';
 
   // Expanded body
   var html = '<div style="padding:12px 14px;font-size:11px">';
@@ -3528,8 +3592,13 @@ function capRenderWhatIf(C){
   if(!el) return;
   var baseline = C.totalGPUs;
 
+  var curISL=S.isl||2000, curOSL=S.osl||200;
   var scenarios = [
     {label:'FP16 KV (instead of FP8)', fn:function(){var o=S.kvPrec;S.kvPrec='fp16';var r=capComputeFit();S.kvPrec=o;return r.totalGPUs;}},
+    {label:'Half avg ISL ('+(Math.round(curISL/2/100)*100)+' tokens)', fn:function(){var o=S.isl;S.isl=Math.max(100,Math.round(curISL/2));var r=capComputeFit();S.isl=o;return r.totalGPUs;}},
+    {label:'Double avg ISL ('+(curISL*2)+' tokens)', fn:function(){var o=S.isl;S.isl=curISL*2;var r=capComputeFit();S.isl=o;return r.totalGPUs;}},
+    {label:'Long output OSL=2000 (vs '+curOSL+')', fn:function(){var o=S.osl;S.osl=2000;var r=capComputeFit();S.osl=o;return r.totalGPUs;}},
+    {label:'Use max ctx for sizing (128K ISL!)', fn:function(){var o=S.isl;S.isl=128000;var r=capComputeFit();S.isl=o;return r.totalGPUs;}, warn:true},
     {label:'FP8 KV (instead of FP16)', fn:function(){var o=S.kvPrec;S.kvPrec='fp8';var r=capComputeFit();S.kvPrec=o;return r.totalGPUs;}},
     {label:'Half the context ('+Math.round(S.ctx/2)+'K)', fn:function(){var o=S.ctx;S.ctx=Math.max(1,Math.round(S.ctx/2));var r=capComputeFit();S.ctx=o;return r.totalGPUs;}},
     {label:'Double the context ('+(S.ctx*2)+'K)', fn:function(){var o=S.ctx;S.ctx=S.ctx*2;var r=capComputeFit();S.ctx=o;return r.totalGPUs;}},
@@ -3664,7 +3733,11 @@ function calc(){
 
   // Subtitle
   var sub = document.getElementById('outcome-subtitle');
-  if(sub) sub.textContent = S.modelLabel+' · '+(S.users.toLocaleString())+' users ('+Math.round((S.concRate||0.2)*100)+'% active) · '+S.ctx+'K ctx · TP='+C.tp;
+  if(sub){
+    var islLabel=(S.isl||2000)>=1000?((S.isl||2000)/1000).toFixed(0)+'K':(S.isl||2000)+'';
+    var avgCtxTok=Math.round(capAvgCtx());
+    sub.textContent = S.modelLabel+' · '+(S.users.toLocaleString())+' users ('+Math.round((S.concRate||0.2)*100)+'% active) · ISL='+islLabel+' OSL='+(S.osl||200)+' · avg_ctx='+(avgCtxTok/1000).toFixed(1)+'K · TP='+C.tp;
+  }
 
   // Panel summaries
   var phm = document.getElementById('ph-model-sum');
@@ -3678,6 +3751,11 @@ function calc(){
   var phc = document.getElementById('ph-cost-sum');
   if(phc) phc.textContent = S.dep+' · GCP $'+(S.cloudRate||3).toFixed(2)+'/hr';
 
+  // Update ISL/OSL display
+  capUpdateAvgCtxDisplay();
+  // Update cost detail
+  capUpdateCostDetail(C);
+
   // VRAM bar
   var tpEl = document.getElementById('vram-bar-tp');
   if(tpEl) tpEl.textContent = C.tp;
@@ -3690,8 +3768,8 @@ function calc(){
   var bar = document.getElementById('vram-bar');
   if(bar){
     bar.innerHTML='';
-    function addSeg(pct,cls,lbl){ if(pct>0.5){var d=document.createElement('div');d.className='vb-seg '+cls;d.style.width=Math.max(pct,1)+'%';d.textContent=pct>8?lbl:'';bar.appendChild(d);} }
-    addSeg(wPct,'vb-weights','W '+capFmtGB(C.wGB));
+    function addSeg(pct,cls,lbl,minPct){ if(pct>0.2){var d=document.createElement('div');d.className='vb-seg '+cls;d.style.width=Math.max(pct,minPct||1)+'%';d.textContent=pct>8?lbl:'';d.title=lbl;bar.appendChild(d);} }
+    addSeg(wPct,'vb-weights','W '+capFmtGB(C.wGB),3);
     addSeg(kvPct,'vb-kv','KV '+capFmtGB(kvAmt));
     addSeg(ohPct,'vb-oh','OH '+capFmtGB(C.oh));
     if(frPct>0) addSeg(frPct,'vb-free',capFmtGB(totalVram*(frPct/100))+' free');
@@ -3803,6 +3881,16 @@ function fmtGB(n){ return n>=1?n.toFixed(1)+' GB':Math.round(n*1000)+' MB'; }
 function fmtCtx(n){ return n>=1000?'1M':n+'K'; }
 function fmtUsers(n){ return n>=10000?(n/1000).toFixed(0)+'K':n>=1000?(n/1000).toFixed(1)+'K':String(n); }
 function fmtK(n){ return '$'+Math.round(n/1000)+'K'; }
+function fmtSmart(n){
+  // Smart formatter: B/M/K with appropriate precision
+  if(!n || isNaN(n)) return '$0';
+  if(n >= 1e9)  return '$'+(n/1e9).toFixed(2).replace(/\.00$/,'')+'B';
+  if(n >= 1e6)  return '$'+(n/1e6).toFixed(1).replace(/\.0$/,'')+'M';
+  if(n >= 1e3)  return '$'+Math.round(n/1000)+'K';
+  return '$'+Math.round(n);
+}
+function fmtSmartYr(n){ return fmtSmart(n)+'/yr'; }
+function fmtSmartMo(n){ return fmtSmart(n)+'/mo'; }
 function fmtMo(n){ return n>=1000?'$'+(n/1000).toFixed(1)+'K':'$'+Math.round(n); }
 function fmtNum(n){ return n.toLocaleString(); }
 
@@ -3834,19 +3922,23 @@ function usersToPos(n){
 function renderKVRows(C){
   var el = document.getElementById('kv-rows');
   if(!el) return;
-  var ctxs=[4,8,16,32,64,128,256,512,1000];
-  var html='';
-  ctxs.forEach(function(c){
-    var savedCtx=S.ctx; S.ctx=c;
+  // Vary ISL (not ctxMax) — OSL stays fixed at S.osl
+  var isls=[500,1000,2000,4000,8000,16000,32000,64000,128000];
+  var curIsl = S.isl || (S.ctx*1000);
+  var html='<div style="font-size:10px;color:var(--text4);margin-bottom:4px;padding:0 2px">Users/replica at different avg ISL (OSL='+(S.osl||200)+' fixed)</div>';
+  var avail=C?C.availForKV||C.avail||100:100;
+  html+='';
+  isls.forEach(function(isl){
+    var savedISL=S.isl; S.isl=isl;
     var kpv=capKVPerUser();
-    S.ctx=savedCtx;
-    var avail=C?C.availForKV||C.avail||100:100;
+    S.isl=savedISL;
     var u=Math.max(1,Math.floor(avail/kpv));
     var pct=Math.min(u/50*100,100);
-    var cls=c>256?'over':c>64?'warn':'';
-    var isCur=c===(S.ctx);
+    var isCur=isl===curIsl;
+    var cls=isl>32000?'over':isl>8000?'warn':'';
+    var label=isl>=1000?(isl/1000).toFixed(0)+'K':isl+'';
     html+='<div class="kv-row">'
-      +'<span class="kv-ctx">'+(c>=1000?'1M':c+'K')+'</span>'
+      +'<span class="kv-ctx">'+label+'</span>'
       +'<div class="kv-bar-bg"><div class="kv-bar-fg '+(isCur?'':cls)+'" style="width:'+pct+'%"></div></div>'
       +'<span class="kv-users '+(isCur?'you':cls)+'">'+u+' users'+(isCur?' ← you':'')+'</span>'
       +'</div>';
@@ -4502,8 +4594,66 @@ function setCtx(n){
   document.getElementById('s-ctx2').value=pos;
   document.getElementById('sv-ctx').textContent=fmtCtx(n);
   document.getElementById('sv-ctx2').textContent=fmtCtx(n);
-  document.getElementById('ctx-exact').value=n;
+  if(document.getElementById('ctx-exact')) document.getElementById('ctx-exact').value=n;
   calc();
+}
+function setISL(n){
+  if(!n||n<1)return;
+  S.isl=n;
+  var el=document.getElementById('isl-exact'); if(el) el.value=n;
+  // Update active chip
+  document.querySelectorAll('[onclick^="setISL"]').forEach(function(b){
+    b.classList.toggle('on', b.getAttribute('onclick')==='setISL('+n+')');
+  });
+  capUpdateAvgCtxDisplay();
+  debouncedCalc();
+}
+function setOSL(n){
+  if(!n||n<1)return;
+  S.osl=n;
+  var el=document.getElementById('osl-exact'); if(el) el.value=n;
+  document.querySelectorAll('[onclick^="setOSL"]').forEach(function(b){
+    b.classList.toggle('on', b.getAttribute('onclick')==='setOSL('+n+')');
+  });
+  capUpdateAvgCtxDisplay();
+  debouncedCalc();
+}
+function setCtxMax(n){
+  if(!n||n<1)return;
+  S.ctxMax=n;
+  S.ctx=n; // keep compat
+  document.querySelectorAll('[onclick^="setCtxMax"]').forEach(function(b){
+    b.classList.toggle('on', b.getAttribute('onclick')==='setCtxMax('+n+')');
+  });
+  debouncedCalc();
+}
+function capUpdateAvgCtxDisplay(){
+  var isl=S.isl||2000, osl=S.osl||200;
+  var avg=Math.round(isl+osl/2);
+  var words=Math.round(avg*0.75);
+  var el=document.getElementById('avg-ctx-val'); if(el) el.textContent=avg.toLocaleString();
+  var we=document.getElementById('avg-ctx-words'); if(we) we.textContent=words.toLocaleString();
+  // Update subtitle
+  var ph=document.getElementById('ph-users-sum');
+  if(ph) ph.textContent=S.users.toLocaleString()+' users · ISL='+(isl>=1000?(isl/1000).toFixed(0)+'K':isl)+' OSL='+osl+' · '+Math.round((S.concRate||0.2)*100)+'% active';
+}
+var _costExpanded=false;
+function capToggleCost(){
+  _costExpanded=!_costExpanded;
+  var det=document.getElementById('cost-tile-detail');
+  var arr=document.getElementById('cost-toggle-arrow');
+  if(det) det.style.display=_costExpanded?'block':'none';
+  if(arr) arr.textContent=_costExpanded?'▲':'▼';
+}
+function capUpdateCostDetail(C){
+  function _s(id,v){var e=document.getElementById(id);if(e)e.textContent=v;}
+  _s('cost-detail-cloud',    fmtSmart(C.cloudMo));
+  _s('cost-detail-cloud5yr', fmtSmart(C.cloudCost5yr));
+  _s('cost-detail-onprem',   fmtSmart(C.onpremMo));
+  _s('cost-detail-onprem5yr',fmtSmart(C.onpremCost5yr));
+  _s('cost-detail-amort',    S.amort||5);
+  _s('cost-detail-amort2',   S.amort||5);
+  _s('cost-detail-gpu-price',Math.round((S.hwCost||25000)/1000)+'K');
 }
 function syncSliders(){
   var uPos=usersToPos(S.users);
@@ -6107,7 +6257,7 @@ function updateTierSummaries(results){
     if(results){var r=results[i];var re=document.getElementById('ft-result-'+i);if(re&&r){
       var gpuTxt=r.isApiOnly?'<span style="color:var(--text4);font-size:10px">API only · no GPUs needed</span>':r.totalGPUs+' GPU'+(r.totalGPUs!==1?'s':'')+' <span style="font-size:10px;color:var(--text4)">(self-host)</span>';
       re.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center">'
-        +'<span style="color:var(--red)">API: <strong>'+fmtK(r.apiCostYr)+'</strong>/yr</span>'
+        +'<span style="color:var(--red)">API: <strong>'+fmtSmart(r.apiCostYr)+'</strong>/yr</span>'
         +'<span style="color:var(--blue)">'+gpuTxt+'</span>'
         +'</div>'
         +'<div style="font-size:10px;color:var(--text3);margin-top:3px">'+r.queriesPerDay.toLocaleString()+' queries/day · '+r.concurrentUsers+' concurrent ('+Math.round((SF.concurrencyFactor||0.10)*100)+'%)</div>';
@@ -6135,7 +6285,7 @@ function renderFleetBreakdown(results){
       +'<td style="font-size:11px">'+t.apiModel+'</td>'
       +'<td><div style="display:flex;align-items:center;gap:5px"><div style="height:4px;width:'+Math.round(t.trafficPct*1.2)+'px;background:'+col+';border-radius:2px"></div><span>'+t.trafficPct+'%</span></div></td>'
       +'<td style="font-family:var(--mono);font-size:11px">'+qpd.toLocaleString()+'</td>'
-      +'<td style="font-weight:600">'+fmtK(r.apiCostYr)+'</td>'
+      +'<td style="font-weight:600">'+fmtSmart(r.apiCostYr)+'</td>'
       +(r.isApiOnly
         ? '<td style="font-size:11px;color:var(--text4)"><span style="color:var(--text4)">API only</span></td>'
         : '<td style="font-size:11px;color:var(--blue);position:relative;cursor:help">'
@@ -7495,7 +7645,7 @@ function exportPerfV2CSV(){
   var sections = [];
 
   // Header
-  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.9.1');
+  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.9.2');
   sections.push('Model: '+PERF_STATE.modelLabel+', GPU: '+(PERF_GPU_LABELS[meta.gpu]||meta.gpu)+', Backend: '+(meta.backend||'').toUpperCase()+', TP='+meta.tp);
   sections.push('ISL: '+meta.isl+', OSL: '+meta.osl+', Prefix: '+meta.pct+'%, Eff ISL: '+Math.round(meta.isl*(1-meta.pct/100)));
   sections.push('Target: '+rd.toLocaleString()+' req/day ('+( rd/86400).toFixed(1)+' req/sec), Buffer: '+buf+'%');
@@ -8770,7 +8920,7 @@ function tpExportSheets(){
   if(!r||!p){alert('Run calculation first.');return;}
   var sel=r.selected;
   var lines=[
-    'GPU THROUGHPUT SIZING\tgpu.calc v5.9.1\t'+new Date().toLocaleDateString(),
+    'GPU THROUGHPUT SIZING\tgpu.calc v5.9.2\t'+new Date().toLocaleDateString(),
     'DISCLAIMER\tDirectional estimate ±30-50%. Validate before procurement.',
     '',
     'INPUTS','model\t'+document.getElementById('tp-model-name-display').textContent,
@@ -8815,7 +8965,7 @@ function tpExportSheets(){
 function tpExportJSON(){
   var r=TP_STATE.lastResult; if(!r){alert('Run first.');return;}
   var out={
-    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.9.1'},
+    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.9.2'},
     inputs:TP_STATE.lastParams,
     kv:{kv_per_token:r.kv_per_token,kv_per_request_mb:r.kv_per_request_mb,kv_ratio:r.kv_ratio,eta_kv:r.eta_kv},
     ttft:{compute_ms:r.ttft_compute_ms,queue_ms:r.ttft_queue_ms,total_ms:r.ttft_total_ms},
