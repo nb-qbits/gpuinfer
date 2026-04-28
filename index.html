@@ -1325,6 +1325,11 @@ button{font-family:var(--sans);cursor:pointer}
             <button class="chip on" id="mode-std"  onclick="setMode('std',this)">Standard</button>
             <button class="chip" id="mode-llmd" onclick="setMode('llmd',this)">llm-d disaggregated</button>
           </div>
+          <div id="llmd-mode-note" style="display:none;font-size:10px;background:rgba(26,86,219,.07);border:1px solid rgba(26,86,219,.2);border-radius:var(--r);padding:6px 10px;margin-top:4px;color:var(--text2)">
+            ℹ llm-d disaggregated separates prefill and decode pools.<br>
+            Memory sizing (this tab) is unchanged — same weights + KV.<br>
+            GPU count changes only in the <a onclick="nav('throughput')" style="color:var(--blue);cursor:pointer;text-decoration:underline">Throughput tab</a> where prefill/decode split is modelled.
+          </div>
           <div id="llmd-config" class="hidden">
             <div class="panel-label" style="margin-top:8px">Prefill GPUs</div>
             <div class="slider-row">
@@ -2648,7 +2653,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px">real-time inference only · v5.9.4</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px">real-time inference only · v5.9.5</span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -3055,7 +3060,7 @@ function openLayer(id){
 // ===== CORE MATH =====
 // weightsGB defined in compat layer below
 
-var APP_VERSION = '6.0.4'; var APP_VERSION_COMPAT = '5.9.4'; // gpu.calc v6.0.0
+var APP_VERSION = '6.0.5'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
 // ===== CAPACITY ENGINE v6.0.0 =====
 // Layer-by-layer: weights → KV → GPU specs → memory fit → replicas → cost
 
@@ -3740,7 +3745,13 @@ function calc(){
   // Binding constraint
   var bLabel = document.getElementById('cap-binding-label');
   var bNote  = document.getElementById('cap-binding-note');
-  if(bLabel) bLabel.textContent = 'MEMORY (KV + weights)';
+  if(bLabel){
+    var cacheNote = (S.hitrate>0) ? (S.cacheType==='evicting' 
+      ? ' · '+Math.round(S.hitrate*100)+'% prefix evicting → KV reduced'
+      : ' · '+Math.round(S.hitrate*100)+'% prefix persistent → KV unchanged (hits reduce TTFT only)')
+      : '';
+    bLabel.textContent = 'MEMORY (KV + weights)'+cacheNote;
+  }
   if(bNote)  bNote.textContent  = 'For request-rate sizing → Throughput tab';
 
   // Subtitle
@@ -4562,6 +4573,8 @@ function setMode(m,btn){
   document.getElementById('mode-std').classList.toggle('on',m==='std');
   document.getElementById('mode-llmd').classList.toggle('on',m==='llmd');
   document.getElementById('llmd-config').classList.toggle('hidden',m!=='llmd');
+  var llmdNote=document.getElementById('llmd-mode-note');
+  if(llmdNote) llmdNote.style.display=m==='llmd'?'block':'none';
   calc();
 }
 function setTP(n,btn){
@@ -5392,7 +5405,7 @@ function calcHybrid(){
     else if(k==='run'){if(sl)sl.value=running;if(vl)vl.textContent=running;}
     else if(k==='hw'){if(sl)sl.value=hw/1000;if(vl)vl.textContent='$'+(hw/1000)+'K';}
     else if(k==='util'){if(sl)sl.value=Math.round(util*100);if(vl)vl.textContent=Math.round(util*100)+'%';}
-    else if(k==='amort'){if(sl)sl.value=amort;if(vl)vl.textContent=amort+' yrs';}
+    else if(k==='amort'){if(sl)sl.value=amort;if(vl)vl.textContent=amort+' yr amort';}
   });
   var rc=document.getElementById('hybrid-right-content');
   if(!rc)return;
@@ -5439,10 +5452,52 @@ function calcHybrid(){
     // 4-column cost comparison including dedicated node
     +'<div class="section-title" style="margin-bottom:8px">5-YEAR COST COMPARISON</div>'
     +'<div class="cost-compare">'
-    +'<div class="cc-card'+(bestKey==='cloud'?' recommended':'')+'"><div class="cc-label">Pure cloud</div><div class="cc-price" style="color:var(--red)">'+fmtSmart(purecloudCost5)+'</div><div class="cc-sub">on-demand · all rented</div>'+(bestKey==='cloud'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
-    +'<div class="cc-card'+(bestKey==='ded'?' recommended':'')+'"><div class="cc-label">Dedicated node</div><div class="cc-price" style="color:var(--purple)">'+fmtK(dedCost5)+'</div><div class="cc-sub">'+dedNodes+' node'+(dedNodes>1?'s':'')+' · $'+Math.round(dedRateMo/1000)+'K/mo flat</div>'+(bestKey==='ded'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
-    +'<div class="cc-card'+(bestKey==='hybrid'?' recommended':'')+'"><div class="cc-badge">✦ HYBRID</div><div class="cc-label">Hybrid</div><div class="cc-price" style="color:var(--blue)">'+fmtSmart(hybridCost5)+'</div><div class="cc-sub">'+hybridSplit+'% own · '+(100-hybridSplit)+'% rent</div>'+(bestKey==='hybrid'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
-    +'<div class="cc-card'+(bestKey==='onprem'?' recommended':'')+'"><div class="cc-label">Pure on-prem</div><div class="cc-price" style="color:var(--green)">'+fmtSmart(pureonpremCost5)+'</div><div class="cc-sub">'+(S.hGpuName||'H100')+' · $'+(hw/1000).toFixed(0)+'K/GPU · '+amort+'yr amort</div>'+(bestKey==='onprem'?'<div class="cc-badge">★ cheapest</div>':'')+'</div>'
+    // Helper for math details
+    var calcNote=function(lbl,lines){return '<div style="font-size:9px;color:var(--text4);margin-top:5px;line-height:1.7;font-family:var(--mono)">'+lines.join('<br>')+'</div>';};
+    +'<div class="cc-card'+(bestKey==='cloud'?' recommended':'')+'">'
+      +'<div class="cc-label">Pure cloud</div>'
+      +'<div class="cc-price" style="color:var(--red)">'+fmtSmart(purecloudCost5)+'</div>'
+      +'<div class="cc-sub">on-demand · all rented</div>'
+      +calcNote('cloud',[
+        gpus+' GPU × $'+rate.toFixed(2)+'/hr × 8760 hr/yr = '+fmtSmart(gpus*rate*8760)+'/yr',
+        '× '+amort+'yr = '+fmtSmart(purecloudCost5)
+      ])
+      +(bestKey==='cloud'?'<div class="cc-badge">★ cheapest</div>':'')
+      +'</div>'
+    +'<div class="cc-card'+(bestKey==='ded'?' recommended':'')+'">'
+      +'<div class="cc-label">Dedicated node</div>'
+      +'<div class="cc-price" style="color:var(--purple)">'+fmtSmart(dedCost5)+'</div>'
+      +'<div class="cc-sub">'+dedNodes+' node'+(dedNodes>1?'s':'')+' · $'+Math.round(dedRateMo/1000)+'K/mo flat</div>'
+      +calcNote('ded',[
+        dedNodes+' node × $'+Math.round(dedRateMo/1000)+'K/mo × 12 × '+amort+'yr',
+        '= $'+Math.round(dedRateMo/1000)+'K × '+dedNodes+' × '+(12*amort)+' = '+fmtSmart(dedCost5)
+      ])
+      +(bestKey==='ded'?'<div class="cc-badge">★ cheapest</div>':'')
+      +'</div>'
+    +'<div class="cc-card'+(bestKey==='hybrid'?' recommended':'')+'">'
+      +'<div class="cc-badge">✦ HYBRID</div>'
+      +'<div class="cc-label">Hybrid</div>'
+      +'<div class="cc-price" style="color:var(--blue)">'+fmtSmart(hybridCost5)+'</div>'
+      +'<div class="cc-sub">'+hybridSplit+'% own · '+(100-hybridSplit)+'% rent</div>'
+      +calcNote('hyb',[
+        ownedGpusDisplay+' GPU owned: hw + 25% infra + 15%×'+amort+'yr opex',
+        rentedGpusDisplay+' GPU rented: $'+rate.toFixed(2)+'/hr × 8760 × '+amort+'yr',
+        'Total: '+fmtSmart(onpremCost5)+' + '+fmtSmart(cloudCost5)+' = '+fmtSmart(hybridCost5)
+      ])
+      +(bestKey==='hybrid'?'<div class="cc-badge">★ cheapest</div>':'')
+      +'</div>'
+    +'<div class="cc-card'+(bestKey==='onprem'?' recommended':'')+'">'
+      +'<div class="cc-label">Pure on-prem</div>'
+      +'<div class="cc-price" style="color:var(--green)">'+fmtSmart(pureonpremCost5)+'</div>'
+      +'<div class="cc-sub">'+(S.hGpuName||'H100')+' · $'+(hw/1000).toFixed(0)+'K/GPU · '+amort+'yr</div>'
+      +calcNote('onprem',[
+        gpus+' GPU × $'+(hw/1000)+'K = $'+fmtSmart(gpus*hw)+' hw',
+        '+ 25% infra ($'+fmtSmart(gpus*hw*0.25)+') + 15%×'+amort+'yr opex',
+        '= '+fmtSmart(gpus*hw)+' + '+fmtSmart(gpus*hw*0.25)+' + '+fmtSmart(gpus*hw*0.15*amort),
+        'Total: '+fmtSmart(pureonpremCost5)
+      ])
+      +(bestKey==='onprem'?'<div class="cc-badge">★ cheapest</div>':'')
+      +'</div>'
     +'</div>'
     +'<div style="font-size:11px;color:var(--text4);margin-bottom:12px">★ = cheapest at your current utilisation ('+Math.round(util*100)+'%). Dedicated node wins at 25–65% utilisation. On-prem wins above 65%.</div>'
     // bars including dedicated node
@@ -6261,26 +6316,32 @@ function calcFleet(){
     var bHtml='<div style="font-size:10px;color:var(--text4);margin-top:6px;line-height:1.8">';
     // Total queries formula
     var totalQPD=Math.round(SF.totalUsers*(SF.queriesPerUserPerDay||100));
-    bHtml+='<div style="font-weight:600;color:var(--text3);margin-bottom:4px">'
+    bHtml+='<div style="font-weight:600;color:var(--text3);margin-bottom:6px;font-size:11px">'
       +SF.totalUsers.toLocaleString()+' users × '+(SF.queriesPerUserPerDay||100)+' q/day = '
-      +totalQPD.toLocaleString()+' queries/day</div>';
-    // Per-tier breakdown
+      +(totalQPD).toLocaleString()+' q/day total</div>';
+    // Per-tier breakdown with full math
+    var tierColors2=['#1a56db','#057a55','#b45309','#7c3aed','#0891b2'];
     results.forEach(function(r,i){
       var t=SF.tiers[i]; if(!t)return;
       var prov=API_PROVIDERS.find(function(p){return p.model===t.apiModel;})||{inputPer1M:0,outputPer1M:0};
       var qpd=Math.round(SF.totalUsers*(t.trafficPct/100)*(SF.queriesPerUserPerDay||100));
-      var costPerQ=(t.avgInputTok*prov.inputPer1M+t.avgOutputTok*prov.outputPer1M)/1e6;
-      var tierColors=['#1a56db','#057a55','#b45309','#7c3aed','#0891b2'];
-      var col=tierColors[i%5];
-      bHtml+='<div style="border-left:2px solid '+col+';padding-left:6px;margin-bottom:3px">'
-        +'<span style="font-weight:600;color:'+col+'">'+t.name+'</span> · '
-        +t.trafficPct+'% → '+qpd.toLocaleString()+' q/day<br>'
-        +'<span style="font-family:var(--mono);font-size:9px">'
-        +qpd.toLocaleString()+'×365 × ('+t.avgInputTok+'in×$'+prov.inputPer1M+' + '+t.avgOutputTok+'out×$'+prov.outputPer1M+')/1M'
-        +' = <strong>'+fmtSmart(r.apiCostYr)+'</strong>/yr</span>'
+      var costIn =t.avgInputTok *prov.inputPer1M /1e6;
+      var costOut=t.avgOutputTok*prov.outputPer1M/1e6;
+      var costPerQ=costIn+costOut;
+      var col=tierColors2[i%5];
+      bHtml+='<div style="border-left:2px solid '+col+';padding-left:8px;margin-bottom:6px">'
+        +'<div style="font-weight:600;color:'+col+';font-size:10px">'+t.name+' ('+t.trafficPct+'%) → '+qpd.toLocaleString()+' q/day</div>'
+        +'<div style="font-family:var(--mono);font-size:9px;color:var(--text3);line-height:1.8;margin-top:2px">'
+        +'in:  '+t.avgInputTok+'tok × $'+prov.inputPer1M+'/1M = $'+costIn.toFixed(5)+'/q<br>'
+        +'out: '+t.avgOutputTok+'tok × $'+prov.outputPer1M+'/1M = $'+costOut.toFixed(5)+'/q<br>'
+        +'<span style="font-weight:600">$'+costPerQ.toFixed(5)+'/q × '+qpd.toLocaleString()+'q/day × 365 = <span style="color:'+col+'">'+fmtSmart(r.apiCostYr)+'</span>/yr</span>'
+        +'</div>'
         +'</div>';
     });
-    bHtml+='<div style="border-top:1px solid var(--border);padding-top:4px;margin-top:4px;font-weight:600;color:var(--red)">Total: '+fmtSmart(totalApiCostYr)+'/yr = '+fmtSmart(totalApiCostYr/12)+'/mo</div>';
+    bHtml+='<div style="border-top:1px solid var(--border);padding-top:6px;margin-top:4px;font-size:11px">'
+      +'<span style="font-weight:600;color:var(--red)">Total: '+fmtSmart(totalApiCostYr)+'/yr</span>'
+      +' = '+fmtSmart(totalApiCostYr/12)+'/mo'
+      +' = '+fmtSmart(totalApiCostYr/365)+'/day</div>';
     bHtml+='</div>';
     breakdownEl.innerHTML=bHtml;
   }
@@ -6551,14 +6612,24 @@ function renderFrontierCompare(){
     var diff=yr-currentYr;
     var diffStr=(diff>0?'+':'')+fmtSmart(diff);
     var diffCol=diff>0?'var(--red)':'var(--green)';
+    // Per-query cost breakdown
+    var costPerQIn  = (avgIn  * p.inputPer1M  / 1e6);
+    var costPerQOut = (avgOut * p.outputPer1M / 1e6);
+    var costPerQ    = costPerQIn + costPerQOut;
     html+='<div style="background:var(--bg3);border-radius:var(--r);padding:12px 14px;border-left:3px solid '+fm.color+'">'
       +'<div style="font-size:10px;font-weight:600;color:'+fm.color+';margin-bottom:2px;text-transform:uppercase;letter-spacing:.04em">'+fm.name+'</div>'
-      +'<div style="font-size:9px;color:var(--text4);margin-bottom:4px">if 100% traffic routed here</div>'
+      +'<div style="font-size:9px;color:var(--text4);margin-bottom:4px">if 100% of '+qpd.toLocaleString()+' q/day routed here</div>'
       +'<div style="font-size:20px;font-weight:700;font-family:var(--mono)">'+fmtSmart(yr)+'</div>'
       +'<div style="font-size:10px;color:'+diffCol+';margin-top:2px">'+diffStr+' vs your mix</div>'
-      +'<div style="font-size:9px;color:var(--text4);margin-top:4px;font-family:var(--mono)">'
-      +totalQPD.toLocaleString()+' q/day × 365 × ('
-      +(avgIn)+'tok×$'+p.inputPer1M+'+'+avgOut+'tok×$'+p.outputPer1M+')/1M'
+      +'<div style="font-size:9px;color:var(--text4);margin-top:6px;line-height:1.7">'
+      +'<div>Per query:</div>'
+      +'<div style="font-family:var(--mono)">'
+      +'  in:  '+Math.round(avgIn)+'tok × $'+p.inputPer1M+'/1M = $'+costPerQIn.toFixed(5)+'</div>'
+      +'<div style="font-family:var(--mono)">'
+      +'  out: '+Math.round(avgOut)+'tok × $'+p.outputPer1M+'/1M = $'+costPerQOut.toFixed(5)+'</div>'
+      +'<div style="font-family:var(--mono);font-weight:600">'
+      +'  total: $'+costPerQ.toFixed(5)+'/query</div>'
+      +'<div style="margin-top:3px">'+qpd.toLocaleString()+' q/day × 365 × $'+costPerQ.toFixed(5)+' = <strong>'+fmtSmart(yr)+'</strong>/yr</div>'
       +'</div>'
       +'</div>';
   });
@@ -7776,7 +7847,7 @@ function exportPerfV2CSV(){
   var sections = [];
 
   // Header
-  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.9.4');
+  sections.push('GPU SIZING ANALYSIS — gpu.calc v5.9.5');
   sections.push('Model: '+PERF_STATE.modelLabel+', GPU: '+(PERF_GPU_LABELS[meta.gpu]||meta.gpu)+', Backend: '+(meta.backend||'').toUpperCase()+', TP='+meta.tp);
   sections.push('ISL: '+meta.isl+', OSL: '+meta.osl+', Prefix: '+meta.pct+'%, Eff ISL: '+Math.round(meta.isl*(1-meta.pct/100)));
   sections.push('Target: '+rd.toLocaleString()+' req/day ('+( rd/86400).toFixed(1)+' req/sec), Buffer: '+buf+'%');
@@ -9051,7 +9122,7 @@ function tpExportSheets(){
   if(!r||!p){alert('Run calculation first.');return;}
   var sel=r.selected;
   var lines=[
-    'GPU THROUGHPUT SIZING\tgpu.calc v5.9.4\t'+new Date().toLocaleDateString(),
+    'GPU THROUGHPUT SIZING\tgpu.calc v5.9.5\t'+new Date().toLocaleDateString(),
     'DISCLAIMER\tDirectional estimate ±30-50%. Validate before procurement.',
     '',
     'INPUTS','model\t'+document.getElementById('tp-model-name-display').textContent,
@@ -9096,7 +9167,7 @@ function tpExportSheets(){
 function tpExportJSON(){
   var r=TP_STATE.lastResult; if(!r){alert('Run first.');return;}
   var out={
-    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.9.4'},
+    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.9.5'},
     inputs:TP_STATE.lastParams,
     kv:{kv_per_token:r.kv_per_token,kv_per_request_mb:r.kv_per_request_mb,kv_ratio:r.kv_ratio,eta_kv:r.eta_kv},
     ttft:{compute_ms:r.ttft_compute_ms,queue_ms:r.ttft_queue_ms,total_ms:r.ttft_total_ms},
