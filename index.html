@@ -2672,15 +2672,16 @@ var S = {
   slidingWindow:null,   // hybrid_sliding: window size in tokens
   globalKvHeads:null,   // hybrid_sliding: KV heads for global layers (if different)
   globalHeadDim:null,   // hybrid_sliding: head dim for global layers (if different)
+  isMoE:false,          // MoE flag
   kvLoraRank:null,      // MLA: compressed KV dimension (DeepSeek V2/V3)
   qkRopeHeadDim:null,   // MLA: rope head dim added to latent
   // Users
-  users:30, ctx:8, hitrate:0.10,
+  users:1000, ctx:4, hitrate:0.0, concRate:0.20, cacheType:'persistent',
   // Inference
   fw:'vllm', mode:'std', tp:1, kvPrec:'fp16',
   pfGpus:1, dcGpus:1,
   // GPU
-  gpuName:'H100', gpuVram:80,
+  gpuName:'H200', gpuVram:141,
   // Cost
   dep:'cloud', cloudRate:3.00, disc:0,
   hwCost:25000, amort:5, kwh:0.10, infraPct:0, opexPct:0,
@@ -2985,7 +2986,7 @@ function openLayer(id){
 }
 
 // ===== CORE MATH =====
-function weightsGB(p){ var o=p||S; return o.params * (o.prec==='fp16'?2:o.prec==='fp8'?1:0.5); }
+// weightsGB defined in compat layer below
 
 var APP_VERSION = '6.0.0'; var APP_VERSION_COMPAT = '5.9.0'; // gpu.calc v6.0.0
 // ===== CAPACITY ENGINE v6.0.0 =====
@@ -3579,7 +3580,7 @@ function calc(){
   // ── ZONE A: ANSWER ────────────────────────────────────────
   var heroNum = document.getElementById('hero-num');
   var heroLabel= document.getElementById('hero-label');
-  if(heroNum)  heroNum.textContent  = C.totalGPUs;
+  if(heroNum)  heroNum.textContent  = (C.totalGPUs && isFinite(C.totalGPUs)) ? C.totalGPUs : '?';
   if(heroLabel) heroLabel.textContent = S.gpuName+' GPUs · '+C.replicas+' replicas × TP='+C.tp;
 
   // Compat: update old stat tile IDs so tests pass
