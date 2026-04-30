@@ -388,6 +388,38 @@ API_PROVIDERS.forEach(p => {
     `in=$${p.inputPer1M}, out=$${p.outputPer1M}`);
 });
 
+// ── Version consistency ─────────────────────────────────────────────────────
+(function testVersionConsistency() {
+  const fs   = require('fs');
+  const path = require('path');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+
+  // Extract APP_VERSION from JS
+  const verMatch = html.match(/APP_VERSION = '([^']+)'/);
+  const appVersion = verMatch ? verMatch[1] : null;
+  assert('APP_VERSION is defined in index.html', !!appVersion, 'not found');
+
+  // Nav bar must show same version (static fallback text)
+  const navMatch = html.match(/id="nav-version">([^<]+)<\/span>/);
+  const navVersion = navMatch ? navMatch[1] : null;
+  assert('nav-version element exists in HTML', !!navVersion, 'id="nav-version" not found');
+  assert('Nav bar version matches APP_VERSION',
+    navVersion === appVersion,
+    `nav shows "${navVersion}", APP_VERSION is "${appVersion}"`);
+
+  // No other hardcoded old version strings in visible UI
+  const staleRefs = (html.match(/v5\.\d+\.\d+/g) || [])
+    .filter(v => !html.includes(`APP_VERSION_COMPAT = '${v.slice(1)}'`)); // exclude compat var
+  assert('No stale v5.x.x version strings in UI',
+    staleRefs.length === 0,
+    `found: ${staleRefs.join(', ')}`);
+
+  // Export functions use APP_VERSION not hardcoded string
+  const hardcodedInExport = /sections\.push\([^)]*v\d+\.\d+\.\d+/.test(html);
+  assert('Export functions use APP_VERSION not hardcoded string',
+    !hardcodedInExport, 'found hardcoded version in export function');
+})();
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // LAYER 5 — REGRESSION SNAPSHOTS (locked values for each bug fix)
 // ═══════════════════════════════════════════════════════════════════════════════
