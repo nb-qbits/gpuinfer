@@ -3060,7 +3060,7 @@ function openLayer(id){
 // ===== CORE MATH =====
 // weightsGB defined in compat layer below
 
-var APP_VERSION = '6.0.6'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
+var APP_VERSION = '6.0.7'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
 // ===== CAPACITY ENGINE v6.0.0 =====
 // Layer-by-layer: weights → KV → GPU specs → memory fit → replicas → cost
 
@@ -6590,17 +6590,22 @@ function renderFrontierCompare(){
     {name:'GPT-4o',       model:'GPT-4o',           color:'#057a55'},
     {name:'Gemini Flash', model:'Gemini 2.0 Flash',  color:'#1a56db'},
   ];
-  // FIX-001: Use fixed weighted avg tokens computed from ACTUAL tier token counts
-  // but locked to the token values themselves, not traffic %. This way changing
-  // traffic split does NOT change the "if 100% went here" tile cost.
-  // We use a simple average across tiers (equal weight) as the stable baseline.
-  var avgIn=0, avgOut=0;
+  // FIX-001 v2: Traffic-weighted avg tokens, but only from tiers with traffic assigned.
+  // When 100% is on tier 1 (200 tok), result = 200. Correct.
+  // When split 55/22/23, result = weighted blend of actual mix. Also correct.
+  var avgIn=0, avgOut=0, totalPctUsed=0;
   SF.tiers.forEach(function(t){
-    avgIn+=t.avgInputTok;
-    avgOut+=t.avgOutputTok;
+    if(t.trafficPct>0){
+      avgIn+=t.avgInputTok*(t.trafficPct/100);
+      avgOut+=t.avgOutputTok*(t.trafficPct/100);
+      totalPctUsed+=t.trafficPct;
+    }
   });
-  avgIn=avgIn/Math.max(1,SF.tiers.length);
-  avgOut=avgOut/Math.max(1,SF.tiers.length);
+  // Normalise in case traffic doesn't sum to exactly 100
+  if(totalPctUsed>0&&totalPctUsed!==100){
+    avgIn=avgIn*(100/totalPctUsed);
+    avgOut=avgOut*(100/totalPctUsed);
+  }
   var qpd=SF.totalUsers*(SF.queriesPerUserPerDay||100);
 
   // Current mixed cost
@@ -6657,12 +6662,16 @@ function renderFleetCostCompare(totalApiCostYr,onpremYr,totalGPUs,activeProvider
   var ded5=dedNodes*dedRateMo*12*5;
   // Naive = 100% traffic to Claude Sonnet (no routing savings)
   var naiveProv=API_PROVIDERS.find(function(p){return p.model==='Claude Sonnet 4.6'||p.model==='Claude 3.7 Sonnet';})||{inputPer1M:3,outputPer1M:15};
-  // FIX-004: Use simple average of tier tokens (not traffic-weighted) so
-  // naive cost stays stable when only traffic split changes
-  var avgIn=0,avgOut=0;
-  SF.tiers.forEach(function(t){avgIn+=t.avgInputTok;avgOut+=t.avgOutputTok;});
-  avgIn=avgIn/Math.max(1,SF.tiers.length);
-  avgOut=avgOut/Math.max(1,SF.tiers.length);
+  // FIX-004 v2: Traffic-weighted avg, only from tiers with traffic > 0
+  var avgIn=0,avgOut=0,_pctUsed=0;
+  SF.tiers.forEach(function(t){
+    if(t.trafficPct>0){
+      avgIn+=t.avgInputTok*(t.trafficPct/100);
+      avgOut+=t.avgOutputTok*(t.trafficPct/100);
+      _pctUsed+=t.trafficPct;
+    }
+  });
+  if(_pctUsed>0&&_pctUsed!==100){avgIn=avgIn*(100/_pctUsed);avgOut=avgOut*(100/_pctUsed);}
   var naiveQpd=SF.totalUsers*(SF.queriesPerUserPerDay||100);
   var naiveYr=naiveQpd*365*(avgIn*naiveProv.inputPer1M+avgOut*naiveProv.outputPer1M)/1e6;
   var amortYrs=5;
