@@ -1,5 +1,78 @@
 <!DOCTYPE html>
 <html lang="en">
+<!--
+================================================================================
+  gpu.calc — BUG REGISTRY
+  Centralised log of known bugs, root causes, and fix status.
+  Format: BUG-XXX | page | severity | status | description
+================================================================================
+
+  BUG-023 | Throughput page | HIGH | FIXED in v6.1.0
+  eff_batch incorrectly capped by p.concurrency
+  ─────────────────────────────────────────────
+  Location : tpot_for_tp() → Step 4 BATCH CAP, line ~8085
+  Code     : var eff_batch = max(1, round(min(batch_cap_raw, p.concurrency) * batch_frag))
+  Symptom  : Lowering concurrency from 100 → 1 causes GPU count to jump 43 → 546
+             (13× increase) even though less concurrency should mean fewer GPUs.
+  Root cause: eff_batch is used for throughput sizing (seq_per_sec = eff_batch / TPOT×OSL).
+             When concurrency=1, min(batch_cap_raw=25, 1) = 1, collapsing eff_batch to 1.
+             seq_per_sec drops 18×, reps_tput rises 18×, GPU count explodes.
+  Fix      : eff_batch for THROUGHPUT sizing should only be capped by max_batch_tokens,
+             NOT by concurrency. Concurrency = peak simultaneous users, unrelated to
+             how large a decode batch the GPU can fill.
+             Separate eff_batch_tput (no concurrency cap) from eff_batch_conc (with cap).
+  Reported : 2026-04-30 | Discovered via screenshot comparison by vgrover1515
+
+  ── Previously fixed bugs ────────────────────────────────────────────────────
+
+  BUG-024 | Throughput | MEDIUM | FIXED in v6.1.0
+  Evicting prefix cache did not reduce avg_ctx in tpEngine → GPU count unchanged.
+  Fix: avg_ctx now multiplied by (1 - prefix_pct/100) when cache_type = 'evicting'.
+  Also added cache_type selector UI to throughput page.
+
+  BUG-025 | Throughput | MEDIUM | FIXED in v6.1.0
+  tpLiveRecalc() returned early if TP_STATE.lastResult was null.
+  initThroughputPage() never auto-fired a calculation → blank page on first visit.
+  Fix: initThroughputPage() now calls runThroughput() on first init.
+
+  BUG-026 | Hybrid | HIGH | FIXED in v6.0.10
+  var calcNote declared mid-string-concat in calcHybrid() → all 4 cost tiles never rendered.
+  Fix: moved calcNote declaration before rc.innerHTML assignment.
+
+  BUG-001 | Routing page | HIGH | FIXED in v6.0.8
+  Frontier tiles used traffic-weighted avg tokens across all tiers.
+  Changing traffic split changed tile cost even with no model/token changes.
+  Fix: each tile now uses tokens from its own matching tier (or tier[0] fallback).
+
+  BUG-002 | Routing page | HIGH | FIXED in v6.0.6
+  renderFleetBreakdown hardcoded 100 queries/day instead of SF.queriesPerUserPerDay.
+  Breakdown table and savings column showed 40× wrong values when q/day ≠ 100.
+
+  BUG-003 | Routing page | MEDIUM | FIXED in v6.0.6
+  renderTrafficFlow SVG hardcoded 100 queries/day. Node cost labels were wrong.
+
+  BUG-004 | Routing page | MEDIUM | FIXED in v6.0.8
+  naiveYr in renderFleetCostCompare used traffic-weighted avg tokens (same root as BUG-001).
+
+  BUG-005 | Routing page | LOW | FIXED in v6.0.6
+  Naive provider mismatch: renderFleetBreakdown used 'Claude 3.7 Sonnet' while
+  renderFleetCostCompare used 'Claude Sonnet 4.6 || Claude 3.7 Sonnet'. Savings
+  numbers differed between table and 5yr bar for same inputs.
+
+  BUG-012 | Fleet page | LOW | OPEN (tracked inline)
+  Tier with apiModel set but no self-hosted model → GPU count = 0 (API-only tier).
+
+  BUG-018 | Fleet page | LOW | OPEN (tracked inline)
+  Duplicate model tiers not detected/warned.
+
+  BUG-021 | Capacity page | LOW | OPEN (tracked inline)
+  KV cache theoretical max — production realism factor applied.
+
+  BUG-022 | Capacity page | LOW | OPEN (tracked inline)
+  Safety buffer 20% headroom applied in production sizing.
+
+================================================================================
+-->
 <head>
 <meta charset="UTF-8">
   <meta name="gpu-calc-version" content="6.0.1">
@@ -1866,6 +1939,12 @@ button{font-family:var(--sans);cursor:pointer}
             <button class="chip" onclick="tpSetPrefix(90,this)">90%</button>
           </div>
           <input type="number" id="tp-prefix" value="80" min="0" max="99" oninput="tpUpdateISLDisplay();tpLiveRecalc()" class="tp-inp" style="width:60px;margin-bottom:8px">
+          <div style="margin-bottom:6px">
+            <select id="tp-cache-type" onchange="tpLiveRecalc()" style="padding:4px 6px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2);color:var(--text2);font-size:11px;width:100%">
+              <option value="persistent">Persistent (KV stays in VRAM — TTFT only)</option>
+              <option value="evicting">Evicting (KV freed after hit — reduces GPU count)</option>
+            </select>
+          </div>
           <div id="tp-isl-eff-row" style="font-size:11px;color:var(--blue);font-family:var(--mono);background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:var(--r);padding:4px 8px">
             ↳ Eff. ISL: <strong id="tp-isl-eff-val">1,800</strong> tokens (prefix skips compute, not storage)
           </div>
@@ -3060,7 +3139,7 @@ function openLayer(id){
 // ===== CORE MATH =====
 // weightsGB defined in compat layer below
 
-var APP_VERSION = '6.0.8'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
+var APP_VERSION = '6.1.1'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
 // ===== CAPACITY ENGINE v6.0.0 =====
 // Layer-by-layer: weights → KV → GPU specs → memory fit → replicas → cost
 
@@ -5409,6 +5488,8 @@ function calcHybrid(){
   });
   var rc=document.getElementById('hybrid-right-content');
   if(!rc)return;
+  // Helper for math details in 5-year tiles
+  var calcNote=function(lbl,lines){return '<div style="font-size:9px;color:var(--text4);margin-top:5px;line-height:1.7;font-family:var(--mono)">'+lines.join('<br>')+'</div>';};
   rc.innerHTML=
     // Audit
     '<div class="audit-box">'
@@ -5452,8 +5533,6 @@ function calcHybrid(){
     // 4-column cost comparison including dedicated node
     +'<div class="section-title" style="margin-bottom:8px">5-YEAR COST COMPARISON</div>'
     +'<div class="cost-compare">'
-    // Helper for math details
-    var calcNote=function(lbl,lines){return '<div style="font-size:9px;color:var(--text4);margin-top:5px;line-height:1.7;font-family:var(--mono)">'+lines.join('<br>')+'</div>';};
     +'<div class="cc-card'+(bestKey==='cloud'?' recommended':'')+'">'
       +'<div class="cc-label">Pure cloud</div>'
       +'<div class="cc-price" style="color:var(--red)">'+fmtSmart(purecloudCost5)+'</div>'
@@ -6054,8 +6133,14 @@ function computeTier(tier){
   var wGB=tier.params*bytesPerParam;
   var ohGB=vram*0.08;
   var usable=(vram-ohGB)*tier.tp;
-  var bytesPerTok=2*tier.layers*tier.kvHeads*tier.headDim*2;
-  var kvPU=bytesPerTok*tier.ctx*1000/1e9;
+  // FIX-028: bytes_kv derived from tier precision, not hardcoded 2
+  var bytesKV = tier.prec==='fp8'?1:tier.prec==='int4'?0.5:2;
+  // FIX-027: use avg_ctx = ISL + OSL/2, not ctx×1000 (which is peak context, not average)
+  var tierISL = tier.avgInputTok  || (tier.ctx*1000) || 2000;
+  var tierOSL = tier.avgOutputTok || 200;
+  var tierAvgCtx = tierISL + tierOSL / 2;
+  var bytesPerTok=2*tier.layers*tier.kvHeads*tier.headDim*bytesKV;
+  var kvPU=bytesPerTok*tierAvgCtx/1e9;
   var kvPool=(usable-wGB)*0.95;
 
   // BUG-021: KV cache theoretical max — apply production realism factor
@@ -8062,7 +8147,10 @@ function tpEngine(p) {
   // KV cache grows from ISL at step 0 to ISL+OSL at step OSL.
   // Average over the decode phase = ISL + OSL/2.
   // Prefill still uses full ISL (KV must store all input tokens).
-  var avg_ctx        = p.isl + p.osl / 2;          // average decode context
+  // FIX-024: Evicting cache frees KV after a hit → reduces effective avg_ctx for sizing.
+  // Persistent cache keeps KV in VRAM (no reduction). Consistent with capKVPerUser().
+  var prefix_frac_kv = (p.cache_type === 'evicting') ? (p.prefix_pct / 100.0) : 0;
+  var avg_ctx        = (p.isl + p.osl / 2) * (1 - prefix_frac_kv);  // reduced if evicting
   var kv_per_token   = 2 * p.layers * p.kv_heads * p.head_dim * p.bytes_kv;
   var kv_per_request = kv_per_token * avg_ctx;      // avg KV per request during decode
 
@@ -8082,8 +8170,11 @@ function tpEngine(p) {
   var max_bt        = p.max_batch_tokens || TP_MAX_BATCH_TOKENS;
   var batch_frag    = p.batch_frag_factor || 0.70;
   var batch_cap_raw = Math.min(p.batch, Math.floor(max_bt / Math.max(isl_eff, 1)));
-  var eff_batch     = Math.max(1, Math.round(Math.min(batch_cap_raw, p.concurrency) * batch_frag));
-  var batch_capped  = batch_cap_raw < p.batch;
+  // FIX-023: eff_batch_tput NOT capped by concurrency (throughput sizing uses full batch capacity)
+  // eff_batch_conc is used only for the concurrency floor replica check
+  var eff_batch      = Math.max(1, Math.round(batch_cap_raw * batch_frag));  // throughput sizing
+  var eff_batch_conc = Math.max(1, Math.round(Math.min(batch_cap_raw, p.concurrency) * batch_frag)); // concurrency floor only
+  var batch_capped   = batch_cap_raw < p.batch;
 
   // ── STEP 5: KV RATIO + ETA_KV (TP-independent) ───────────
   // Uses avg_ctx (not ISL) and eff_batch (not configured batch)
@@ -8100,7 +8191,7 @@ function tpEngine(p) {
   // Compute: uses isl_eff (prefix saves compute, not storage)
   // Queue:   time to accumulate eff_batch requests at arrival rate
   var TTFT_compute = (isl_eff * 2 * eff_params) / (p.flops * p.mfu_prefill);
-  var TTFT_queue   = eff_batch / req_per_sec;
+  var TTFT_queue   = eff_batch_conc / req_per_sec;  // queue time uses concurrency-capped batch
   var TTFT_total   = TTFT_compute + TTFT_queue;
 
   // ── STEP 7: PER-TP TPOT + SIZING ─────────────────────────
@@ -8145,6 +8236,7 @@ function tpEngine(p) {
     var gpus_tput   = reps_tput * tp;
 
     // Concurrency floor (F1): enough replicas for concurrent prefill load
+    // Uses eff_batch_conc (batch capped by concurrency) — not the throughput batch
     var pf_time_s   = TTFT_compute;
     var pf_budget_s = Math.max(pf_time_s * 3.0, 0.5);
     var reps_conc   = Math.max(1, Math.ceil((p.concurrency * pf_time_s) / pf_budget_s));
@@ -8152,9 +8244,11 @@ function tpEngine(p) {
     var gpus        = Math.max(gpus_tput, gpus_conc);
     var reps        = Math.ceil(gpus / tp);
 
-    // Memory fit check
+    // FIX-029: Memory fit uses eff_batch (actual decode batch), not concurrency/tp
+    // concurrency = peak simultaneous users across ALL replicas
+    // eff_batch = tokens actually in flight on THIS GPU at once
     var w_gb  = p.total_params * p.bytes_param / tp / 1e9;
-    var kv_gb = kv_per_token * avg_ctx * (p.concurrency / tp) / 1e9;
+    var kv_gb = kv_per_token * avg_ctx * eff_batch / tp / 1e9;
     var fits  = (w_gb + kv_gb) < 0.9 * p.vram_gb;
 
     var explain;
@@ -8170,6 +8264,9 @@ function tpEngine(p) {
       t_sync_ms:t_sync*1000, oh_ms:oh*1000,
       ib_pen:ib_pen, seq_per_sec:seq_per_sec,
       gpus:gpus, replicas:reps,
+      gpus_tput:gpus_tput, gpus_conc:gpus_conc,
+      reps_tput:reps_tput, reps_conc:reps_conc,
+      pf_budget_s:pf_budget_s,
       kv_gpu_mb:kv_gpu/1e6, w_gb:w_gb, kv_gb:kv_gb,
       kv_bound:t_kv>=t_w,
       bottleneck:t_kv>=t_w?'KV':'compute',
@@ -8247,7 +8344,7 @@ function tpEngine(p) {
     kv_per_token:kv_per_token,
     kv_per_request_mb:kv_per_request / 1e6,
     kv_ratio:kv_ratio, eta_kv:eta_kv,
-    eff_batch:eff_batch, batch_capped:batch_capped,
+    eff_batch:eff_batch, eff_batch_conc:eff_batch_conc, batch_capped:batch_capped,
     ttft_compute_ms:TTFT_compute * 1000,
     ttft_queue_ms:TTFT_queue * 1000,
     ttft_total_ms:TTFT_total * 1000,
@@ -8292,6 +8389,7 @@ function tpReadParams(){
     batch:         parseInt(document.getElementById('tp-batch').value)||64,
     concurrency:   parseInt(document.getElementById('tp-concurrency').value)||100,
     prefix_pct:    (function(){ var v=parseFloat(document.getElementById('tp-prefix').value); return isNaN(v)?80:v; })(),
+    cache_type:    (function(){ var el=document.getElementById('tp-cache-type'); return el?el.value:'persistent'; })(),
     req_day:       parseFloat(document.getElementById('tp-req-day').value)||100e6,
     // tp
     tp_mode:       document.getElementById('tp-tp-mode').value||'auto',
@@ -8833,25 +8931,33 @@ function tpRenderMath(r){
       +'<span style="color:var(--text4);font-size:10px">'+note+'</span>'
       +'</div>';
   }
+  var cal = p.is_moe ? (p.cal_moe||2.8) : (p.cal_dense||1.5);
+  var tput_eff = p.tput_eff || 0.85;
+  var binding = sel.gpus_tput >= sel.gpus_conc ? 'THROUGHPUT' : 'CONCURRENCY FLOOR';
+  var cacheNote = p.cache_type==='evicting' ? ' (evicting: ×'+(1-p.prefix_pct/100).toFixed(2)+')' : ' (persistent: no KV reduction)';
   el.innerHTML =
-    row('1a', p.req_day.toLocaleString()+' / 86400', r.req_per_sec.toFixed(2)+' req/s', 'demand')
-   +row('1b', p.isl+' × (1−'+p.prefix_pct+'%)', r.isl_eff.toLocaleString()+' tokens', 'eff ISL')
-   +row('2',  '2 × '+p.kv_heads+' kv_heads × '+p.head_dim+' head_dim × '+p.layers+' layers × '+p.bytes_kv+'B', (r.kv_per_token/1024).toFixed(1)+' KB/token', 'kv_per_token')
-   +row('2b', 'ISL + OSL/2 = '+p.isl+' + '+p.osl+'/2', r.avg_ctx.toFixed(0)+' tokens', 'avg_ctx (decode phase)')
-   +row('2c', 'kv_per_token × avg_ctx', r.kv_per_request_mb.toFixed(1)+' MB', 'kv_per_req (avg over decode)')
-   +row('3',  'dense_params + (expert_params/num_exp × active_exp)', (r.eff_params/1e9).toFixed(3)+'B', 'eff_params for prefill')
-   +row('4',  'kv_per_req × batch / active_bytes', r.kv_ratio.toFixed(2)+'×', 'kv_ratio (TP-independent)')
-   +row('5',  'η_kv from kv_ratio', r.eta_kv.toFixed(3), 'KV BW efficiency')
-   +row('6a', 'isl_eff × 2 × eff_params / (flops × mfu_prefill)', r.ttft_compute_ms.toFixed(1)+'ms', 'TTFT_compute')
-   +row('6b', 'min(eff_batch='+r.eff_batch+', conc='+p.concurrency+') / req_s', r.ttft_queue_ms.toFixed(1)+'ms', 'TTFT_queue')
+    row('1a', p.req_day.toLocaleString()+' / 86,400', r.req_per_sec.toFixed(2)+' req/s', 'request rate')
+   +row('1b', p.isl+' × (1 − '+p.prefix_pct+'%)', r.isl_eff.toLocaleString()+' tokens', 'eff ISL (prefill compute only)')
+   +row('2',  '2 × '+p.layers+' layers × '+p.kv_heads+' KV heads × '+p.head_dim+' head_dim × '+p.bytes_kv+'B', (r.kv_per_token/1024).toFixed(1)+' KB/token', 'KV per token')
+   +row('2b', 'ISL + OSL/2 = '+p.isl+' + '+p.osl+'/2'+cacheNote, r.avg_ctx.toFixed(0)+' tokens', 'avg_ctx (KV sizing)')
+   +row('2c', 'KV/token × avg_ctx', r.kv_per_request_mb.toFixed(1)+' MB', 'KV per request (avg over decode)')
+   +row('3',  p.is_moe ? 'dense_params('+( p.dense_params/1e9).toFixed(1)+'B) + expert_params/num_exp × active_exp' : 'total_params', (r.eff_params/1e9).toFixed(3)+'B', 'eff_params for prefill FLOPs')
+   +row('4',  'KV/req × eff_batch('+r.eff_batch+') / (active_params × bytes)', r.kv_ratio.toFixed(2)+'×', 'KV ratio → sets η_kv')
+   +row('5',  'η_kv from KV ratio (>10→×0.70, >3→×0.85, else ×1.0) × mfu_bw('+p.mfu_bw_base+')', r.eta_kv.toFixed(3), 'KV BW efficiency')
+   +row('6a', 'isl_eff × 2 × eff_params / ('+( p.flops/1e12).toFixed(0)+'TFLOPS × mfu_prefill '+p.mfu_prefill+')', r.ttft_compute_ms.toFixed(1)+'ms', 'TTFT compute')
+   +row('6b', 'eff_batch_conc('+r.eff_batch_conc+') / req_s  [batch capped by min(cap,concurrency='+p.concurrency+')]', r.ttft_queue_ms.toFixed(1)+'ms', 'TTFT queue wait')
    +row('6c', 'TTFT_compute + TTFT_queue', r.ttft_total_ms.toFixed(1)+'ms', 'TTFT total')
-   +row('7a', 'active_params × bytes / TP='+r.selected_tp, sel.t_w_ms.toFixed(3)+'ms', 'time_weights')
-   +row('7b', 'kv_per_token × avg_ctx × eff_batch / TP='+r.selected_tp, sel.t_kv_ms.toFixed(3)+'ms', 'time_kv (avg_ctx + eff_batch)')
-   +row('7c', 'max(time_weights, time_kv)', sel.t_comp_ms.toFixed(3)+'ms', 'pipelined — not sum')
-   +row('8',  'allreduce + sync + overhead', (sel.t_ar_ms+sel.t_sync_ms+sel.oh_ms).toFixed(3)+'ms', 'communication')
-   +row('9',  '(time_compute + comm) × ib_pen × cal_mult', sel.tpot_ms.toFixed(2)+'ms', 'TPOT')
-   +row('10', 'req_s × TPOT × OSL / (eff_batch × tput_eff) × 1.2', sel.gpus+' GPUs', 'GPU count (batch amortised)')
-   +row('11', 'ceil(GPUs / TP)', sel.replicas+' replicas', 'replicas');
+   +row('7a', 'active_params('+( p.active_params/1e9).toFixed(2)+'B) × '+p.bytes_param+'B / TP='+r.selected_tp+' / ('+( p.bandwidth/1e12).toFixed(1)+'TB/s × η_w '+p.eta_weights+')', sel.t_w_ms.toFixed(3)+'ms', 'time to read weights')
+   +row('7b', 'KV/token × avg_ctx × eff_batch('+r.eff_batch+') / TP='+r.selected_tp+' / ('+( p.bandwidth/1e12).toFixed(1)+'TB/s × η_kv '+r.eta_kv.toFixed(3)+')', sel.t_kv_ms.toFixed(3)+'ms', 'time to read KV cache')
+   +row('7c', 'max(t_weights, t_kv) — pipelined, not summed', sel.t_comp_ms.toFixed(3)+'ms', 'memory-bound compute time')
+   +row('8',  'all-reduce + sync barriers + scheduling overhead (×'+r.selected_tp+' overhead)', (sel.t_ar_ms+sel.t_sync_ms+sel.oh_ms).toFixed(3)+'ms', 'communication overhead')
+   +row('9',  '(t_compute + comm) × ib_penalty('+sel.ib_pen.toFixed(2)+') × calibration('+cal+')', sel.tpot_ms.toFixed(2)+'ms', 'TPOT per output token')
+   +'<div style="padding:4px 0;border-bottom:1px solid var(--border);font-size:10px;color:var(--text4);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-top:6px">GPU COUNT — two constraints, take the max</div>'
+   +row('10a', 'seq/replica/sec = eff_batch('+r.eff_batch+') / (TPOT × OSL) = '+r.eff_batch+' / ('+sel.tpot_ms.toFixed(2)+'ms × '+p.osl+')', sel.seq_per_sec.toFixed(2)+' seq/s', 'throughput per replica')
+   +row('10b', 'replicas = ⌈req_s / (seq/s × tput_eff('+tput_eff+')) × headroom(1.2)⌉ × TP', sel.gpus_tput+' GPUs', (sel.gpus_tput>=sel.gpus_conc?'▶ BINDING':'not binding')+' · throughput path')
+   +row('10c', 'replicas = ⌈concurrency('+p.concurrency+') × TTFT_compute / pf_budget('+( sel.pf_budget_s*1000).toFixed(0)+'ms)⌉ × TP', sel.gpus_conc+' GPUs', (sel.gpus_conc>sel.gpus_tput?'▶ BINDING':'not binding')+' · concurrency floor')
+   +row('10d', 'GPUs = max(throughput path, concurrency floor)', sel.gpus+' GPUs  ← '+binding+' WINS', 'final GPU count')
+   +row('11', 'ceil('+sel.gpus+' / TP='+r.selected_tp+')', sel.replicas+' replicas', 'total replicas');
 }
 
 // ── MAIN RUN (with sensational loading) ──────────────────────
@@ -9127,43 +9233,75 @@ function tpExportSheets(){
   var r=TP_STATE.lastResult; var p=TP_STATE.lastParams;
   if(!r||!p){alert('Run calculation first.');return;}
   var sel=r.selected;
+  var cal = p.is_moe ? (p.cal_moe||2.8) : (p.cal_dense||1.5);
+  var tput_eff = p.tput_eff||0.85;
+  var binding = sel.gpus_tput >= sel.gpus_conc ? 'THROUGHPUT' : 'CONCURRENCY FLOOR';
+  var modelName = (document.getElementById('tp-model-name-display')||{}).textContent||'unknown';
+  var gpuName   = (document.getElementById('tp-gpu-name')||{}).value||'unknown';
   var lines=[
-    'GPU THROUGHPUT SIZING\tgpu.calc v5.9.5\t'+new Date().toLocaleDateString(),
+    'GPU THROUGHPUT SIZING MATH\tgpu.calc '+APP_VERSION+'\t'+new Date().toLocaleDateString(),
     'DISCLAIMER\tDirectional estimate ±30-50%. Validate before procurement.',
     '',
-    'INPUTS','model\t'+document.getElementById('tp-model-name-display').textContent,
-    'gpu\t'+document.getElementById('tp-gpu-name').value,
-    'isl\t'+p.isl,'osl\t'+p.osl,'batch\t'+p.batch,
-    'prefix_pct\t'+p.prefix_pct,'eff_isl\t'+r.isl_eff,
-    'concurrency\t'+p.concurrency,'req_day\t'+p.req_day,
+    '── INPUTS ──\t\t',
+    'Param\tValue\tNote',
+    'Model\t'+modelName+'\t',
+    'GPU\t'+gpuName+'\t',
+    'ISL (input tokens)\t'+p.isl+'\t',
+    'OSL (output tokens)\t'+p.osl+'\t',
+    'Prefix cache hit %\t'+p.prefix_pct+'%\t'+p.cache_type,
+    'Batch size\t'+p.batch+'\t',
+    'Concurrency\t'+p.concurrency+'\tpeak simultaneous requests',
+    'Req / day\t'+p.req_day.toLocaleString()+'\t',
+    'GPU TFLOPS\t'+(p.flops/1e12).toFixed(0)+'\t',
+    'GPU BW (TB/s)\t'+(p.bandwidth/1e12).toFixed(1)+'\t',
+    'mfu_prefill\t'+p.mfu_prefill+'\t',
+    'mfu_bw_base\t'+p.mfu_bw_base+'\t',
+    'calibration\t'+cal+'\t'+(p.is_moe?'MoE':'dense'),
     '',
-    'KV CACHE',
-    'kv_per_token_bytes\t'+r.kv_per_token,
-    'kv_per_request_mb\t'+r.kv_per_request_mb.toFixed(1),
-    'kv_ratio\t'+r.kv_ratio.toFixed(2),
-    'eta_kv\t'+r.eta_kv.toFixed(3),
+    '── STEP-BY-STEP SIZING MATH ──\t\t',
+    'Step\tFormula\tValue\tNote',
+    '1a\t'+p.req_day.toLocaleString()+' / 86400\t'+r.req_per_sec.toFixed(2)+' req/s\tRequest rate',
+    '1b\t'+p.isl+' × (1 - '+p.prefix_pct+'%)\t'+r.isl_eff+' tokens\tEff ISL (prefill compute only)',
+    '2\t2 × '+p.layers+' layers × '+p.kv_heads+' KV heads × '+p.head_dim+' head_dim × '+p.bytes_kv+'B\t'+(r.kv_per_token/1024).toFixed(1)+' KB/token\tKV per token',
+    '2b\tISL + OSL/2'+(p.cache_type==='evicting'?' × (1-'+p.prefix_pct+'%) evicting':'')+' = '+p.isl+' + '+p.osl+'/2\t'+r.avg_ctx.toFixed(0)+' tokens\tavg_ctx (KV sizing)',
+    '2c\tKV/token × avg_ctx\t'+r.kv_per_request_mb.toFixed(1)+' MB\tKV per request',
+    '3\teff_params ('+(p.is_moe?'dense+active experts':'total_params')+')\t'+(r.eff_params/1e9).toFixed(3)+'B\tFor prefill FLOPs',
+    '4\tKV/req × eff_batch('+r.eff_batch+') / active_bytes\t'+r.kv_ratio.toFixed(2)+'×\tKV ratio → sets η_kv',
+    '5\tη_kv from KV ratio\t'+r.eta_kv.toFixed(3)+'\tKV BW efficiency',
+    '6a\tisl_eff × 2 × eff_params / (TFLOPS × mfu_prefill)\t'+r.ttft_compute_ms.toFixed(1)+'ms\tTTFT compute',
+    '6b\teff_batch_conc('+r.eff_batch_conc+') / req_s\t'+r.ttft_queue_ms.toFixed(1)+'ms\tTTFT queue wait',
+    '6c\tTTFT_compute + TTFT_queue\t'+r.ttft_total_ms.toFixed(1)+'ms\tTTFT total',
+    '7a\tactive_params × bytes / TP / BW / η_w\t'+sel.t_w_ms.toFixed(3)+'ms\tTime to read weights',
+    '7b\tKV/token × avg_ctx × eff_batch / TP / BW / η_kv\t'+sel.t_kv_ms.toFixed(3)+'ms\tTime to read KV cache',
+    '7c\tmax(t_weights, t_kv)\t'+sel.t_comp_ms.toFixed(3)+'ms\tMemory-bound compute (pipelined)',
+    '8\tall-reduce + sync + overhead\t'+(sel.t_ar_ms+sel.t_sync_ms+sel.oh_ms).toFixed(3)+'ms\tCommunication overhead',
+    '9\t(t_compute + comm) × ib_penalty × calibration\t'+sel.tpot_ms.toFixed(2)+'ms\tTPOT per output token',
     '',
-    'RESULTS',
-    'ttft_compute_ms\t'+r.ttft_compute_ms.toFixed(1),
-    'ttft_queue_ms\t'+r.ttft_queue_ms.toFixed(1),
-    'ttft_total_ms\t'+r.ttft_total_ms.toFixed(1),
-    'selected_tp\t'+r.selected_tp,
-    'tpot_ms\t'+sel.tpot_ms.toFixed(2),
-    'gpus\t'+sel.gpus,
-    'replicas\t'+sel.replicas,
-    'disagg_total_gpus\t'+r.disagg.total_gpus,
-    'disagg_ttft_ms\t'+r.disagg.ttft_total_ms.toFixed(1),
+    '── GPU COUNT (two constraints — take the MAX) ──\t\t',
+    'Step\tFormula\tValue\tNote',
+    '10a\tseq/replica/sec = eff_batch / (TPOT × OSL)\t'+sel.seq_per_sec.toFixed(2)+' seq/s\tReplica throughput',
+    '10b\treplicas = ⌈req_s / (seq/s × '+tput_eff+')⌉ × 1.2 headroom\t'+sel.gpus_tput+' GPUs\t'+(sel.gpus_tput>=sel.gpus_conc?'▶ BINDING':'not binding')+' · throughput path',
+    '10c\treplicas = ⌈concurrency × TTFT_compute / pf_budget⌉\t'+sel.gpus_conc+' GPUs\t'+(sel.gpus_conc>sel.gpus_tput?'▶ BINDING':'not binding')+' · concurrency floor',
+    '10d\tGPUs = max(throughput, concurrency floor)\t'+sel.gpus+' GPUs\t'+binding+' WINS',
+    '11\tceil(GPUs / TP='+r.selected_tp+')\t'+sel.replicas+' replicas\tFinal answer',
     '',
-    'TP SWEEP',
-    'tp\ttpot_ms\tgpus\treplicas\tkv_gpu_mb\tfits',
+    '── TP SWEEP ──\t\t',
+    'TP\tTPOT (ms)\tGPUs\tReplicas\tKV/GPU (MB)\tFits\tBottleneck',
   ];
   TP_OPTIONS.forEach(function(tp){
     var tv=r.tp_sweep[tp];
-    lines.push(tp+'\t'+tv.tpot_ms.toFixed(2)+'\t'+tv.gpus+'\t'+tv.replicas+'\t'+tv.kv_gpu_mb.toFixed(0)+'\t'+(tv.fits?'YES':'OOM'));
+    lines.push(tp+'\t'+tv.tpot_ms.toFixed(2)+'\t'+tv.gpus+'\t'+tv.replicas+'\t'+tv.kv_gpu_mb.toFixed(0)+'\t'+(tv.fits?'YES':'OOM')+'\t'+tv.bottleneck);
   });
+  lines.push('');
+  lines.push('── vLLM vs llm-d ──\t\t');
+  lines.push('Mode\tGPUs\tTTFT (ms)\tTPOT (ms)\tNote');
+  lines.push('vLLM\t'+sel.gpus+'\t'+r.ttft_total_ms.toFixed(1)+'\t'+sel.tpot_ms.toFixed(2)+'\t');
+  if(r.disagg){
+    lines.push('llm-d\t'+r.disagg.total_gpus+'\t'+r.disagg.ttft_total_ms.toFixed(1)+'\t'+sel.tpot_ms.toFixed(2)+'\tprefill disaggregated');
+  }
   var tsv=lines.join('\n');
   navigator.clipboard.writeText(tsv).then(function(){
-    alert('Copied! Paste into Google Sheets cell A1.');
+    alert('✓ Copied! Paste into Google Sheets cell A1.');
   }).catch(function(){
     var a=document.createElement('a'); a.href='data:text/tab-separated-values;charset=utf-8,'+encodeURIComponent(tsv);
     a.download='throughput-sizing.tsv'; a.click();
@@ -9173,7 +9311,7 @@ function tpExportSheets(){
 function tpExportJSON(){
   var r=TP_STATE.lastResult; if(!r){alert('Run first.');return;}
   var out={
-    meta:{generated:new Date().toISOString(),tool:'gpu.calc v5.9.5'},
+    meta:{generated:new Date().toISOString(),tool:'gpu.calc '+APP_VERSION},
     inputs:TP_STATE.lastParams,
     kv:{kv_per_token:r.kv_per_token,kv_per_request_mb:r.kv_per_request_mb,kv_ratio:r.kv_ratio,eta_kv:r.eta_kv},
     ttft:{compute_ms:r.ttft_compute_ms,queue_ms:r.ttft_queue_ms,total_ms:r.ttft_total_ms},
@@ -9229,6 +9367,9 @@ function initThroughputPage(){
     tpUpdateISLDisplay();
     tpUpdateRPS();
     _tpPageInited = true;
+    // FIX-025: Auto-run on first visit so page shows results immediately (not blank)
+    runThroughput();
+    return;
   }
   // Always re-render if we have a result (page may have been hidden)
   if(TP_STATE.lastResult) tpRender(TP_STATE.lastResult);
