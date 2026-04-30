@@ -3060,7 +3060,7 @@ function openLayer(id){
 // ===== CORE MATH =====
 // weightsGB defined in compat layer below
 
-var APP_VERSION = '6.0.5'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
+var APP_VERSION = '6.0.6'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
 // ===== CAPACITY ENGINE v6.0.0 =====
 // Layer-by-layer: weights → KV → GPU specs → memory fit → replicas → cost
 
@@ -6457,13 +6457,13 @@ function renderFleetBreakdown(results){
   var el=document.getElementById('fleet-breakdown-table');
   if(!el)return;
   var tierColors=['#1a56db','#057a55','#b45309','#7c3aed','#0891b2'];
-  var naiveProv=API_PROVIDERS.find(function(p){return p.model==='Claude 3.7 Sonnet';})||API_PROVIDERS[1]||{inputPer1M:3,outputPer1M:15};
+  var naiveProv=API_PROVIDERS.find(function(p){return p.model==='Claude Sonnet 4.6'||p.model==='Claude 3.7 Sonnet';})||API_PROVIDERS[1]||{inputPer1M:3,outputPer1M:15};
   var html='<tr><th>Tier</th><th>API model</th><th>Traffic</th><th>Queries/day</th><th>API cost/yr</th><th>Self-host GPUs</th><th>Tokens (in/out)</th><th>vs all-Sonnet</th></tr>';
   var totalApiYr=0;
   SF.tiers.forEach(function(t,i){
     var r=results[i];
     var col=tierColors[i%tierColors.length];
-    var qpd=Math.round(SF.totalUsers*(t.trafficPct/100)*100);
+    var qpd=Math.round(SF.totalUsers*(t.trafficPct/100)*(SF.queriesPerUserPerDay||100));
     var naiveYr=qpd*365*(t.avgInputTok*naiveProv.inputPer1M+t.avgOutputTok*naiveProv.outputPer1M)/1e6;
     var saving=naiveYr-r.apiCostYr;
     var saveTag=saving>0?'<span style="color:var(--green);font-weight:600">saves '+fmtSmart(saving)+'</span>':'<span style="color:var(--red)">+'+fmtSmart(Math.abs(saving))+'</span>';
@@ -6495,7 +6495,7 @@ function renderFleetBreakdown(results){
       +'</tr>';
   });
   var naiveTotalYr=SF.tiers.reduce(function(s,t){
-    var qpd=Math.round(SF.totalUsers*(t.trafficPct/100)*100);
+    var qpd=Math.round(SF.totalUsers*(t.trafficPct/100)*(SF.queriesPerUserPerDay||100));
     return s+qpd*365*(t.avgInputTok*naiveProv.inputPer1M+t.avgOutputTok*naiveProv.outputPer1M)/1e6;
   },0);
   html+='<tr style="background:var(--bg3);font-weight:600">'
@@ -6570,7 +6570,7 @@ function renderTrafficFlow(){
 
     // API cost badge on right (not GPUs — these are API calls)
     var apiP=API_PROVIDERS.find(function(x){return x.model===t.apiModel;})||{inputPer1M:3,outputPer1M:15};
-    var qpd=SF.totalUsers*(t.trafficPct/100)*100;
+    var qpd=SF.totalUsers*(t.trafficPct/100)*(SF.queriesPerUserPerDay||100);
     var apiYr=qpd*365*(t.avgInputTok*apiP.inputPer1M+t.avgOutputTok*apiP.outputPer1M)/1e6;
     svg+='<text x="'+(destX+destW-8)+'" y="'+(ty+17)+'" text-anchor="end" font-size="10" font-weight="600" fill="var(--text1)" font-family="inherit">'+fmtSmart(apiYr)+'/yr</text>';
     svg+='<text x="'+(destX+destW-8)+'" y="'+(ty+30)+'" text-anchor="end" font-size="9.5" fill="var(--text3)" font-family="inherit">API</text>';
@@ -6590,12 +6590,17 @@ function renderFrontierCompare(){
     {name:'GPT-4o',       model:'GPT-4o',           color:'#057a55'},
     {name:'Gemini Flash', model:'Gemini 2.0 Flash',  color:'#1a56db'},
   ];
-  // BUG-001: Weighted avg tokens by traffic % (not simple average)
+  // FIX-001: Use fixed weighted avg tokens computed from ACTUAL tier token counts
+  // but locked to the token values themselves, not traffic %. This way changing
+  // traffic split does NOT change the "if 100% went here" tile cost.
+  // We use a simple average across tiers (equal weight) as the stable baseline.
   var avgIn=0, avgOut=0;
   SF.tiers.forEach(function(t){
-    avgIn+=t.avgInputTok*(t.trafficPct/100);
-    avgOut+=t.avgOutputTok*(t.trafficPct/100);
+    avgIn+=t.avgInputTok;
+    avgOut+=t.avgOutputTok;
   });
+  avgIn=avgIn/Math.max(1,SF.tiers.length);
+  avgOut=avgOut/Math.max(1,SF.tiers.length);
   var qpd=SF.totalUsers*(SF.queriesPerUserPerDay||100);
 
   // Current mixed cost
@@ -6652,8 +6657,12 @@ function renderFleetCostCompare(totalApiCostYr,onpremYr,totalGPUs,activeProvider
   var ded5=dedNodes*dedRateMo*12*5;
   // Naive = 100% traffic to Claude Sonnet (no routing savings)
   var naiveProv=API_PROVIDERS.find(function(p){return p.model==='Claude Sonnet 4.6'||p.model==='Claude 3.7 Sonnet';})||{inputPer1M:3,outputPer1M:15};
+  // FIX-004: Use simple average of tier tokens (not traffic-weighted) so
+  // naive cost stays stable when only traffic split changes
   var avgIn=0,avgOut=0;
-  SF.tiers.forEach(function(t){avgIn+=t.avgInputTok*(t.trafficPct/100);avgOut+=t.avgOutputTok*(t.trafficPct/100);});
+  SF.tiers.forEach(function(t){avgIn+=t.avgInputTok;avgOut+=t.avgOutputTok;});
+  avgIn=avgIn/Math.max(1,SF.tiers.length);
+  avgOut=avgOut/Math.max(1,SF.tiers.length);
   var naiveQpd=SF.totalUsers*(SF.queriesPerUserPerDay||100);
   var naiveYr=naiveQpd*365*(avgIn*naiveProv.inputPer1M+avgOut*naiveProv.outputPer1M)/1e6;
   var amortYrs=5;
