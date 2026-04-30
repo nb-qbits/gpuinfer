@@ -128,6 +128,7 @@ try {
 }
 
 // ── STEP 3: Run tests ──────────────────────────────────────────────────────
+let passCount = '?';
 if (SKIP_TESTS) {
   console.log('\n  [2/3] Tests SKIPPED (--skip-tests flag)');
   console.log('\n  ⚠  WARNING: Releasing without test validation');
@@ -138,6 +139,8 @@ if (SKIP_TESTS) {
     const output = execSync(`node "${TEST_PATH}"${judgeFlag}`, { encoding: 'utf8' });
     // Extract results line
     const resultsLine = output.split('\n').find(l => l.includes('RESULTS:'));
+    const _pm = output.match(/(\d+) passed/);
+    passCount = _pm ? _pm[1] : '?';
     console.log(`  ${resultsLine?.trim() || 'Tests completed'}`);
     
     // Count failures
@@ -172,7 +175,7 @@ console.log(`
   │  File size:  ${(htmlSize/1024).toFixed(0).padStart(6)} KB                         │
   │  Bugs fixed: ${String(fixedBugs).padStart(6)} in registry                  │
   │  Open bugs:  ${String(openBugs).padStart(6)} tracked                       │
-  │  Test suite: 89 assertions across 5 layers   │
+  │  Test suite: ${passCount} assertions, 6 layers     │
   │  LLM judge:  ${WITH_JUDGE ? 'enabled' : 'disabled (use --judge)       '}          │
   └─────────────────────────────────────────────┘
 
