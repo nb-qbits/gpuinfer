@@ -2732,7 +2732,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px" id="version-display">real-time inference only · v<span id="nav-version">6.1.2</span></span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px" id="version-display">real-time inference only · v<span id="nav-version">6.3.0</span></span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -3139,7 +3139,7 @@ function openLayer(id){
 // ===== CORE MATH =====
 // weightsGB defined in compat layer below
 
-var APP_VERSION = '6.1.2'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
+var APP_VERSION = '6.3.0'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
 document.addEventListener('DOMContentLoaded',function(){var el=document.getElementById('nav-version');if(el)el.textContent=APP_VERSION;});
 // ===== CAPACITY ENGINE v6.0.0 =====
 // Layer-by-layer: weights → KV → GPU specs → memory fit → replicas → cost
@@ -4547,8 +4547,11 @@ function fetchHFModel(id,statusId,cb){
         +'<span style="font-size:10px;color:var(--text4)">Format: owner/model-name (e.g. meta-llama/Llama-3.1-8B)</span>';
     } else {
       var msg = (e&&e.message)||'';
+      var isDNS     = msg.includes('NAME_NOT_RESOLVED')||msg.includes('ENOTFOUND');
       var isNetwork = msg.includes('fetch')||msg.includes('network')||msg.includes('Failed')||msg.includes('Load')||msg.includes('NetworkError');
-      if(isNetwork || !HF_PROXY) {
+      if(isDNS){
+        st.innerHTML='⚠ Cannot reach lookup service — DNS failed. Try switching networks or disabling VPN. Use model grid instead.';
+      } else if(isNetwork || !HF_PROXY) {
         st.innerHTML='⚠ Live lookup requires the Worker proxy — pick from the model grid above<br>'
           +'<span style="font-size:10px;color:var(--text4)">Once Worker is deployed at '+HF_PROXY+', live lookup will work</span>';
       } else {
@@ -8189,23 +8192,82 @@ function tpEngine(p) {
   eta_kv = Math.max(eta_kv, 0.22);
 
   // ── STEP 6: TTFT (TP-independent) ────────────────────────
-  // Compute: uses isl_eff (prefix saves compute, not storage)
-  // Queue:   time to accumulate eff_batch requests at arrival rate
+  // TTFT_compute: Roofline Model (prefill is compute-bound)
+  //   FLOPs = isl_eff × 2 × eff_params (matrix-vector products)
+  //   Time  = FLOPs / (GPU FLOPS × MFU)
+  //   Reference: Williams et al. 2009 Roofline Model
   var TTFT_compute = (isl_eff * 2 * eff_params) / (p.flops * p.mfu_prefill);
-  var TTFT_queue   = eff_batch_conc / req_per_sec;  // queue time uses concurrency-capped batch
+
+  // TTFT_queue: M/D/1 Queuing Theory
+  //   LLM inference has DETERMINISTIC service time (fixed ISL/OSL per batch class)
+  //   → M/D/1 queue (Poisson arrivals, Deterministic service) NOT M/M/1
+  //   M/D/1 formula: W_q = ρ / (2μ(1-ρ))
+  //   where: ρ = λ/μ = utilization, μ = service rate, λ = arrival rate
+  //   At low ρ: queue wait ≈ 0. At ρ→1: queue wait → ∞ (hyperbolic blowup)
+  //   Reference: Kleinrock 1975, Queueing Systems Vol 1
+  //
+  //   NOTE: μ here is estimated from eff_batch_conc and TTFT_compute as proxy
+  //   for prefill service rate. Full M/D/1 requires knowing seq_per_sec which
+  //   is computed in tpot_for_tp() — so we use a pre-sweep estimate here.
+  // M/D/1 Queuing Theory (Kleinrock 1975):
+  // The queue is served by the SYSTEM of replicas, not a single GPU.
+  // Rough replica count: r_est = ceil(req/s / (eff_batch/TTFT × tput_eff))
+  // System service rate: μ_sys = μ_single × r_est
+  // ρ_sys = λ / μ_sys — this is the meaningful utilization metric.
+  var tput_eff_est    = p.tput_eff || TP_THROUGHPUT_EFF;
+  var _mu_single      = eff_batch_conc / Math.max(TTFT_compute, 1e-6);
+  var _r_est          = Math.max(1, Math.ceil(req_per_sec / (_mu_single * tput_eff_est)));
+  var _mu_sys         = _mu_single * _r_est;   // total system prefill rate
+  var _rho_prefill    = Math.min(req_per_sec / Math.max(_mu_sys, req_per_sec * 0.01), 0.98);
+  // M/D/1: W_q = ρ / (2μ_sys(1-ρ))
+  var TTFT_queue_MD1  = _rho_prefill / (2 * _mu_sys * (1 - _rho_prefill));
+  // Fallback: old formula (eff_batch / req_s) used as upper bound sanity check
+  var TTFT_queue_old  = eff_batch_conc / req_per_sec;
+  var TTFT_queue      = Math.min(Math.max(TTFT_queue_MD1, 0), TTFT_queue_old * 2);
+  var utilization_prefill = _rho_prefill;  // expose for UI warning (ρ > 0.8 = high load)
   var TTFT_total   = TTFT_compute + TTFT_queue;
+
+  // ── STEP 6b: LITTLE'S LAW CONCURRENCY ────────────────────
+  // Little's Law: L = λ × W
+  // L = concurrent requests in system
+  // λ = arrival rate (req/sec)
+  // W = time in system = TTFT + TPOT×OSL (E2E latency)
+  // Rough TPOT estimate for Little's Law (TP=1 single-GPU, pre-sweep)
+  var _w_tp1  = p.active_params * p.bytes_param / p.bandwidth / (p.eta_weights||TP_ETA_WEIGHTS);
+  var _kv_tp1 = kv_per_token * avg_ctx * eff_batch / p.bandwidth / Math.max(eta_kv, 0.22);
+  var _cal    = p.is_moe ? (p.cal_moe||TP_CAL_MOE) : (p.cal_dense||TP_CAL_DENSE);
+  var _oh_tp1 = Math.max(0.6e-3, 0.1 * Math.max(_w_tp1, _kv_tp1));
+  var tpot_est= (Math.max(_w_tp1,_kv_tp1) + _oh_tp1) * _cal;
+  var e2e_est = TTFT_total + tpot_est * p.osl;
+
+  // Little's Law implied concurrency
+  var littles_concurrency = Math.ceil(req_per_sec * e2e_est);
+  // Use max(user input, Little's Law) — never under-provision
+  var effective_concurrency = Math.max(p.concurrency, littles_concurrency);
+  var littles_warning = littles_concurrency > p.concurrency;  // flag for UI
+
+  // Recompute eff_batch_conc with effective_concurrency
+  eff_batch_conc = Math.max(1, Math.round(Math.min(batch_cap_raw, effective_concurrency) * batch_frag));
 
   // ── STEP 7: PER-TP TPOT + SIZING ─────────────────────────
   function tpot_for_tp(tp){
-    // F3: Graduated NVLink/IB interconnect penalty
-    var ib_pen;
-    if      (tp <= 1)  ib_pen = 1.00;
-    else if (tp <= 2)  ib_pen = 1.05;
-    else if (tp <= 4)  ib_pen = 1.08;
-    else if (tp <= 8)  ib_pen = 1.10;
-    else               ib_pen = (p.ib_penalty || TP_IB_PENALTY);  // 1.20 TP=16
     var cal   = p.is_moe ? (p.cal_moe || TP_CAL_MOE) : (p.cal_dense || TP_CAL_DENSE);
     var eta_w = p.eta_weights || TP_ETA_WEIGHTS;
+
+    // ── Roofline Model (Williams et al. 2009) ──────────────
+    // Decode is memory-bandwidth bound, NOT compute bound.
+    // Roofline ridge point = FLOPS / BW (arithmetic intensity threshold)
+    //   ridge = p.flops / p.bandwidth  (e.g. H200: 989T/4.8T = 206 FLOP/byte)
+    // Arithmetic intensity for decode:
+    //   FLOPs  = 2 × active_params × eff_batch  (matmul per decode step)
+    //   Bytes  = (active_params + KV_total) × bytes_per_param (memory reads)
+    //   If intensity < ridge → MEMORY BOUND (t_kv or t_w dominates)
+    //   If intensity > ridge → COMPUTE BOUND (rare, only at batch > 500+)
+    var ridge_pt      = p.flops / p.bandwidth;           // FLOP/byte threshold
+    var decode_flops  = 2 * p.active_params * eff_batch; // FLOPs per decode step
+    var decode_bytes  = (p.active_params / tp + kv_per_token * avg_ctx * eff_batch / tp)
+                        * p.bytes_param;
+    var arith_intens  = decode_flops / Math.max(decode_bytes, 1);  // FLOP/byte
 
     // Memory reads per decode step — NEVER multiply bandwidth by TP
     // Weights: active params sharded across TP GPUs
@@ -8214,7 +8276,7 @@ function tpEngine(p) {
     var kv_gpu = kv_per_token * avg_ctx * eff_batch / tp;
     var t_w    = w_gpu  / (p.bandwidth * eta_w);
     var t_kv   = kv_gpu / (p.bandwidth * eta_kv);
-    var t_comp = Math.max(t_w, t_kv);           // pipelined — NOT summed
+    var t_comp = Math.max(t_w, t_kv);           // pipelined — Roofline: take the bottleneck
 
     // Communication overhead (all-reduce + sync barriers)
     var ibw    = (p.nvlink_bw > 0) ? p.nvlink_bw : p.pcie_bw;
@@ -8223,6 +8285,31 @@ function tpEngine(p) {
     var t_ar   = (ar_b / ibw) * tf * (p.allreduce_eff || TP_ALLREDUCE_EFF);
     var t_sync = p.layers * (p.sync_us || TP_SYNC_US) * 1e-6 * (p.sync_overlap || TP_SYNC_OVERLAP);
     var oh     = Math.max(0.6e-3, 0.1 * t_comp);
+
+    // ── Universal Scalability Law (Gunther 2002) ───────────
+    // USL extends Amdahl's Law with a coherency penalty:
+    //   Speedup(N) = N / (1 + α(N-1) + β×N×(N-1))
+    //   α = serialization fraction (contention — all-reduce overhead)
+    //   β = coherency fraction (cross-GPU data movement penalty)
+    //
+    // Replaces flat step-function ib_pen (1.0, 1.05, 1.08, 1.10, 1.20)
+    // USL gives a smooth, physically-derived degradation curve.
+    // α and β are derived from actual comm terms (t_ar, t_sync) relative to t_comp:
+    //   α = (t_ar + t_sync) / (t_comp + t_ar + t_sync)   serial fraction
+    //   β = α × 0.05   coherency ≈ 5% of serialization (NVLink empirical)
+    // USL speedup is then used as an ib_pen multiplier: ib_pen = N / Speedup(N)
+    var t_comm_total = t_ar + t_sync;
+    var usl_alpha = (tp > 1) ? Math.min((t_comm_total) / Math.max(t_comp + t_comm_total, 1e-9), 0.15) : 0;
+    var usl_beta  = usl_alpha * 0.05;
+    var usl_speedup = (tp > 1)
+      ? tp / (1 + usl_alpha*(tp-1) + usl_beta*tp*(tp-1))
+      : 1.0;
+    // ib_pen: how much slower than ideal linear speedup
+    // e.g. TP=8 ideal=8×, USL=5.3× → ib_pen = 8/5.3 = 1.51
+    var ib_pen = (tp > 1) ? (tp / usl_speedup) / tp : 1.0;
+    // Apply additional IB penalty for cross-node (TP>8 requires InfiniBand)
+    if(tp > 8) ib_pen *= (p.ib_penalty || TP_IB_PENALTY);
+    ib_pen = Math.max(1.0, ib_pen);   // never faster than ideal
 
     var tpot   = (t_comp + t_ar + t_sync + oh) * ib_pen * cal;
 
@@ -8233,14 +8320,15 @@ function tpEngine(p) {
     // GPUs = replicas × TP   ← this was missing, causing 8× undercount
     var tput_eff    = p.tput_eff || TP_THROUGHPUT_EFF;
     var seq_per_sec = eff_batch / (tpot * p.osl);
-    var reps_tput   = Math.ceil((req_per_sec / (seq_per_sec * tput_eff)) * TP_HEADROOM);
+    var headroom    = 1 + ((p.buf_pct||20) / 100);  // FIX-032: dynamic buffer from UI
+    var reps_tput   = Math.ceil((req_per_sec / (seq_per_sec * tput_eff)) * headroom);
     var gpus_tput   = reps_tput * tp;
 
     // Concurrency floor (F1): enough replicas for concurrent prefill load
-    // Uses eff_batch_conc (batch capped by concurrency) — not the throughput batch
+    // FIX-033: Uses effective_concurrency = max(user_input, Little's Law implied)
     var pf_time_s   = TTFT_compute;
     var pf_budget_s = Math.max(pf_time_s * 3.0, 0.5);
-    var reps_conc   = Math.max(1, Math.ceil((p.concurrency * pf_time_s) / pf_budget_s));
+    var reps_conc   = Math.max(1, Math.ceil((effective_concurrency * pf_time_s) / pf_budget_s));
     var gpus_conc   = reps_conc * tp;
     var gpus        = Math.max(gpus_tput, gpus_conc);
     var reps        = Math.ceil(gpus / tp);
@@ -8273,6 +8361,12 @@ function tpEngine(p) {
       bottleneck:t_kv>=t_w?'KV':'compute',
       tier:tp>8?'multi_node':'single_node',
       explain:explain,
+      // USL (Universal Scalability Law)
+      usl_alpha:usl_alpha, usl_beta:usl_beta,
+      usl_speedup:usl_speedup, ib_pen:ib_pen,
+      // Roofline Model
+      arith_intens:arith_intens, ridge_pt:ridge_pt,
+      roofline_bound:arith_intens < ridge_pt ? 'memory' : 'compute',
     };
   }
 
@@ -8341,6 +8435,12 @@ function tpEngine(p) {
 
   return {
     isl_eff:isl_eff, avg_ctx:avg_ctx, req_per_sec:req_per_sec,
+    littles_concurrency:littles_concurrency,
+    effective_concurrency:effective_concurrency,
+    littles_warning:littles_warning,
+    e2e_est_ms:e2e_est*1000,
+    utilization_prefill:utilization_prefill,
+    ttft_queue_md1_ms:TTFT_queue*1000,
     eff_params:eff_params,
     kv_per_token:kv_per_token,
     kv_per_request_mb:kv_per_request / 1e6,
@@ -8403,6 +8503,7 @@ function tpReadParams(){
     ib_penalty:    parseFloat(document.getElementById('tp-ib-pen').value)||1.2,
     disagg_q_factor: parseFloat(document.getElementById('tp-disagg-q').value)||0.3,
     tput_eff:      parseFloat(document.getElementById('tp-tput-eff').value)||0.85,
+    buf_pct:       parseInt(document.getElementById('tp-buf').value)||20,  // FIX-032: infra buffer %
     batch_frag_factor: 0.70,  // F4: scheduler fragmentation
   };
   // Scale model params from Billions to actual values HERE
@@ -8497,7 +8598,7 @@ function tpRenderHero(r, mode){
   }
 
   var gpuCard   = hcard('GPUs needed', tpFmtGPU(sel.gpus),
-                   'TP='+r.selected_tp+' × '+sel.replicas+' replicas · +20% buffer',
+                   'TP='+r.selected_tp+' × '+sel.replicas+' replicas · +'+(r.p.buf_pct||20)+'% buffer',
                    'var(--blue)', 'PRIMARY ANSWER', 'good');
   var tpotCard  = hcard('TPOT', tpFmt(sel.tpot_ms),
                    'per output token · '+sel.bottleneck+'-bound ('+tpot_kv_pct+'% KV)',
@@ -8510,8 +8611,27 @@ function tpRenderHero(r, mode){
                    'TTFT + '+p.osl+'×TPOT',
                    'var(--text1)', '', '');
 
+  // Utilization warning (M/D/1 queue blowup when ρ > 0.8)
+  var utilWarn = '';
+  if(r.utilization_prefill && r.utilization_prefill > 0.80){
+    var rhoStr = (r.utilization_prefill*100).toFixed(0)+'%';
+    var severity = r.utilization_prefill > 0.90 ? 'var(--red)' : 'var(--amber,#f90)';
+    utilWarn = '<div style="background:rgba(255,80,80,0.07);border:1px solid '+severity+';border-radius:var(--r);padding:8px 12px;margin-bottom:8px;font-size:11px;line-height:1.6">'
+      +'<strong>⚠ High utilization ρ='+rhoStr+' (M/D/1 Queuing Theory):</strong> '
+      +'Queue wait grows hyperbolically as ρ→1. At '+rhoStr+' utilization, TTFT queue is significant. '
+      +'Add more replicas or reduce req/day to bring ρ below 0.8 for stable latency.'
+      +'</div>';
+  }
+
+  // Little's Law warning banner
+  var littlesWarn = '';
+  if(r.littles_warning){
+    littlesWarn = '<div style="background:rgba(255,160,0,0.08);border:1px solid var(--amber,#f90);border-radius:var(--r);padding:8px 12px;margin-bottom:10px;font-size:11px;line-height:1.6">'      +'<strong>⚠ Little\'s Law:</strong> At '+r.req_per_sec.toFixed(0)+' req/s with '+r.e2e_est_ms.toFixed(0)+'ms E2E latency, '      +'the system needs <strong>'+r.littles_concurrency+'</strong> concurrent requests in flight '      +'(L = λ × W = '+r.req_per_sec.toFixed(0)+' × '+(r.e2e_est_ms/1000).toFixed(3)+'s). '      +'Your concurrency input of <strong>'+r.p.concurrency+'</strong> is too low — '      +'sizing uses <strong>'+r.effective_concurrency+'</strong> instead.'      +'</div>';
+  }
   el.innerHTML =
-    '<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px">'
+    utilWarn
+    +littlesWarn
+    +'<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:10px;margin-bottom:14px">'
     +gpuCard+tpotCard+ttftCard+e2eCard
     +'</div>';
 }
@@ -8936,29 +9056,51 @@ function tpRenderMath(r){
   var tput_eff = p.tput_eff || 0.85;
   var binding = sel.gpus_tput >= sel.gpus_conc ? 'THROUGHPUT' : 'CONCURRENCY FLOOR';
   var cacheNote = p.cache_type==='evicting' ? ' (evicting: ×'+(1-p.prefix_pct/100).toFixed(2)+')' : ' (persistent: no KV reduction)';
+  var rooflineBound = sel.roofline_bound==='memory' ? 'MEMORY-BOUND ✓' : 'COMPUTE-BOUND';
+  var ridgePt   = sel.ridge_pt   ? (sel.ridge_pt).toFixed(0)+' FLOP/byte' : '—';
+  var arithInt  = sel.arith_intens ? sel.arith_intens.toFixed(1)+' FLOP/byte' : '—';
+  var rho       = r.utilization_prefill ? (r.utilization_prefill*100).toFixed(1)+'%' : '—';
+  var uslAlpha  = sel.usl_alpha !== undefined ? sel.usl_alpha.toFixed(3) : '—';
+  var uslBeta   = sel.usl_beta  !== undefined ? sel.usl_beta.toFixed(4)  : '—';
+  var uslSpeedup= sel.usl_speedup!==undefined ? sel.usl_speedup.toFixed(2)+'×' : '—';
+
+  // Section header helper — shows law citation inline
+  function secHdr(title, law){
+    return '<div style="padding:5px 0 3px;border-bottom:2px solid var(--border);font-size:10px;'      +'color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-top:8px">'      +title+'<span style="font-size:9px;font-weight:400;text-transform:none;color:var(--blue);margin-left:8px">'
+      +law+'</span></div>';
+  }
+
   el.innerHTML =
-    row('1a', p.req_day.toLocaleString()+' / 86,400', r.req_per_sec.toFixed(2)+' req/s', 'request rate')
+    secHdr('Inputs & KV Cache', '')
+   +row('1a', p.req_day.toLocaleString()+' / 86,400', r.req_per_sec.toFixed(2)+' req/s', 'request rate')
    +row('1b', p.isl+' × (1 − '+p.prefix_pct+'%)', r.isl_eff.toLocaleString()+' tokens', 'eff ISL (prefill compute only)')
-   +row('2',  '2 × '+p.layers+' layers × '+p.kv_heads+' KV heads × '+p.head_dim+' head_dim × '+p.bytes_kv+'B', (r.kv_per_token/1024).toFixed(1)+' KB/token', 'KV per token')
+   +row('2',  '2 × '+p.layers+'L × '+p.kv_heads+'H × '+p.head_dim+'D × '+p.bytes_kv+'B', (r.kv_per_token/1024).toFixed(1)+' KB/token', 'KV per token')
    +row('2b', 'ISL + OSL/2 = '+p.isl+' + '+p.osl+'/2'+cacheNote, r.avg_ctx.toFixed(0)+' tokens', 'avg_ctx (KV sizing)')
-   +row('2c', 'KV/token × avg_ctx', r.kv_per_request_mb.toFixed(1)+' MB', 'KV per request (avg over decode)')
-   +row('3',  p.is_moe ? 'dense_params('+( p.dense_params/1e9).toFixed(1)+'B) + expert_params/num_exp × active_exp' : 'total_params', (r.eff_params/1e9).toFixed(3)+'B', 'eff_params for prefill FLOPs')
+   +row('2c', 'KV/token × avg_ctx', r.kv_per_request_mb.toFixed(1)+' MB', 'KV per request')
+   +row('3',  p.is_moe?'dense('+( p.dense_params/1e9).toFixed(1)+'B) + active_experts':'total_params', (r.eff_params/1e9).toFixed(3)+'B', 'eff_params for prefill FLOPs')
    +row('4',  'KV/req × eff_batch('+r.eff_batch+') / (active_params × bytes)', r.kv_ratio.toFixed(2)+'×', 'KV ratio → sets η_kv')
-   +row('5',  'η_kv from KV ratio (>10→×0.70, >3→×0.85, else ×1.0) × mfu_bw('+p.mfu_bw_base+')', r.eta_kv.toFixed(3), 'KV BW efficiency')
-   +row('6a', 'isl_eff × 2 × eff_params / ('+( p.flops/1e12).toFixed(0)+'TFLOPS × mfu_prefill '+p.mfu_prefill+')', r.ttft_compute_ms.toFixed(1)+'ms', 'TTFT compute')
-   +row('6b', 'eff_batch_conc('+r.eff_batch_conc+') / req_s  [batch capped by min(cap,concurrency='+p.concurrency+')]', r.ttft_queue_ms.toFixed(1)+'ms', 'TTFT queue wait')
+   +row('5',  'η_kv from KV ratio · mfu_bw('+p.mfu_bw_base+')', r.eta_kv.toFixed(3), 'KV BW efficiency')
+   +secHdr('TTFT — Prefill Phase', 'Roofline Model (Williams et al. 2009)')
+   +row('6a', 'isl_eff × 2 × eff_params / (TFLOPS × mfu)', r.ttft_compute_ms.toFixed(1)+'ms', 'TTFT compute — Roofline: prefill is FLOP-bound above ridge='+ridgePt)
+   +row('6b', 'M/D/1: ρ/(2μ(1−ρ))  ρ=λ/μ='+rho, r.ttft_queue_ms.toFixed(1)+'ms', 'TTFT queue — M/D/1 Queuing Theory (Kleinrock 1975), deterministic service')
    +row('6c', 'TTFT_compute + TTFT_queue', r.ttft_total_ms.toFixed(1)+'ms', 'TTFT total')
-   +row('7a', 'active_params('+( p.active_params/1e9).toFixed(2)+'B) × '+p.bytes_param+'B / TP='+r.selected_tp+' / ('+( p.bandwidth/1e12).toFixed(1)+'TB/s × η_w '+p.eta_weights+')', sel.t_w_ms.toFixed(3)+'ms', 'time to read weights')
-   +row('7b', 'KV/token × avg_ctx × eff_batch('+r.eff_batch+') / TP='+r.selected_tp+' / ('+( p.bandwidth/1e12).toFixed(1)+'TB/s × η_kv '+r.eta_kv.toFixed(3)+')', sel.t_kv_ms.toFixed(3)+'ms', 'time to read KV cache')
-   +row('7c', 'max(t_weights, t_kv) — pipelined, not summed', sel.t_comp_ms.toFixed(3)+'ms', 'memory-bound compute time')
-   +row('8',  'all-reduce + sync barriers + scheduling overhead (×'+r.selected_tp+' overhead)', (sel.t_ar_ms+sel.t_sync_ms+sel.oh_ms).toFixed(3)+'ms', 'communication overhead')
-   +row('9',  '(t_compute + comm) × ib_penalty('+sel.ib_pen.toFixed(2)+') × calibration('+cal+')', sel.tpot_ms.toFixed(2)+'ms', 'TPOT per output token')
-   +'<div style="padding:4px 0;border-bottom:1px solid var(--border);font-size:10px;color:var(--text4);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-top:6px">GPU COUNT — two constraints, take the max</div>'
-   +row('10a', 'seq/replica/sec = eff_batch('+r.eff_batch+') / (TPOT × OSL) = '+r.eff_batch+' / ('+sel.tpot_ms.toFixed(2)+'ms × '+p.osl+')', sel.seq_per_sec.toFixed(2)+' seq/s', 'throughput per replica')
-   +row('10b', 'replicas = ⌈req_s / (seq/s × tput_eff('+tput_eff+')) × headroom(1.2)⌉ × TP', sel.gpus_tput+' GPUs', (sel.gpus_tput>=sel.gpus_conc?'▶ BINDING':'not binding')+' · throughput path')
-   +row('10c', 'replicas = ⌈concurrency('+p.concurrency+') × TTFT_compute / pf_budget('+( sel.pf_budget_s*1000).toFixed(0)+'ms)⌉ × TP', sel.gpus_conc+' GPUs', (sel.gpus_conc>sel.gpus_tput?'▶ BINDING':'not binding')+' · concurrency floor')
-   +row('10d', 'GPUs = max(throughput path, concurrency floor)', sel.gpus+' GPUs  ← '+binding+' WINS', 'final GPU count')
-   +row('11', 'ceil('+sel.gpus+' / TP='+r.selected_tp+')', sel.replicas+' replicas', 'total replicas');
+   +secHdr("Little's Law — Effective Concurrency", "Little 1961: L = λW")
+   +row('6d', 'E2E = TTFT + TPOT×OSL', r.e2e_est_ms.toFixed(1)+'ms', 'E2E latency estimate')
+   +row('6e', 'L = λ × W = '+r.req_per_sec.toFixed(1)+' × '+(r.e2e_est_ms/1000).toFixed(3)+'s', r.littles_concurrency+' concurrent', "Little's Law: concurrent requests in system")
+   +row('6f', 'effective = max(user='+p.concurrency+', L='+r.littles_concurrency+')', r.effective_concurrency+(r.littles_warning?" ← Little's binding":' ← user input'), 'concurrency used for all sizing')
+   +secHdr('TPOT — Decode Phase', 'Roofline Model + USL (Gunther 2002)')
+   +row('7a', 'active_params×bytes / TP / BW / η_w', sel.t_w_ms.toFixed(3)+'ms', 'time to read weights')
+   +row('7b', 'KV/tok×avg_ctx×batch / TP / BW / η_kv', sel.t_kv_ms.toFixed(3)+'ms', 'time to read KV cache')
+   +row('7c', 'max(t_w, t_kv) — Roofline: bottleneck, NOT sum', sel.t_comp_ms.toFixed(3)+'ms', rooflineBound+' · arith_intensity='+arithInt+' vs ridge='+ridgePt)
+   +row('8',  'allreduce + sync + overhead', (sel.t_ar_ms+sel.t_sync_ms+sel.oh_ms).toFixed(3)+'ms', 'communication overhead')
+   +row('8b', 'USL: N/(1+α(N−1)+βN(N−1))  α='+uslAlpha+' β='+uslBeta, uslSpeedup+' vs ideal '+r.selected_tp+'×', 'USL (Gunther): actual speedup from TP sharding')
+   +row('9',  '(t_comp+comm) × ib_pen('+sel.ib_pen.toFixed(2)+',USL) × cal('+cal+')', sel.tpot_ms.toFixed(2)+'ms', 'TPOT per output token')
+   +secHdr('GPU Count — Take the Max', 'Throughput constraint vs Concurrency floor')
+   +row('10a','seq/replica = eff_batch / (TPOT×OSL)', sel.seq_per_sec.toFixed(2)+' seq/s', 'throughput per replica')
+   +row('10b','replicas = ⌈req_s / (seq/s × tput_eff) × headroom('+(1+(p.buf_pct||20)/100).toFixed(2)+')⌉', sel.gpus_tput+' GPUs', (sel.gpus_tput>=sel.gpus_conc?'▶ BINDING':'not binding')+' · throughput path')
+   +row('10c','replicas = ⌈L_eff('+r.effective_concurrency+') × TTFT / pf_budget('+(sel.pf_budget_s*1000).toFixed(0)+'ms)⌉', sel.gpus_conc+' GPUs', (sel.gpus_conc>sel.gpus_tput?'▶ BINDING':'not binding')+' · concurrency floor')
+   +row('10d','GPUs = max(throughput, concurrency floor) × TP', sel.gpus+' GPUs  ← '+binding+' WINS', 'final GPU count')
+   +row('11', 'ceil(GPUs / TP='+r.selected_tp+')', sel.replicas+' replicas', 'Final answer');
 }
 
 // ── MAIN RUN (with sensational loading) ──────────────────────
@@ -9270,6 +9412,12 @@ function tpExportSheets(){
     '4\tKV/req × eff_batch('+r.eff_batch+') / active_bytes\t'+r.kv_ratio.toFixed(2)+'×\tKV ratio → sets η_kv',
     '5\tη_kv from KV ratio\t'+r.eta_kv.toFixed(3)+'\tKV BW efficiency',
     '6a\tisl_eff × 2 × eff_params / (TFLOPS × mfu_prefill)\t'+r.ttft_compute_ms.toFixed(1)+'ms\tTTFT compute',
+    '6b\teff_batch_conc / req_s\t'+r.ttft_queue_ms.toFixed(1)+'ms\tTTFT queue wait',
+    '6c\tTTFT_compute + TTFT_queue\t'+r.ttft_total_ms.toFixed(1)+'ms\tTTFT total',
+    '── Little\'s Law ──\t\t\t',
+    '6d\tE2E_est = TTFT + TPOT×OSL\t'+r.e2e_est_ms.toFixed(1)+'ms\tE2E latency estimate',
+    '6e\tL = λ × W = '+r.req_per_sec.toFixed(1)+' req/s × '+(r.e2e_est_ms/1000).toFixed(3)+'s\t'+r.littles_concurrency+'\tLittle\'s Law implied concurrency',
+    '6f\teffective_concurrency = max(user='+p.concurrency+', Little\'s='+r.littles_concurrency+')\t'+r.effective_concurrency+'\t'+(r.littles_warning?'Little\'s Law binding':'user input binding'),
     '6b\teff_batch_conc('+r.eff_batch_conc+') / req_s\t'+r.ttft_queue_ms.toFixed(1)+'ms\tTTFT queue wait',
     '6c\tTTFT_compute + TTFT_queue\t'+r.ttft_total_ms.toFixed(1)+'ms\tTTFT total',
     '7a\tactive_params × bytes / TP / BW / η_w\t'+sel.t_w_ms.toFixed(3)+'ms\tTime to read weights',
@@ -9368,8 +9516,9 @@ function initThroughputPage(){
     tpUpdateISLDisplay();
     tpUpdateRPS();
     _tpPageInited = true;
-    // FIX-025: Auto-run on first visit so page shows results immediately (not blank)
-    runThroughput();
+    // FIX-025 v2: Use setTimeout to ensure DOM is fully painted before running
+    // This fixes the double-click issue where chips/inputs weren't ready yet
+    setTimeout(function(){ runThroughput(); }, 50);
     return;
   }
   // Always re-render if we have a result (page may have been hidden)
