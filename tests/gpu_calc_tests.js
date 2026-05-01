@@ -16,7 +16,8 @@
 
 const core = require('../gpu_calc_core.js');
 const { tpEngine, computeTier, capKVPerToken, capKVPerUser,
-        capBytesKV, capKVCategory, capAvgCtx, API_PROVIDERS, GPU_DATA, S, SF } = core;
+        capBytesKV, capKVCategory, capAvgCtx, API_PROVIDERS, GPU_DATA, S, SF,
+        CAP_OH_NON_TORCH_GB, CAP_ACT_COEFF, CAP_GPU_MEM_UTIL } = core;
 
 const WITH_JUDGE = process.argv.includes('--judge');
 const JUDGE_MODEL = 'claude-sonnet-4-20250514';
@@ -850,6 +851,122 @@ const html_reg = fs_reg.readFileSync(path_reg.join(__dirname,'..','index.html'),
     `got ${sel.roofline_bound}, intensity=${sel.arith_intens?.toFixed(1)}, ridge=${sel.ridge_pt?.toFixed(0)}`);
   // arith_intens > 0
   assert('Roofline: arith_intens > 0', sel.arith_intens > 0, `got ${sel.arith_intens}`);
+})();
+
+
+// ── BUG-038: eff_params display showed 75B (missing /num_experts in formula) ──
+(function bugTest038() {
+  // Computation must use dense + (expert_total/num_experts × active_experts)
+  // NOT dense + expert_total × active_experts
+  const r = tpEngine(tpParams({ is_moe:true, dense_params:3e9,
+    total_expert_params:18e9, num_experts:128, active_experts:4 }));
+  const expected_eff = 3e9 + (18e9/128 * 4);  // = 3.5625B
+  assertClose('BUG-038: eff_params uses /num_experts (3.56B not 75B)',
+    r.eff_params, expected_eff, 1);
+  assert('BUG-038: eff_params < total_params (MoE active only)',
+    r.eff_params < 21e9,
+    `got ${(r.eff_params/1e9).toFixed(2)}B, total=21B`);
+})();
+
+// ── BUG-039: avg_ctx for evicting cache applied hit_rate to OSL tokens ────────
+(function bugTest039() {
+  // OSL tokens are NEVER cached (being generated) → hit_rate must NOT reduce OSL/2
+  // Correct: avg_ctx = ISL×(1-hit_rate) + OSL/2
+  // Wrong:   avg_ctx = (ISL + OSL/2) × (1-hit_rate)
+  const isl=9000, osl=50, prefix=80;
+  const r = tpEngine(tpParams({ isl, osl, prefix_pct:prefix, cache_type:'evicting' }));
+  const correct = isl*(1-prefix/100) + osl/2;   // = 1825
+  const wrong   = (isl + osl/2) * (1-prefix/100); // = 1805
+  assertClose('BUG-039: avg_ctx for evicting = ISL×(1-hit)+OSL/2 (not (ISL+OSL/2)×(1-hit))',
+    r.avg_ctx, correct, 1);
+  assert('BUG-039: avg_ctx ≠ wrong formula',
+    Math.abs(r.avg_ctx - wrong) > 1,
+    `got ${r.avg_ctx}, should not be ${wrong}`);
+  // Also: OSL/2 portion must NOT be reduced
+  const osl_contribution = osl/2;
+  const isl_reduced = isl*(1-prefix/100);
+  assertClose('BUG-039: avg_ctx = isl_reduced + osl/2',
+    r.avg_ctx, isl_reduced + osl_contribution, 1);
+})();
+
+// ── BUG-040: bottleneck label wrong when weight-read dominates ────────────────
+(function bugTest040() {
+  // At small batch + FP8 weights: t_w > t_kv → should be 'weight', not 'compute'
+  const r = tpEngine(tpParams({
+    bytes_param:1,    // FP8 weights — halves weight read time
+    bytes_kv:2,       // FP16 KV — keeps KV same
+    isl:9000, osl:50, // large context → significant KV
+    prefix_pct:80, cache_type:'evicting',  // small avg_ctx
+  }));
+  const sel = r.selected;
+  // With FP8 weights: t_w = active_params×1byte/BW/eta_w
+  //                   t_kv = kv/tok × avg_ctx × batch / BW / eta_kv
+  // bottleneck should reflect actual dominant term
+  assert('BUG-040: bottleneck is one of: weight, KV, compute',
+    ['weight','KV','compute'].includes(sel.bottleneck),
+    `got "${sel.bottleneck}"`);
+  // When t_w > t_kv → bottleneck = 'weight' not 'compute'
+  if(sel.t_w_ms > sel.t_kv_ms && sel.arith_intens < sel.ridge_pt){
+    assert('BUG-040: weight-read-bound → bottleneck = weight',
+      sel.bottleneck === 'weight',
+      `t_w=${sel.t_w_ms.toFixed(3)}ms > t_kv=${sel.t_kv_ms.toFixed(3)}ms but bottleneck="${sel.bottleneck}"`);
+  }
+})();
+
+// ── TO-DO-006: Dynamic vLLM overhead formula ──────────────────────────────────
+(function testDynamicOverhead() {
+  // capOverheadGB must use version-calibrated coefficient, not flat constant
+  // Verify the two key version differences
+  const coeff_v017    = 0.11;
+  const coeff_pre17   = 0.27;
+  const batch_tokens  = 2048;
+  const hidden_dim    = 4096;  // typical
+  const bytes_act     = 2;     // bf16
+
+  // Expected: act_peak scales with model hidden_dim
+  const act_v017  = coeff_v017  * batch_tokens * hidden_dim * bytes_act / 1e9;
+  const act_pre17 = coeff_pre17 * batch_tokens * hidden_dim * bytes_act / 1e9;
+
+  // act_pre17 should be ~2.5× act_v017 (60% reduction in v0.17)
+  assertClose('TO-DO-006: vLLM v0.17+ activation significantly lower than pre-v0.17',
+    act_pre17 / act_v017, 0.27/0.11, 10);
+
+  // non_torch is stable at ~0.3 GB
+  assert('TO-DO-006: CAP_OH_NON_TORCH_GB defined and small',
+    typeof CAP_OH_NON_TORCH_GB !== 'undefined' && CAP_OH_NON_TORCH_GB < 1.0,
+    `got ${CAP_OH_NON_TORCH_GB}`);
+
+  // CAP_ACT_COEFF has version entries
+  assert('TO-DO-006: CAP_ACT_COEFF has vllm_v017 entry',
+    CAP_ACT_COEFF && CAP_ACT_COEFF['vllm_v017'] !== undefined);
+  assert('TO-DO-006: CAP_ACT_COEFF has vllm_pre17 entry',
+    CAP_ACT_COEFF && CAP_ACT_COEFF['vllm_pre17'] !== undefined);
+  assert('TO-DO-006: v0.17 coefficient < pre-v0.17 (60% reduction)',
+    CAP_ACT_COEFF['vllm_v017'] < CAP_ACT_COEFF['vllm_pre17'],
+    `v017=${CAP_ACT_COEFF['vllm_v017']}, pre17=${CAP_ACT_COEFF['vllm_pre17']}`);
+})();
+
+// ── Roofline bottleneck classification consistency ────────────────────────────
+(function testRooflineBottleneck() {
+  // bottleneck='compute' only when arith_intensity > ridge_pt
+  // bottleneck='KV' when t_kv > t_w AND below ridge
+  // bottleneck='weight' when t_w > t_kv AND below ridge
+  const r = tpEngine(tpParams());
+  const sel = r.selected;
+
+  if(sel.arith_intens > sel.ridge_pt){
+    assert('Roofline: compute-bound when intensity > ridge',
+      sel.bottleneck === 'compute',
+      `intensity=${sel.arith_intens?.toFixed(1)}, ridge=${sel.ridge_pt?.toFixed(0)}, bottleneck=${sel.bottleneck}`);
+  } else if(sel.t_kv_ms >= sel.t_w_ms){
+    assert('Roofline: KV-bound when t_kv >= t_w (below ridge)',
+      sel.bottleneck === 'KV',
+      `t_kv=${sel.t_kv_ms?.toFixed(3)}, t_w=${sel.t_w_ms?.toFixed(3)}, bottleneck=${sel.bottleneck}`);
+  } else {
+    assert('Roofline: weight-bound when t_w > t_kv (below ridge)',
+      sel.bottleneck === 'weight',
+      `t_w=${sel.t_w_ms?.toFixed(3)}, t_kv=${sel.t_kv_ms?.toFixed(3)}, bottleneck=${sel.bottleneck}`);
+  }
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════════

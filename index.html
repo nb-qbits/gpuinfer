@@ -1392,6 +1392,38 @@ button{font-family:var(--sans);cursor:pointer}
           <div class="chips-wrap">
             <button class="chip on" id="fw-vllm"  onclick="setFW('vllm',this)">vLLM (95% PA)</button>
             <button class="chip" id="fw-naive" onclick="setFW('naive',this)">Naive (85%)</button>
+
+          <!-- TO-DO-006: vLLM Dynamic Memory Formula -->
+          <div style="margin-top:10px;padding:8px 10px;background:var(--bg2);border-radius:var(--r);border:1px solid var(--border);font-size:11px">
+            <div style="font-weight:600;color:var(--text3);margin-bottom:8px">vLLM Memory Budget</div>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+              <span style="color:var(--text4);width:100px">Version</span>
+              <select id="cap-vllm-version" onchange="recalc()" style="flex:1;padding:2px 4px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg3);color:var(--text1);font-size:11px">
+                <option value="vllm_v017">vLLM ≥ v0.17 ✓</option>
+                <option value="vllm_pre17">vLLM ≤ v0.16</option>
+                <option value="trtllm">TRT-LLM</option>
+                <option value="sglang">SGLang</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+              <span style="color:var(--text4);width:100px">gpu_mem_util</span>
+              <input type="number" id="cap-gpu-mem-util" value="0.90" min="0.5" max="0.98" step="0.01" oninput="recalc()"
+                style="width:55px;padding:2px 4px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg3);color:var(--text1);font-size:11px;font-family:var(--mono)">
+              <span style="color:var(--text4)">default 0.90</span>
+            </div>
+            <div style="display:flex;gap:6px;align-items:flex-start">
+              <span style="color:var(--text4);width:100px;padding-top:3px">act_peak GB</span>
+              <div>
+                <input type="number" id="cap-act-peak-override" placeholder="auto"
+                  oninput="recalc();var s=document.getElementById('cap-act-status');var v=parseFloat(this.value);if(s){s.textContent=(!isNaN(v)&&v>0)?'from log ✓':'estimated';s.style.color=(!isNaN(v)&&v>0)?'var(--green)':'var(--amber,#f90)';}"
+                  style="width:55px;padding:2px 4px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg3);color:var(--text1);font-size:11px;font-family:var(--mono)">
+                <span id="cap-act-status" style="color:var(--amber,#f90);margin-left:4px">estimated</span>
+                <div style="color:var(--text4);font-size:10px;margin-top:3px;line-height:1.5">
+                  From vLLM log: <span style="font-family:var(--mono)">PyTorch activation peak memory takes X.XX GiB</span>
+                </div>
+              </div>
+            </div>
+          </div>
           </div>
           <div class="panel-label" style="margin-top:8px">Mode</div>
           <div class="chips-wrap">
@@ -2732,7 +2764,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px" id="version-display">real-time inference only · v<span id="nav-version">6.3.0</span></span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px" id="version-display">real-time inference only · v<span id="nav-version">6.3.1</span></span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -3139,13 +3171,25 @@ function openLayer(id){
 // ===== CORE MATH =====
 // weightsGB defined in compat layer below
 
-var APP_VERSION = '6.3.0'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
+var APP_VERSION = '6.3.1'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
 document.addEventListener('DOMContentLoaded',function(){var el=document.getElementById('nav-version');if(el)el.textContent=APP_VERSION;});
 // ===== CAPACITY ENGINE v6.0.0 =====
 // Layer-by-layer: weights → KV → GPU specs → memory fit → replicas → cost
 
 // ── CONSTANTS ────────────────────────────────────────────────
-var CAP_OH_FLAT_GB  = 11.0;   // flat vLLM overhead (CUDA+PyTorch+paging+activations)
+// ── MEMORY OVERHEAD — vLLM Formula (replaces flat CAP_OH_FLAT_GB) ──────────
+// vLLM computes: avail_KV = (vram × gpu_mem_util) - weights - non_torch - act_peak
+// act_peak scales with max_batch_tokens × hidden_dim × bytes (version-calibrated)
+// Reference: vLLM worker.py profiling pass; Anyscale docs gpu-memory formula
+var CAP_OH_NON_TORCH_GB = 0.3;   // CUDA context + drivers (stable across versions)
+var CAP_ACT_COEFF = {             // empirical: act_peak = C × batch_tok × hidden × bytes
+  'vllm_v017': 0.11,              // vLLM ≥ v0.17 (FlashAttention v2 optimized)
+  'vllm_pre17': 0.27,             // vLLM < v0.17 (old attention kernel)
+  'trtllm':    0.08,              // TRT-LLM (more aggressive memory optimization)
+  'sglang':    0.12,              // SGLang
+};
+var CAP_GPU_MEM_UTIL   = 0.90;   // gpu_memory_utilization (vLLM default)
+var CAP_OH_FLAT_GB     = 11.0;   // legacy fallback only
 var CAP_PA_EFF_VLLM = 0.95;   // PagedAttention memory efficiency
 var CAP_PA_EFF_NAIVE= 0.85;
 var CAP_HEADROOM    = 1.20;   // 20% replica headroom
@@ -3238,9 +3282,42 @@ function capKVPerUser(){
 
 // ── OVERHEAD (flat, not % of weights — B3 FIX) ───────────────
 function capOverheadGB(tp){
-  // Flat per-node overhead, not proportional to model size
-  // Components: CUDA ctx 2GB + PyTorch 1.5GB + vLLM paging 1GB + activations 6.5GB
-  return CAP_OH_FLAT_GB;
+  // ── vLLM Dynamic Memory Formula (TO-DO-006) ──────────────────────────────
+  // Mirrors vLLM's actual formula: avail_KV = (vram×util) - weights - non_torch - act_peak
+  // act_peak = C × max_batch_tokens × hidden_dim × bytes (version-calibrated coefficient)
+  //
+  // Components:
+  //   non_torch: CUDA context + drivers (~0.3 GB, stable across versions)
+  //   act_peak:  activation memory from profiling pass
+  //              scales with model hidden_dim and max_batch_tokens
+  //              C coefficient changes per vLLM version (v0.17 reduced by 60%)
+  //
+  // User can override act_peak with their actual vLLM startup log value.
+  // Reference: vLLM worker.py profiling pass; Anyscale GPU memory docs
+  var vllmVer = (document.getElementById('cap-vllm-version')||{value:'vllm_v017'}).value || 'vllm_v017';
+  var actOverride = parseFloat((document.getElementById('cap-act-peak-override')||{value:''}).value);
+  var non_torch = CAP_OH_NON_TORCH_GB;
+
+  // Activation peak: use user override if provided, else derive from formula
+  var act_peak;
+  if(!isNaN(actOverride) && actOverride > 0){
+    act_peak = actOverride;  // "from profiling log ✓"
+  } else {
+    var coeff = CAP_ACT_COEFF[vllmVer] || CAP_ACT_COEFF['vllm_v017'];
+    var maxBatchTok = S.maxBatchTokens || 2048;  // vLLM default max_num_batched_tokens
+    var hiddenDim   = S.hiddenDim || (S.numHeads * S.headDim) || 4096;
+    var bytesAct    = S.prec==='fp8' ? 1 : 2;  // activation dtype follows weight dtype
+    act_peak = coeff * maxBatchTok * hiddenDim * bytesAct / 1e9;
+    act_peak = Math.max(0.5, Math.min(act_peak, 12.0));  // sanity bounds
+  }
+  return non_torch + act_peak;
+}
+
+// Compute total usable VRAM budget (mirrors vLLM gpu_memory_utilization param)
+function capUsableVRAM(){
+  var gspec = capGPUSpec();
+  var util  = parseFloat((document.getElementById('cap-gpu-mem-util')||{value:'0.90'}).value) || CAP_GPU_MEM_UTIL;
+  return gspec.vram * util;
 }
 
 // ── COMPUTE MEMORY FIT ────────────────────────────────────────
@@ -3248,7 +3325,9 @@ function capComputeFit(){
   var wGB  = weightsGB();
   var kvPU = capKVPerUser();
   var gspec= capGPUSpec();
-  var vram = gspec.vram;
+  // TO-DO-006: use dynamic vLLM formula instead of flat CAP_OH_FLAT_GB
+  // avail_KV = (vram × gpu_mem_util) - weights - overhead (non_torch + act_peak)
+  var vram  = gspec.vram * (parseFloat((document.getElementById('cap-gpu-mem-util')||{value:'0.90'}).value)||0.90);
   var pa   = S.fw==='vllm' ? CAP_PA_EFF_VLLM : CAP_PA_EFF_NAIVE;
 
   // Active users from concurrency rate — B2 FIX
@@ -3579,7 +3658,7 @@ function capRenderL3(C){
   html += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">VRAM breakdown per GPU</div>';
   html += capRow('Raw VRAM', g.vram+' GB','available total', g.name,'var(--text1)');
   html += capRow('Framework overhead', 'CUDA 2GB + PyTorch 1.5GB + vLLM paging 1GB + activations 6.5GB',
-    CAP_OH_FLAT_GB+' GB', 'fixed regardless of model size', 'var(--amber)');
+    capOverheadGB(1).toFixed(2)+' GB', 'non_torch(0.3)+act_peak(version-calibrated)', 'var(--amber)');
   html += capRow('After overhead', g.vram+' − '+CAP_OH_FLAT_GB, (g.vram-CAP_OH_FLAT_GB).toFixed(1)+' GB', '', 'var(--text1)');
   html += capRow('PA efficiency', (S.fw==='vllm'?'vLLM 95%':'Naive 85%'), 
     (((g.vram-CAP_OH_FLAT_GB)*(S.fw==='vllm'?0.95:0.85)).toFixed(1))+' GB', 'usable for KV cache', 'var(--green)');
@@ -8151,10 +8230,12 @@ function tpEngine(p) {
   // KV cache grows from ISL at step 0 to ISL+OSL at step OSL.
   // Average over the decode phase = ISL + OSL/2.
   // Prefill still uses full ISL (KV must store all input tokens).
-  // FIX-024: Evicting cache frees KV after a hit → reduces effective avg_ctx for sizing.
+  // FIX-024 v2: Evicting cache frees KV after a hit → reduces ISL portion of avg_ctx.
+  // OSL tokens are NEVER cached (they are being generated) → OSL/2 never reduced.
   // Persistent cache keeps KV in VRAM (no reduction). Consistent with capKVPerUser().
+  // Correct formula: avg_ctx = ISL×(1-hit_rate) + OSL/2
   var prefix_frac_kv = (p.cache_type === 'evicting') ? (p.prefix_pct / 100.0) : 0;
-  var avg_ctx        = (p.isl + p.osl / 2) * (1 - prefix_frac_kv);  // reduced if evicting
+  var avg_ctx        = p.isl * (1 - prefix_frac_kv) + p.osl / 2;  // OSL never cached
   var kv_per_token   = 2 * p.layers * p.kv_heads * p.head_dim * p.bytes_kv;
   var kv_per_request = kv_per_token * avg_ctx;      // avg KV per request during decode
 
@@ -8358,7 +8439,13 @@ function tpEngine(p) {
       pf_budget_s:pf_budget_s,
       kv_gpu_mb:kv_gpu/1e6, w_gb:w_gb, kv_gb:kv_gb,
       kv_bound:t_kv>=t_w,
-      bottleneck:t_kv>=t_w?'KV':'compute',
+      // Roofline Model bottleneck classification:
+      // 'compute' only when arithmetic intensity > ridge_pt (rare at small batch)
+      // 'KV'      when KV read dominates weight read
+      // 'weight'  when weight read dominates KV read (common at small ctx + FP8)
+      bottleneck: arith_intens > ridge_pt ? 'compute'
+                : t_kv >= t_w             ? 'KV'
+                :                           'weight',
       tier:tp>8?'multi_node':'single_node',
       explain:explain,
       // USL (Universal Scalability Law)
@@ -9077,7 +9164,7 @@ function tpRenderMath(r){
    +row('2',  '2 × '+p.layers+'L × '+p.kv_heads+'H × '+p.head_dim+'D × '+p.bytes_kv+'B', (r.kv_per_token/1024).toFixed(1)+' KB/token', 'KV per token')
    +row('2b', 'ISL + OSL/2 = '+p.isl+' + '+p.osl+'/2'+cacheNote, r.avg_ctx.toFixed(0)+' tokens', 'avg_ctx (KV sizing)')
    +row('2c', 'KV/token × avg_ctx', r.kv_per_request_mb.toFixed(1)+' MB', 'KV per request')
-   +row('3',  p.is_moe?'dense('+( p.dense_params/1e9).toFixed(1)+'B) + active_experts':'total_params', (r.eff_params/1e9).toFixed(3)+'B', 'eff_params for prefill FLOPs')
+   +row('3',  p.is_moe?'dense('+( p.dense_params/1e9).toFixed(1)+'B) + (expert_total('+( p.total_expert_params/1e9).toFixed(0)+'B) / num_exp('+p.num_experts+') × active_exp('+p.active_experts+'))':'total_params', (r.eff_params/1e9).toFixed(3)+'B', 'eff_params for prefill FLOPs')
    +row('4',  'KV/req × eff_batch('+r.eff_batch+') / (active_params × bytes)', r.kv_ratio.toFixed(2)+'×', 'KV ratio → sets η_kv')
    +row('5',  'η_kv from KV ratio · mfu_bw('+p.mfu_bw_base+')', r.eta_kv.toFixed(3), 'KV BW efficiency')
    +secHdr('TTFT — Prefill Phase', 'Roofline Model (Williams et al. 2009)')

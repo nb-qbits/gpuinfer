@@ -90,6 +90,10 @@ const pieces = [
   "// ── TP CONSTANTS ──────────────────────────────────────────\n" +
     html.slice(html.indexOf('var TP_MAX_BATCH_TOKENS'),
                html.indexOf('\nfunction tpEngine')).trim() + '\n',
+  "// ── CAP CONSTANTS ─────────────────────────────────────────\n" +
+    html.slice(html.indexOf('var CAP_OH_NON_TORCH_GB'),
+               html.indexOf('\nvar CAP_OH_FLAT_GB')+
+               html.slice(html.indexOf('\nvar CAP_OH_FLAT_GB')).indexOf('\n',1)).trim() + '\n',
   "// ── PRICING DATA ──────────────────────────────────────────\n" +
     extractBracketVar(html, 'var API_PROVIDERS') + ';\n',
   "// ── GPU HARDWARE DATA ─────────────────────────────────────\n" +
@@ -109,7 +113,8 @@ const pieces = [
   "if(typeof module !== 'undefined') module.exports = {\n" +
   "  tpEngine, computeTier, SF,\n" +
   "  capKVPerToken, capKVPerUser, capBytesKV, capKVCategory, capAvgCtx,\n" +
-  "  API_PROVIDERS, GPU_DATA, S\n" +
+  "  API_PROVIDERS, GPU_DATA, S,\n" +
+  "  CAP_OH_NON_TORCH_GB, CAP_ACT_COEFF, CAP_GPU_MEM_UTIL\n" +
   "};\n"
 ];
 
