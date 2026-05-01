@@ -1642,21 +1642,31 @@ button{font-family:var(--sans);cursor:pointer}
         </div>
         <!-- KV three-tile always visible -->
         <div id="l2-tiles" style="display:none;padding:10px 14px 4px">
+          <!-- TO-DO-002: Formula category badge -->
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="font-size:10px;color:var(--text4)">Formula:</span>
+            <span id="l2-kv-category" style="font-size:9px;padding:2px 8px;border-radius:10px;color:#fff;font-weight:600;cursor:help;background:var(--blue)">—</span>
+            <span style="font-size:10px;color:var(--text4)">↑ hover for full description</span>
+          </div>
+          <!-- TO-DO-001: Multi-unit display -->
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:4px">
             <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px">
-              <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text4);margin-bottom:4px">KV / token</div>
+              <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text4);margin-bottom:4px">KV / TOKEN</div>
               <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--blue)" id="l2-kv-tok">—</div>
               <div style="font-size:10px;color:var(--text3);margin-top:3px" id="l2-kv-tok-sub">2(K+V) × L × H × D × B</div>
+              <div style="font-size:9px;color:var(--text4);margin-top:2px" id="l2-kv-tok-units"></div>
             </div>
             <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px">
-              <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text4);margin-bottom:4px">KV / user</div>
+              <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text4);margin-bottom:4px">KV / USER</div>
               <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--blue)" id="l2-kv-user">—</div>
               <div style="font-size:10px;color:var(--text3);margin-top:3px" id="l2-kv-user-sub">kv_tok × ctx_tokens</div>
+              <div style="font-size:9px;color:var(--text4);margin-top:2px" id="l2-kv-user-units"></div>
             </div>
             <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px">
-              <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text4);margin-bottom:4px">KV total (all users)</div>
+              <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text4);margin-bottom:4px">KV TOTAL (ALL USERS)</div>
               <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--blue)" id="l2-kv-total">—</div>
               <div style="font-size:10px;color:var(--text3);margin-top:3px" id="l2-kv-total-sub">kv_user × active users</div>
+              <div style="font-size:9px;color:var(--text4);margin-top:2px" id="l2-kv-total-units"></div>
             </div>
           </div>
         </div>
@@ -2039,6 +2049,8 @@ button{font-family:var(--sans);cursor:pointer}
               <input type="number" id="tp-ib-pen" value="1.2" min="1" max="2" step="0.05" oninput="tpLiveRecalc()" class="tp-inp"></div>
             <div><div class="panel-label" style="margin-bottom:2px">Disagg queue factor</div>
               <input type="number" id="tp-disagg-q" value="0.3" min="0" max="1" step="0.05" oninput="tpLiveRecalc()" class="tp-inp"></div>
+            <div><div class="panel-label" style="margin-bottom:2px">Routing eff. <span style="font-size:9px;color:var(--text4)" title="Prefix-aware routing efficiency for llm-d. Higher = more cache hits on P workers.">(?)</span></div>
+            <input type="number" id="tp-routing-eff" value="0.85" min="0.5" max="0.99" step="0.05" oninput="tpLiveRecalc()" class="tp-inp" title="llm-d routing efficiency: fraction of cache hits preserved by prefix-aware router (0.85=conservative, 0.95=aggressive)"></div>
             <div><div class="panel-label" style="margin-bottom:2px">Throughput eff.</div>
               <input type="number" id="tp-tput-eff" value="0.85" min="0.5" max="1" step="0.01" oninput="tpLiveRecalc()" class="tp-inp"></div>
           </div>
@@ -2764,7 +2776,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px" id="version-display">real-time inference only · v<span id="nav-version">6.3.1</span></span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px" id="version-display">real-time inference only · v<span id="nav-version">6.4.0</span></span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -3171,7 +3183,7 @@ function openLayer(id){
 // ===== CORE MATH =====
 // weightsGB defined in compat layer below
 
-var APP_VERSION = '6.3.1'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
+var APP_VERSION = '6.4.0'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
 document.addEventListener('DOMContentLoaded',function(){var el=document.getElementById('nav-version');if(el)el.textContent=APP_VERSION;});
 // ===== CAPACITY ENGINE v6.0.0 =====
 // Layer-by-layer: weights → KV → GPU specs → memory fit → replicas → cost
@@ -3501,24 +3513,58 @@ function capRenderL2(C){
   // KV per token label based on precision
   var bkvLabel  = bkv===2?'FP16 (2B)':bkv===1?'FP8/INT8 (1B)':'INT4 (0.5B)';
 
+  // TO-DO-002: Show formula category badge in tile header
+  var catEl = document.getElementById('l2-kv-category');
+  if(catEl){
+    var catColors = {1:'var(--blue)',2:'var(--blue)',3:'var(--amber,#f90)',
+                     4:'var(--purple,#8b5cf6)',5:'var(--green)',6:'var(--teal,#0d9488)'};
+    catEl.textContent = cat.short || ('Cat '+cat.id);
+    catEl.title = cat.label;
+    catEl.style.background = catColors[cat.id] || 'var(--blue)';
+  }
   // Always-visible tiles
   var tilesEl = document.getElementById('l2-tiles');
   if(tilesEl) tilesEl.style.display='block';
 
   // KV/token
   var tokKB = kvTokB/1024;
-  document.getElementById('l2-kv-tok').textContent  = tokKB>=1?tokKB.toFixed(0)+' KB':Math.round(kvTokB)+' B';
-  document.getElementById('l2-kv-tok-sub').textContent = '2(K+V) × '+(S.kvLayers||S.numLayers)+'L × '+S.numKvHeads+'H × '+S.headDim+'D × '+bkv+'B';
+  // TO-DO-001: Multi-unit display — show in KB/MB/GB so users see value at their scale
+  function fmtMultiUnit(bytes){
+    var kb = bytes/1024, mb = bytes/1e6, gb = bytes/1e9;
+    if(gb >= 1)   return gb.toFixed(2)+' GB';
+    if(mb >= 1)   return mb.toFixed(1)+' MB';
+    if(kb >= 1)   return kb.toFixed(1)+' KB';
+    return Math.round(bytes)+' B';
+  }
+  function fmtAllUnits(bytes){
+    var kb=bytes/1024, mb=bytes/1e6, gb=bytes/1e9;
+    var parts=[];
+    if(gb>=0.001) parts.push(gb.toFixed(3)+' GB');
+    if(mb>=0.001) parts.push(mb.toFixed(2)+' MB');
+    if(kb>=0.1)   parts.push(kb.toFixed(1)+' KB');
+    return parts.join(' = ');
+  }
 
-  // KV/user
-  document.getElementById('l2-kv-user').textContent  = capFmtGB(kvPerUser);
+  document.getElementById('l2-kv-tok').textContent  = fmtMultiUnit(kvTokB);
+  document.getElementById('l2-kv-tok-sub').textContent = '2(K+V) × '+(S.kvLayers||S.numLayers)+'L × '+S.numKvHeads+'H × '+S.headDim+'D × '+bkv+'B';
+  // Add multi-unit tooltip
+  // Show all unit variants in secondary line
+  var tokUnitsEl  = document.getElementById('l2-kv-tok-units');
+  var userUnitsEl = document.getElementById('l2-kv-user-units');
+  var totalUnitsEl= document.getElementById('l2-kv-total-units');
+  if(tokUnitsEl)   tokUnitsEl.textContent   = fmtAllUnits(kvTokB);
+  if(userUnitsEl)  userUnitsEl.textContent  = fmtAllUnits(kvPerUser*1e9);
+  if(totalUnitsEl) totalUnitsEl.textContent = fmtAllUnits(kvTotal*1e9);
+
+  // KV/user — multi-unit
+  document.getElementById('l2-kv-user').textContent  = fmtMultiUnit(kvPerUser*1e9);
   var islTok=S.isl||2000, oslTok=S.osl||200;
   var avgCtxTok=Math.round(capAvgCtx());
-  document.getElementById('l2-kv-user-sub').textContent = capFmtBytes(kvTokB)+'/tok × '+avgCtxTok.toLocaleString()+' avg_ctx';
+  document.getElementById('l2-kv-user-sub').textContent = fmtMultiUnit(kvTokB)+'/tok × '+avgCtxTok.toLocaleString()+' avg_ctx';
 
-  // KV total
-  document.getElementById('l2-kv-total').textContent = capFmtGB(kvTotal);
-  document.getElementById('l2-kv-total-sub').textContent = capFmtGB(kvPerUser)+'/user × '+activeU+' active';
+  // KV total — multi-unit
+  document.getElementById('l2-kv-total').textContent = fmtMultiUnit(kvTotal*1e9);
+  document.getElementById('l2-kv-total-sub').textContent = fmtMultiUnit(kvPerUser*1e9)+'/user × '+activeU+' active';
 
   // Expanded body
   var html = '<div style="padding:12px 14px;font-size:11px">';
@@ -3592,6 +3638,47 @@ function capRenderL2(C){
     }
     html += '</div>';
   }
+
+  // TO-DO-004: Memory budget breakdown checklist
+  html += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin:12px 0 6px">VRAM Budget Breakdown</div>';
+  html += '<div style="font-size:10px;color:var(--text4);margin-bottom:6px">What uses VRAM on one GPU (TP='+( S.tp||1)+')</div>';
+  var vramGPU   = S.gpuVram || 80;
+  var wGB_disp  = weightsGB ? weightsGB() : (S.params*(S.prec==='fp8'?1:S.prec==='int4'?0.5:2));
+  var kvGB_disp = kvPerUser; // already in GB
+  var actCoeff  = 0.11; // vLLM v0.17+
+  var hidDim    = S.numHeads * S.headDim || 4096;
+  var actPeak   = actCoeff * 2048 * hidDim * (S.prec==='fp8'?1:2) / 1e9;
+  actPeak       = Math.max(0.5, Math.min(actPeak, 12.0));
+  var nonTorch  = 0.3;
+  var totalUsed = wGB_disp + kvGB_disp + actPeak + nonTorch;
+  var remaining = vramGPU * 0.90 - totalUsed;
+
+  function memRow(icon, label, val, note, color){
+    return '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">'
+      +'<span style="width:16px;text-align:center">'+icon+'</span>'
+      +'<span style="flex:1;color:var(--text2)">'+label+'</span>'
+      +'<span style="color:'+(color||'var(--text1)')+';font-family:var(--mono);font-size:11px;min-width:70px;text-align:right">'+val+'</span>'
+      +'<span style="color:var(--text4);font-size:10px;min-width:130px;text-align:right">'+note+'</span>'
+      +'</div>';
+  }
+  html += '<div style="background:var(--bg3);border-radius:var(--r);padding:8px 10px">';
+  html += memRow('✅','Model weights ('+S.params+'B × '+(S.prec||'fp16')+')', capFmtGB(wGB_disp), 'sharded by TP', 'var(--blue)');
+  html += memRow('✅','KV cache (1 user at '+( S.ctx)+'K ctx)', capFmtGB(kvGB_disp), 'scales with active users', 'var(--blue)');
+  html += memRow('⚠️','Activation peak (vLLM v0.17+)', capFmtGB(actPeak), 'C=0.11 × batch × hidden × bytes', 'var(--amber,#f90)');
+  html += memRow('✅','Non-torch (CUDA ctx + drivers)', capFmtGB(nonTorch), 'stable across versions', 'var(--text3)');
+  html += memRow('⬜','Gradients', '0 GB', 'inference only — excluded ✓', 'var(--text4)');
+  html += memRow('⬜','Optimizer states', '0 GB', 'inference only — excluded ✓', 'var(--text4)');
+  html += memRow('⚠️','NCCL buffers', '~0.1 GB', 'in CUDA ctx estimate', 'var(--text4)');
+  html += '<div style="border-top:2px solid var(--border);margin-top:4px;padding-top:4px;display:flex;justify-content:space-between">'
+    +'<span style="font-weight:600;color:var(--text1)">Total used (1 user)</span>'
+    +'<span style="font-family:var(--mono);color:'+(remaining>0?'var(--green)':'var(--red)')+';font-weight:700">'
+    +capFmtGB(totalUsed)+' / '+vramGPU+'GB'
+    +'</span></div>';
+  html += '<div style="text-align:right;font-size:10px;color:'+(remaining>0?'var(--green)':'var(--red)')+'">'
+    +(remaining>0?'Remaining: '+capFmtGB(remaining)+' → fits ~'+Math.max(0,Math.floor((vramGPU*0.90-wGB_disp-actPeak-nonTorch)/kvGB_disp))+' more users'
+    :'OOM — KV cache too large for 1 user')
+    +'</div>';
+  html += '</div>';
 
   // Total KV
   html += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin:10px 0 6px">Step 4 — Total KV (all active users)</div>';
@@ -8415,11 +8502,19 @@ function tpEngine(p) {
     var reps        = Math.ceil(gpus / tp);
 
     // FIX-029: Memory fit uses eff_batch (actual decode batch), not concurrency/tp
-    // concurrency = peak simultaneous users across ALL replicas
-    // eff_batch = tokens actually in flight on THIS GPU at once
-    var w_gb  = p.total_params * p.bytes_param / tp / 1e9;
-    var kv_gb = kv_per_token * avg_ctx * eff_batch / tp / 1e9;
-    var fits  = (w_gb + kv_gb) < 0.9 * p.vram_gb;
+    // FIX-034: Use explicit overhead breakdown instead of flat 10% proxy
+    //   non_torch (0.3GB stable) + act_peak (version-calibrated)
+    //   Consistent with Capacity page capComputeFit() formula
+    var w_gb      = p.total_params * p.bytes_param / tp / 1e9;
+    var kv_gb     = kv_per_token * avg_ctx * eff_batch / tp / 1e9;
+    var non_torch = 0.3;  // CUDA context + drivers (stable)
+    // act_peak: version-calibrated coefficient × batch_tokens × hidden × bytes
+    var act_coeff = 0.11; // vLLM ≥ v0.17 default
+    var act_peak  = act_coeff * (p.max_batch_tokens||2048) * (p.hidden_dim||4096) * p.bytes_param / 1e9;
+    act_peak      = Math.max(0.5, Math.min(act_peak, 12.0));
+    var oh_gb     = non_torch + act_peak;
+    var usable    = p.vram_gb * 0.90;  // gpu_memory_utilization default
+    var fits      = (w_gb + kv_gb + oh_gb) < usable;
 
     var explain;
     if     (tp === 1)  explain = 'Full KV on one GPU. No comm overhead. KV-heavy at large context.';
@@ -8474,19 +8569,51 @@ function tpEngine(p) {
   }
 
   // ── STEP 10: DISAGG (llm-d) ──────────────────────────────
+  // BUG-041 FIX: vLLM and llm-d have DIFFERENT effective cache hit rates
+  //
+  // vLLM (colocated):
+  //   Cache is fragmented across N replicas. Requests load-balanced randomly
+  //   → same prefix lands on different replicas → cache miss most of the time.
+  //   Effective hit rate degrades as sqrt(N) with replica count.
+  //   Formula: vllm_hit = user_hit × (1 / sqrt(num_replicas))
+  //   Reference: "Prefix Caching for Large Language Models" (2024)
+  //
+  // llm-d (disaggregated prefill):
+  //   Prefix-aware router sends requests with same prefix to same P worker.
+  //   KV cache stays resident on that P worker → much higher effective hit rate.
+  //   Formula: llmd_hit = user_hit × routing_efficiency (default 0.85)
+  //   routing_efficiency: 0.85 conservative, 0.95 with consistent hashing
+  var user_hit_rate       = (p.prefix_pct || 0) / 100.0;
+  var num_vllm_replicas   = Math.max(1, tp_sweep[selected_tp] ? tp_sweep[selected_tp].reps_tput : 43);
+  var routing_eff         = p.routing_efficiency !== undefined ? p.routing_efficiency : 0.85;
+
+  // vLLM: cache fragmented across replicas
+  var vllm_effective_hit  = user_hit_rate / Math.sqrt(Math.max(1, num_vllm_replicas));
+  vllm_effective_hit      = Math.min(vllm_effective_hit, user_hit_rate);
+
+  // llm-d: prefix-aware routing preserves cache hits
+  var llmd_effective_hit  = user_hit_rate * routing_eff;
+
+  // Effective ISL for each mode
+  var isl_eff_vllm = p.isl * (1 - vllm_effective_hit);
+  var isl_eff_llmd = p.isl * (1 - llmd_effective_hit);
+
+  // TTFT for each mode (Roofline: TTFT_compute = isl_eff × 2 × eff_params / FLOPS×MFU)
+  var TTFT_compute_vllm = (isl_eff_vllm * 2 * eff_params) / (p.flops * p.mfu_prefill);
+  var TTFT_compute_llmd = (isl_eff_llmd * 2 * eff_params) / (p.flops * p.mfu_prefill);
+
   // Prefill pool: sized by compute throughput + concurrency floor
   // Decode pool:  same as vLLM decode sizing (tp_sweep already computed)
   function disagg_prefill_gpus(tp){
-    // Prefill throughput: how many prefills per second per replica
-    var flops_req   = 2 * eff_params * isl_eff;
+    // Prefill throughput using llm-d effective ISL (higher cache hit = cheaper prefill)
+    var flops_req   = 2 * eff_params * isl_eff_llmd;
     var gpu_flops   = p.flops * p.mfu_prefill * tp;
-    var pf_time_s   = flops_req / gpu_flops;           // seconds per prefill
+    var pf_time_s   = flops_req / gpu_flops;
     var rps_rep     = 1.0 / pf_time_s;
     var tput_eff    = p.tput_eff || TP_THROUGHPUT_EFF;
     var gpus_tput   = Math.ceil((req_per_sec / (rps_rep * tput_eff)) * TP_HEADROOM);
-    // Concurrency floor
     var pf_budget_s = Math.max(pf_time_s * 3.0, 0.5);
-    var gpus_conc   = Math.max(1, Math.ceil((p.concurrency * pf_time_s) / pf_budget_s));
+    var gpus_conc   = Math.max(1, Math.ceil((effective_concurrency * pf_time_s) / pf_budget_s));
     gpus_conc       = Math.ceil(gpus_conc / tp) * tp;
     return Math.max(gpus_tput, gpus_conc);
   }
@@ -8515,9 +8642,13 @@ function tpEngine(p) {
     total_gpus:p_gpus + d_gpus,
     pd_ratio:(d_gpus / Math.max(p_gpus, 1)).toFixed(1),
     ttft_total_ms:TTFT_total_disagg * 1000,
-    ttft_compute_ms:TTFT_compute * 1000,
+    ttft_compute_ms:TTFT_compute_llmd * 1000,
     ttft_queue_ms:TTFT_queue * q_factor * 1000,
     tpot_ms:tp_sweep[best_d_tp].tpot_ms,
+    // BUG-041: cache hit transparency
+    llmd_effective_hit:llmd_effective_hit,
+    llmd_isl_eff:isl_eff_llmd,
+    routing_efficiency:routing_eff,
   };
 
   return {
@@ -8528,6 +8659,12 @@ function tpEngine(p) {
     e2e_est_ms:e2e_est*1000,
     utilization_prefill:utilization_prefill,
     ttft_queue_md1_ms:TTFT_queue*1000,
+    vllm_effective_hit:vllm_effective_hit,
+    llmd_effective_hit:llmd_effective_hit,
+    isl_eff_vllm:isl_eff_vllm,
+    isl_eff_llmd:isl_eff_llmd,
+    routing_efficiency:routing_eff,
+    num_vllm_replicas:num_vllm_replicas,
     eff_params:eff_params,
     kv_per_token:kv_per_token,
     kv_per_request_mb:kv_per_request / 1e6,
@@ -8589,6 +8726,7 @@ function tpReadParams(){
     eta_weights:   parseFloat(document.getElementById('tp-eta-w').value)||0.87,
     ib_penalty:    parseFloat(document.getElementById('tp-ib-pen').value)||1.2,
     disagg_q_factor: parseFloat(document.getElementById('tp-disagg-q').value)||0.3,
+    routing_efficiency: parseFloat(document.getElementById('tp-routing-eff').value)||0.85,
     tput_eff:      parseFloat(document.getElementById('tp-tput-eff').value)||0.85,
     buf_pct:       parseInt(document.getElementById('tp-buf').value)||20,  // FIX-032: infra buffer %
     batch_frag_factor: 0.70,  // F4: scheduler fragmentation
@@ -8724,6 +8862,86 @@ function tpRenderHero(r, mode){
 }
 
 // ── U3: Compact vLLM vs llm-d comparison ─────────────────────
+// TO-DO-008: Step-by-step vLLM vs llm-d explanation with cache hit rate math
+function tpServingStepByStep(r, sel, dis, p){
+  if(!dis) return '<div style="color:var(--text4)">llm-d data not available</div>';
+  var user_hit    = (p.prefix_pct||0) / 100;
+  var n_reps      = r.num_vllm_replicas || sel.replicas;
+  var route_eff   = r.routing_efficiency || 0.85;
+  var vllm_hit    = r.vllm_effective_hit || (user_hit / Math.sqrt(Math.max(1, n_reps)));
+  var llmd_hit    = r.llmd_effective_hit || (user_hit * route_eff);
+  var isl         = p.isl;
+  var eff_vllm    = r.isl_eff_vllm || (isl * (1 - vllm_hit));
+  var eff_llmd    = r.isl_eff_llmd || (isl * (1 - llmd_hit));
+
+  function srow(step, formula, result, note, color){
+    return '<div style="display:grid;grid-template-columns:40px 1fr 140px 150px;gap:6px;padding:3px 0;border-bottom:1px solid var(--border)">'
+      +'<span style="color:var(--text4);font-size:10px">'+step+'</span>'
+      +'<span style="color:var(--text2);font-family:var(--mono);font-size:10px">'+formula+'</span>'
+      +'<span style="color:'+(color||'var(--green)')+';font-weight:600;text-align:right;font-family:var(--mono);font-size:10px">'+result+'</span>'
+      +'<span style="color:var(--text4);font-size:10px;text-align:right">'+note+'</span>'
+      +'</div>';
+  }
+
+  var out = '';
+  out += '<div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;font-size:10px;margin-bottom:8px">'
+    +'PREFIX CACHE HIT RATE — Why vLLM and llm-d differ</div>';
+
+  out += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">';
+
+  // vLLM column
+  out += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px">';
+  out += '<div style="font-weight:600;color:var(--blue);margin-bottom:6px">🔵 vLLM — cache fragmented</div>';
+  out += srow('H1', 'user_hit_rate', (user_hit*100).toFixed(0)+'%', 'theoretical', 'var(--text1)');
+  out += srow('H2', 'num_replicas = '+n_reps, '√'+n_reps+'='+Math.sqrt(n_reps).toFixed(1), 'fragmentation factor');
+  out += srow('H3', user_hit.toFixed(2)+' × (1/√'+n_reps+')', (vllm_hit*100).toFixed(1)+'% effective', 'cache fragments across replicas', 'var(--amber,#f90)');
+  out += srow('H4', 'isl_eff = '+isl+' × (1−'+(vllm_hit*100).toFixed(1)+'%)', eff_vllm.toFixed(0)+' tokens', 'effective ISL', 'var(--text1)');
+  out += srow('H5', 'TTFT_compute = isl_eff×2×params/FLOPS', tpFmt(r.ttft_compute_ms||0), 'Roofline', 'var(--text1)');
+  out += '</div>';
+
+  // llm-d column
+  out += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px">';
+  out += '<div style="font-weight:600;color:var(--green);margin-bottom:6px">🟢 llm-d — prefix-aware routing</div>';
+  out += srow('H1', 'user_hit_rate', (user_hit*100).toFixed(0)+'%', 'theoretical', 'var(--text1)');
+  out += srow('H2', 'routing_efficiency = '+route_eff.toFixed(2), route_eff.toFixed(2), 'consistent hash routing');
+  out += srow('H3', user_hit.toFixed(2)+' × '+route_eff.toFixed(2), (llmd_hit*100).toFixed(1)+'% effective', 'prefix-aware router preserves hits', 'var(--green)');
+  out += srow('H4', 'isl_eff = '+isl+' × (1−'+(llmd_hit*100).toFixed(1)+'%)', eff_llmd.toFixed(0)+' tokens', 'effective ISL', 'var(--text1)');
+  out += srow('H5', 'TTFT_compute = isl_eff×2×params/FLOPS', tpFmt(dis.ttft_compute_ms||0), 'Roofline', 'var(--text1)');
+  out += '</div>';
+  out += '</div>';
+
+  // Prefill pool sizing
+  out += '<div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;font-size:10px;margin-bottom:6px">'
+    +'PREFILL POOL SIZING (llm-d P workers)</div>';
+  var flops_req = 2 * r.eff_params * eff_llmd;
+  var gpu_flops = p.flops * p.mfu_prefill;
+  var pf_time   = flops_req / gpu_flops;
+  var rps_rep   = 1.0 / pf_time;
+  out += srow('P1', 'flops/prefill = 2 × '+( r.eff_params/1e9).toFixed(2)+'B × '+eff_llmd.toFixed(0), (flops_req/1e12).toFixed(1)+' TFLOPs', 'using llm-d isl_eff', 'var(--text1)');
+  out += srow('P2', 'pf_time = FLOPs / ('+( p.flops/1e12).toFixed(0)+'T × '+p.mfu_prefill+')', (pf_time*1000).toFixed(1)+'ms', 'per prefill request', 'var(--text1)');
+  out += srow('P3', 'rps/replica = 1 / pf_time', rps_rep.toFixed(1)+' req/s', 'prefill throughput', 'var(--text1)');
+  out += srow('P4', 'P_replicas = ⌈'+r.req_per_sec.toFixed(0)+' / ('+rps_rep.toFixed(1)+'×0.85)⌉ × 1.2', dis.prefill_replicas, 'prefill replicas needed', 'var(--blue)');
+  out += srow('P5', 'P_GPUs = '+dis.prefill_replicas+' × TP='+dis.prefill_tp, dis.prefill_gpus+' GPUs', 'prefill pool', 'var(--blue)');
+
+  // Final comparison
+  out += '<div style="font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;font-size:10px;margin:10px 0 6px">'
+    +'FINAL GPU COUNT</div>';
+  out += srow('F1', 'vLLM decode = '+sel.replicas+' replicas × TP='+r.selected_tp, sel.gpus+' GPUs', 'all-in-one mode', 'var(--blue)');
+  out += srow('F2', 'llm-d = '+dis.prefill_gpus+'P + '+dis.decode_gpus+'D', dis.total_gpus+' GPUs', 'disaggregated', 'var(--green)');
+  out += srow('F3', 'Difference', (dis.total_gpus > sel.gpus ? '+' : '')+(dis.total_gpus - sel.gpus)+' GPUs',
+    dis.total_gpus > sel.gpus ? 'llm-d costs more' : 'llm-d saves GPUs',
+    dis.total_gpus > sel.gpus ? 'var(--amber,#f90)' : 'var(--green)');
+
+  if(user_hit > 0){
+    out += '<div style="margin-top:8px;padding:6px 8px;background:var(--bg2);border-radius:var(--r);font-size:10px;color:var(--text3)">'
+      +'<strong>routing_efficiency</strong> = '+route_eff.toFixed(2)+' (editable in workload settings). '
+      +'Higher = more aggressive prefix routing. Conservative=0.85, Aggressive=0.95.'
+      +'</div>';
+  }
+
+  return out;
+}
+
 function tpRenderServingCompact(r, mode){
   var el = document.getElementById('tp-serving-panels');
   if(!el) return;
@@ -8778,12 +8996,18 @@ function tpRenderServingCompact(r, mode){
       ])
       +'<div style="padding:9px 14px;background:var(--bg3);font-size:11px;color:var(--text2)">'
       +(vllm_wins_gpu
-        ?'<strong style="color:var(--blue)">vLLM uses '+gpu_delta+' fewer GPUs</strong> for this workload (high prefix cache → prefill-light → disagg overhead not worth it). '
+        ?'<strong style="color:var(--blue)">vLLM uses '+gpu_delta+' fewer GPUs</strong> for this workload. '
         :'<strong style="color:var(--green)">llm-d saves '+gpu_delta+' GPUs</strong>. ')
       +(llmd_wins_ttft
-        ?'llm-d reduces TTFT by <strong>'+tpFmt(ttft_delta)+'</strong> via dedicated prefill pool.'
-        :'TTFT is similar across both modes.')
-      +'</div></div>';
+        ?'llm-d reduces TTFT by <strong>'+tpFmt(ttft_delta)+'</strong> via dedicated prefill pool. '
+        :'TTFT is similar across both modes. ')
+      +'<a onclick="document.getElementById(\'tp-serving-detail\').style.display=document.getElementById(\'tp-serving-detail\').style.display===\'none\'?\'block\':\'none\'" '
+      +'style="color:var(--blue);cursor:pointer;text-decoration:underline;margin-left:6px">Why? Step-by-step →</a>'
+      +'</div>'
+      +'<div id="tp-serving-detail" style="display:none;padding:12px 14px;border-top:1px solid var(--border);background:var(--bg);font-size:11px">'
+      +tpServingStepByStep(r, sel, dis, p)
+      +'</div>'
+      +'</div>';
 
   } else if(mode==='vllm'){
     html = tpServingSingle('vLLM / TRT-LLM / SGLang','🔵','var(--blue)',sel,r,false);
@@ -9603,9 +9827,13 @@ function initThroughputPage(){
     tpUpdateISLDisplay();
     tpUpdateRPS();
     _tpPageInited = true;
-    // FIX-025 v2: Use setTimeout to ensure DOM is fully painted before running
-    // This fixes the double-click issue where chips/inputs weren't ready yet
-    setTimeout(function(){ runThroughput(); }, 50);
+    // FIX-025 v3: requestAnimationFrame ensures DOM is painted before calc fires
+    // setTimeout(50ms) wasn't reliable on slow devices — rAF is more robust
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        runThroughput();  // double rAF = after paint + before next paint
+      });
+    });
     return;
   }
   // Always re-render if we have a result (page may have been hidden)
