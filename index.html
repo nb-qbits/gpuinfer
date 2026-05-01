@@ -2776,7 +2776,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px" id="version-display">real-time inference only · v<span id="nav-version">6.4.0</span></span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px" id="version-display">real-time inference only · v<span id="nav-version">6.4.3</span></span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -2951,8 +2951,10 @@ var MODELS = [
   // ── LLM-d reference stack models ──
   // Llama Guard 4 12B: dense, pruned from Llama 4 Scout MoE, GQA, 48L
   {name:'Llama Guard 4 12B',org:'meta',params:12,layers:48,kvHeads:8,numHeads:32,headDim:128,attn:'gqa',hfId:'meta-llama/Llama-Guard-4-12B'},
-  // Gemma 3 12B: hybrid sliding window (5:1 local/global), only 8 global layers need full KV
-  {name:'Gemma 3 12B',org:'google',params:12,layers:48,kvHeads:4,numHeads:16,headDim:256,attn:'gqa',kvLayers:8,hfId:'google/gemma-3-12b-it'},
+  // Gemma 3: hybrid sliding window (5:1 local/global pattern, every 6th layer is global)
+  // kvArchType set by fetchHFModel via model_type='gemma3' detection
+  {name:'Gemma 3 12B', org:'google',params:12,layers:48, kvHeads:4, numHeads:16,headDim:256,attn:'gqa',kvLayers:8, kvArchType:'hybrid_sliding',kvGlobalLayers:8, kvSlidingLayers:40,slidingWindow:1024, hfId:'google/gemma-3-12b-it'},
+  {name:'Gemma 3 27B', org:'google',params:27,layers:62, kvHeads:16,numHeads:32,headDim:128,attn:'gqa',kvLayers:62,kvArchType:'hybrid_sliding',kvGlobalLayers:11,kvSlidingLayers:51,slidingWindow:1024, hfId:'google/gemma-3-27b-it'},
   // Phi-4-reasoning: same arch as Phi-4 14B, finetuned for reasoning
   {name:'Phi-4 reasoning',org:'other',params:14,layers:40,kvHeads:8,numHeads:40,headDim:96,attn:'gqa',hfId:'microsoft/Phi-4-reasoning'},
   // gpt-oss-20b: MoE, 4 active / 128 total experts, GQA, sliding window 128
@@ -3183,7 +3185,7 @@ function openLayer(id){
 // ===== CORE MATH =====
 // weightsGB defined in compat layer below
 
-var APP_VERSION = '6.4.0'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
+var APP_VERSION = '6.4.3'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
 document.addEventListener('DOMContentLoaded',function(){var el=document.getElementById('nav-version');if(el)el.textContent=APP_VERSION;});
 // ===== CAPACITY ENGINE v6.0.0 =====
 // Layer-by-layer: weights → KV → GPU specs → memory fit → replicas → cost
@@ -3225,11 +3227,12 @@ function capGPUSpec(){
 
 // ── KV CATEGORY DETECTION ────────────────────────────────────
 function capKVCategory(){
-  if(S.kvLoraRank)               return {id:5, label:'Category 5 — MLA (DeepSeek V2/V3/R1 full)', short:'MLA'};
-  if(S.kvArchType==='hybrid_ssm')return {id:4, label:'Category 4 — SSM/Attention Hybrid (Jamba, LFM)', short:'SSM hybrid'};
-  if(S.kvArchType==='hybrid_sliding') return {id:3, label:'Category 3 — Hybrid Sliding/Global (Gemma 4)', short:'Sliding hybrid'};
-  if(S.isMoE || (S.kvArchType==='moe')) return {id:2, label:'Category 2 — Standard MoE (Mixtral, gpt-oss-20b)', short:'MoE (same KV as dense)'};
-  return {id:1, label:'Category 1 — Standard Dense (GQA/MHA)', short:'Standard dense'};
+  if(S.kvLoraRank)               return {id:5, label:'Category 5 — MLA (DeepSeek V2/V3/R1) — low-rank KV compression. HF: deepseek-ai/DeepSeek-V3', short:'MLA'};
+  if(S.kvArchType==='hybrid_ssm')return {id:4, label:'Category 4 — SSM/Attention Hybrid (Jamba, LFM) — only attention layers have KV. HF: ai21labs/Jamba-v0.1', short:'SSM hybrid'};
+  if(S.kvArchType==='hybrid_sliding') return {id:3, label:'Category 3 — Hybrid Sliding/Global (Gemma 3/4) — sliding window + global attention. HF: google/gemma-3-27b-it', short:'Sliding hybrid'};
+  if(S.kvArchType==='hybrid_linear') return {id:6, label:'Category 6 — Hybrid Linear Attention — linear attn layers have no KV cache (e.g. RWKV-Hybrid, future models). HF: TBA', short:'Linear hybrid'};
+  if(S.isMoE || (S.kvArchType==='moe')) return {id:2, label:'Category 2 — Standard MoE (Mixtral, Qwen2 MoE) — same KV formula as dense. HF: mistralai/Mixtral-8x7B-v0.1', short:'MoE (same KV)'};
+  return {id:1, label:'Category 1 — Standard Dense GQA/MHA (Llama, Qwen, Mistral). HF: meta-llama/Llama-3.1-8B', short:'Standard dense'};
 }
 
 // ── BYTES_KV fix: correct fallback ───────────────────────────
@@ -3246,14 +3249,50 @@ function capKVPerToken(){
   var bkv = capBytesKV();
   var cat = capKVCategory();
 
-  // Category 5: MLA
+  // Category 5 — MLA (Low-rank KV compression)
+  // Formula: (kv_lora_rank + rope_head_dim) × bytes × layers
+  // Why less KV: K and V projected to low-rank latent space (kv_lora_rank << hidden_dim)
+  // Example model: deepseek-ai/DeepSeek-V3, deepseek-ai/DeepSeek-R1
   if(cat.id===5){
     var ropeHead = S.qkRopeHeadDim || 64;
     return (S.kvLoraRank + ropeHead) * bkv * S.numLayers;
   }
-  // Category 4: SSM — only attention layers
+
+  // Category 4 — SSM/Attention Hybrid
+  // Only attention layers have KV cache; SSM (Mamba) layers have O(1) state
+  // effLayers = attention-only layer count (kvLayers field)
+  // Example model: ai21labs/Jamba-v0.1, microsoft/phi-mamba
+  if(cat.id===4){
+    var effLayers4 = S.kvLayers || Math.ceil(S.numLayers * 0.5);
+    return 2 * effLayers4 * S.numKvHeads * S.headDim * bkv;
+  }
+
+  // Category 3 — Hybrid Sliding/Global Attention
+  // Global layers: use full context (stored in KV)
+  // Sliding layers: only store last W tokens (window size)
+  // Per-token average: (global_layers + sliding_layers) × full formula
+  // Example model: google/gemma-3-27b-it, google/gemma-3-12b-it
+  if(cat.id===3){
+    var gLayers = S.kvGlobalLayers  || Math.ceil(S.numLayers * 0.25);
+    var sLayers = S.kvSlidingLayers || Math.floor(S.numLayers * 0.75);
+    return 2 * (gLayers + sLayers) * S.numKvHeads * S.headDim * bkv;
+  }
+
+  // Category 6 — Hybrid Linear Attention
+  // Linear attention layers have O(1) state (no KV cache needed)
+  // Only standard/full attention layers contribute to KV cache
+  // Real examples: RWKV-7-World (hybrid), future hybrid linear models
+  // Note: Qwen3-30B-A3B is Cat 2 (MoE), NOT linear hybrid
+  if(cat.id===6){
+    var effLayers6 = S.kvLayers || Math.ceil(S.numLayers * 0.5);
+    return 2 * effLayers6 * S.numKvHeads * S.headDim * bkv;
+  }
+
+  // Category 1 — Standard Dense GQA/MHA
+  // Example model: meta-llama/Llama-3.1-8B, Qwen/Qwen2.5-7B-Instruct
+  // Category 2 — Standard MoE (same KV formula as dense — MoE only affects FFN weights)
+  // Example model: mistralai/Mixtral-8x7B-v0.1, Qwen/Qwen1.5-MoE-A2.7B
   var effLayers = S.kvLayers || S.numLayers;
-  // Category 1,2,3,6: standard formula
   return 2 * effLayers * S.numKvHeads * S.headDim * bkv;
 }
 
@@ -3641,11 +3680,16 @@ function capRenderL2(C){
 
   // TO-DO-004: Memory budget breakdown checklist
   html += '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin:12px 0 6px">VRAM Budget Breakdown</div>';
-  html += '<div style="font-size:10px;color:var(--text4);margin-bottom:6px">What uses VRAM on one GPU (TP='+( S.tp||1)+')</div>';
+  html += '<div style="font-size:10px;color:var(--text4);margin-bottom:6px">Per-GPU usage at TP='+tp_disp+' (weights sharded, KV per-user, activations per-GPU)</div>';
   var vramGPU   = S.gpuVram || 80;
-  var wGB_disp  = weightsGB ? weightsGB() : (S.params*(S.prec==='fp8'?1:S.prec==='int4'?0.5:2));
-  var kvGB_disp = kvPerUser; // already in GB
-  var actCoeff  = 0.11; // vLLM v0.17+
+  // BUG-042 FIX: weights sharded by TP — show PER-GPU values
+  var tp_disp   = C && C.tp ? C.tp : (S.tp || 1);
+  var wGB_total = weightsGB ? weightsGB() : (S.params*(S.prec==='fp8'?1:S.prec==='int4'?0.5:2));
+  var wGB_disp  = wGB_total / tp_disp;  // per-GPU weight allocation
+  var kvGB_disp = kvPerUser; // already in GB, NOT sharded (KV is per-user per-replica)
+  // act_peak: NOT sharded by TP (each GPU holds full activations for its layer slice)
+  // Uses version-calibrated coefficient — user can override via cap-act-peak-override
+  var actCoeff  = 0.11; // vLLM v0.17+ (C=0.11 × batch_tokens × hidden × bytes)
   var hidDim    = S.numHeads * S.headDim || 4096;
   var actPeak   = actCoeff * 2048 * hidDim * (S.prec==='fp8'?1:2) / 1e9;
   actPeak       = Math.max(0.5, Math.min(actPeak, 12.0));
@@ -3662,7 +3706,7 @@ function capRenderL2(C){
       +'</div>';
   }
   html += '<div style="background:var(--bg3);border-radius:var(--r);padding:8px 10px">';
-  html += memRow('✅','Model weights ('+S.params+'B × '+(S.prec||'fp16')+')', capFmtGB(wGB_disp), 'sharded by TP', 'var(--blue)');
+  html += memRow('✅','Model weights ('+S.params+'B × '+(S.prec||'fp16')+' / TP='+tp_disp+')', capFmtGB(wGB_disp), tp_disp>1?'sharded: '+capFmtGB(wGB_total)+' total / '+tp_disp:'not sharded', 'var(--blue)');
   html += memRow('✅','KV cache (1 user at '+( S.ctx)+'K ctx)', capFmtGB(kvGB_disp), 'scales with active users', 'var(--blue)');
   html += memRow('⚠️','Activation peak (vLLM v0.17+)', capFmtGB(actPeak), 'C=0.11 × batch × hidden × bytes', 'var(--amber,#f90)');
   html += memRow('✅','Non-torch (CUDA ctx + drivers)', capFmtGB(nonTorch), 'stable across versions', 'var(--text3)');
@@ -4659,6 +4703,83 @@ function fetchHFModel(id,statusId,cb){
       var attOffset = cfg.attn_layer_offset||1;
       kvLayers = Math.floor((layers - attOffset) / attPeriod) + 1;
       archLabel='Hybrid SSM/Jamba ('+kvLayers+' attn of '+layers+' total)';
+    }
+
+    // Cat 3: Hybrid sliding/global — CONFIG-DRIVEN detection (no model_type hardcoding)
+    // Detects any model with sliding window attention regardless of architecture name.
+    // Checks multiple config patterns used by different model families:
+    if(kvArchType === 'standard'){
+
+      // Pattern A: sliding_window_pattern array [true=global, false=sliding]
+      // Used by: Mistral 3, some newer models
+      var swPattern = cfg.sliding_window_pattern;
+      if(Array.isArray(swPattern) && swPattern.length > 0){
+        kvArchType = 'hybrid_sliding';
+        kvGlobalLayers  = swPattern.filter(function(x){ return x===true||x==='global'||x==='full'; }).length;
+        kvSlidingLayers = swPattern.filter(function(x){ return x===false||x==='sliding'||x==='local'; }).length;
+        slidingWindow   = cfg.sliding_window_size || cfg.sliding_window || 1024;
+        kvLayers        = layers;
+        archLabel = 'Hybrid sliding/global (pattern: '+kvGlobalLayers+'g+'+kvSlidingLayers+'s)';
+      }
+
+      // Pattern B: attention_layers_type array (alternative naming)
+      // Used by: some Qwen and other models
+      var altLayerArr = cfg.attention_layers_type || cfg.attn_type_per_layer;
+      if(!kvGlobalLayers && Array.isArray(altLayerArr)){
+        var altSet = {};
+        altLayerArr.forEach(function(t){ altSet[t]=true; });
+        if(altSet['sliding'] && (altSet['full']||altSet['global'])){
+          kvArchType = 'hybrid_sliding';
+          kvGlobalLayers  = altLayerArr.filter(function(t){ return t==='full'||t==='global'; }).length;
+          kvSlidingLayers = altLayerArr.filter(function(t){ return t==='sliding'||t==='local'; }).length;
+          slidingWindow   = cfg.sliding_window_size || cfg.sliding_window || 1024;
+          kvLayers        = layers;
+          archLabel = 'Hybrid sliding/global ('+kvGlobalLayers+'g+'+kvSlidingLayers+'s)';
+        }
+      }
+
+      // Pattern C: global_attn_every_n_layers + sliding_window_size (periodic pattern)
+      // Used by: Gemma 3 and models with regular global/local alternation
+      var swSize   = cfg.sliding_window_size || cfg.sliding_window || 0;
+      var gPeriod  = cfg.global_attn_every_n_layers || cfg.full_attention_every_n_layers || 0;
+      if(!kvGlobalLayers && swSize > 0 && gPeriod > 0){
+        kvArchType      = 'hybrid_sliding';
+        kvGlobalLayers  = Math.ceil(layers / gPeriod);
+        kvSlidingLayers = layers - kvGlobalLayers;
+        slidingWindow   = swSize;
+        globalKvHeads   = cfg.num_global_key_value_heads || kvHeads;
+        globalHeadDim   = cfg.global_head_dim || headDim;
+        kvLayers        = layers;
+        archLabel = 'Hybrid sliding/global (1 global per '+gPeriod+' layers, win='+swSize+')';
+      }
+
+      // Pattern D: has sliding_window but no explicit global pattern
+      // Treat as all-sliding (window only, no global layers)
+      // This is a conservative fallback — all layers use window context
+      if(!kvGlobalLayers && swSize > 0 && !layerArr){
+        // All layers are sliding — this is still Cat 3 but global count = 0
+        // (or every N layers is global per attention_bias_type if present)
+        var hasGlobalField = cfg.num_global_key_value_heads || cfg.global_head_dim;
+        if(hasGlobalField){
+          kvArchType      = 'hybrid_sliding';
+          kvGlobalLayers  = Math.ceil(layers * 0.167); // default 1:5 global:sliding ratio
+          kvSlidingLayers = layers - kvGlobalLayers;
+          slidingWindow   = swSize;
+          kvLayers        = layers;
+          archLabel = 'Hybrid sliding/global (inferred, win='+swSize+')';
+        }
+        // If no global fields, keep as standard (pure sliding window = same KV as standard)
+      }
+
+      // Cat 6: Hybrid linear attention — linear layers have no KV cache
+      // Used by: RWKV-Hybrid, future hybrid linear models
+      // Config signal: linear_attn_layer_ids OR layer_types with 'linear'
+      var linIds = cfg.linear_attn_layer_ids || cfg.linear_layers;
+      if(Array.isArray(linIds) && linIds.length > 0){
+        kvArchType = 'hybrid_linear';
+        kvLayers   = layers - linIds.length; // only standard attn layers have KV
+        archLabel  = 'Hybrid linear attn ('+kvLayers+' standard + '+linIds.length+' linear)';
+      }
     }
 
     // Cat 2: MoE — detected separately, doesn't change KV formula
