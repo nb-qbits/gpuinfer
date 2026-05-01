@@ -2776,7 +2776,7 @@ button{font-family:var(--sans);cursor:pointer}
     <div class="geo-chips" id="geo-chips"></div>
   </div>
   <div class="footer-right">
-    <span class="mono" style="font-size:10px" id="version-display">real-time inference only · v<span id="nav-version">6.4.3</span></span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
+    <span class="mono" style="font-size:10px" id="version-display">real-time inference only · v<span id="nav-version">6.4.4</span></span><span id="price-freshness-badge" style="font-size:10px;margin-left:8px;color:var(--text4)"></span>
     <a href="https://github.com/nb-qbits/gpu-calc" target="_blank">&#9733; GitHub</a>
     <span style="color:var(--text4)">&copy; gpu.calc · CC BY-NC 4.0</span>
   </div>
@@ -3185,7 +3185,7 @@ function openLayer(id){
 // ===== CORE MATH =====
 // weightsGB defined in compat layer below
 
-var APP_VERSION = '6.4.3'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
+var APP_VERSION = '6.4.4'; var APP_VERSION_COMPAT = '5.9.5'; // gpu.calc v6.0.0
 document.addEventListener('DOMContentLoaded',function(){var el=document.getElementById('nav-version');if(el)el.textContent=APP_VERSION;});
 // ===== CAPACITY ENGINE v6.0.0 =====
 // Layer-by-layer: weights → KV → GPU specs → memory fit → replicas → cost
@@ -4591,15 +4591,26 @@ function fetchHFModel(id,statusId,cb){
     var cfg=d.config||{};
     var params=d.safetensors&&d.safetensors.total?d.safetensors.total/1e9:
       cfg.num_parameters?cfg.num_parameters/1e9:
-      12*(cfg.num_hidden_layers||32)*Math.pow(cfg.hidden_size||4096,2)/1e9;
+      (function(){ var lc=cfg.text_config||cfg.language_config||cfg;
+        return 12*(lc.num_hidden_layers||cfg.num_hidden_layers||32)*Math.pow(lc.hidden_size||cfg.hidden_size||4096,2)/1e9;
+      })();
     params=Math.max(1,Math.round(params));
 
     // Base fields (every model has these)
-    var layers = cfg.num_hidden_layers||32;
-    var numHeads = cfg.num_attention_heads||32;
-    var kvHeads = cfg.num_key_value_heads||numHeads;
-    var headDim = cfg.head_dim||(Math.round((cfg.hidden_size||4096)/numHeads));
-    var attn = (cfg.num_key_value_heads&&cfg.num_key_value_heads<numHeads)?'gqa':'mha';
+    // FIX-043: Many vision/multimodal models (Gemma 3, LLaVA, PaliGemma) wrap
+    // language model config under cfg.text_config or cfg.language_config.
+    // Always resolve to the language config for KV/attention fields.
+    var lcfg = cfg.text_config || cfg.language_config || cfg.llm_config || cfg;
+    // Use lcfg for all attention/layer fields, fall back to cfg if missing
+    var layers   = lcfg.num_hidden_layers   || cfg.num_hidden_layers   || 32;
+    var numHeads = lcfg.num_attention_heads || cfg.num_attention_heads || 32;
+    var kvHeads  = lcfg.num_key_value_heads || cfg.num_key_value_heads || numHeads;
+    var headDim  = lcfg.head_dim || cfg.head_dim
+                   || (Math.round((lcfg.hidden_size||cfg.hidden_size||4096)/numHeads));
+    var hiddenSize = lcfg.hidden_size || cfg.hidden_size || 4096;
+    var attn = (kvHeads < numHeads) ? 'gqa' : 'mha';
+    // Also resolve nested fields used for arch detection
+    var lcfgFull = Object.assign({}, cfg, lcfg); // merge: lcfg overrides cfg
 
     // ===== ARCHITECTURE DETECTION (6 categories) =====
     var kvArchType='standard', kvLayers=null, kvGlobalLayers=null, kvSlidingLayers=null;
@@ -4609,20 +4620,20 @@ function fetchHFModel(id,statusId,cb){
     var archLabel = 'Standard';
 
     // Cat 5: DeepSeek MLA — check first (most specific)
-    if(cfg.kv_lora_rank){
+    if(lcfgFull.kv_lora_rank){
       kvArchType='mla';
-      kvLoraRank=cfg.kv_lora_rank;
-      qkRopeHeadDim=cfg.qk_rope_head_dim||64;
+      kvLoraRank=lcfgFull.kv_lora_rank;
+      qkRopeHeadDim=lcfgFull.qk_rope_head_dim||64;
       archLabel='MLA (DeepSeek)';
     }
     // Cat 6: Hybrid linear attention (Qwen3-Next)
-    else if(cfg.linear_key_head_dim){
+    else if(lcfgFull.linear_key_head_dim){
       // Linear layers = fixed state (like SSM), standard layers = normal KV
       // For now, treat as standard with reduced layers (conservative)
       var attLayers = 0;
-      if(Array.isArray(cfg.layer_types)){
-        for(var li=0;li<cfg.layer_types.length;li++){
-          var lt=cfg.layer_types[li];
+      if(Array.isArray(lcfgFull.layer_types)){
+        for(var li=0;li<lcfgFull.layer_types.length;li++){
+          var lt=lcfgFull.layer_types[li];
           if(lt==='full_attention'||lt==='attention'||lt==='full'||lt==='global') attLayers++;
         }
       } else { attLayers = layers; }
@@ -4634,15 +4645,15 @@ function fetchHFModel(id,statusId,cb){
     // Different models use different field names:
     //   layer_types:       Gemma 4, LiquidAI (values: sliding/full/conv/full_attention)
     //   layers_block_type: Zamba2 (values: mamba/hybrid)
-    var layerArr = Array.isArray(cfg.layer_types) && cfg.layer_types.length>0 ? cfg.layer_types :
-                   Array.isArray(cfg.layers_block_type) && cfg.layers_block_type.length>0 ? cfg.layers_block_type : null;
+    var layerArr = Array.isArray(lcfgFull.layer_types) && lcfgFull.layer_types.length>0 ? lcfgFull.layer_types :
+                   Array.isArray(lcfgFull.layers_block_type) && lcfgFull.layers_block_type.length>0 ? lcfgFull.layers_block_type : null;
 
     // Also check hybrid_layer_ids (Zamba2 shortcut — directly lists attention layer indices)
-    if(!layerArr && Array.isArray(cfg.hybrid_layer_ids) && cfg.hybrid_layer_ids.length>0){
+    if(!layerArr && Array.isArray(lcfgFull.hybrid_layer_ids) && lcfgFull.hybrid_layer_ids.length>0){
       kvArchType='hybrid_ssm';
-      kvLayers = cfg.hybrid_layer_ids.length;
+      kvLayers = lcfgFull.hybrid_layer_ids.length;
       // Use kv_channels if available for head_dim override
-      if(cfg.kv_channels) headDim = cfg.kv_channels;
+      if(lcfgFull.kv_channels) headDim = lcfgFull.kv_channels;
       archLabel='Hybrid SSM ('+kvLayers+' attn of '+layers+' total)';
     }
     else if(layerArr){
@@ -4657,7 +4668,7 @@ function fetchHFModel(id,statusId,cb){
           if(t==='full'||t==='global') gCount++;
           else if(t==='sliding') sCount++;
         });
-        var shared = cfg.num_kv_shared_layers||0;
+        var shared = lcfgFull.num_kv_shared_layers||0;
         // Shared layers are the LAST N — walk from end to count types
         var sharedG=0, sharedS=0;
         if(shared>0){
@@ -4668,9 +4679,9 @@ function fetchHFModel(id,statusId,cb){
         }
         kvGlobalLayers = gCount - sharedG;
         kvSlidingLayers = sCount - sharedS;
-        slidingWindow = cfg.sliding_window||1024;
-        globalKvHeads = cfg.num_global_key_value_heads||kvHeads;
-        globalHeadDim = cfg.global_head_dim||headDim;
+        slidingWindow = lcfgFull.sliding_window||1024;
+        globalKvHeads = lcfgFull.num_global_key_value_heads||kvHeads;
+        globalHeadDim = lcfgFull.global_head_dim||headDim;
         kvLayers = kvGlobalLayers + kvSlidingLayers;
         archLabel='Hybrid sliding/global ('+kvGlobalLayers+'g+'+kvSlidingLayers+'s, '+shared+' shared)';
       }
@@ -4683,7 +4694,7 @@ function fetchHFModel(id,statusId,cb){
         });
         kvLayers = attLayers2 || 1;
         // Zamba2: use kv_channels for head_dim if available
-        if(cfg.kv_channels) headDim = cfg.kv_channels;
+        if(lcfgFull.kv_channels) headDim = lcfgFull.kv_channels;
         archLabel='Hybrid SSM ('+kvLayers+' attn of '+layers+' total)';
       }
       else {
@@ -4697,10 +4708,10 @@ function fetchHFModel(id,statusId,cb){
       }
     }
     // Cat 4: Jamba-style (no layer_types array, but attn_layer_period)
-    else if(cfg.attn_layer_period){
+    else if(lcfgFull.attn_layer_period){
       kvArchType='hybrid_ssm';
-      var attPeriod = cfg.attn_layer_period;
-      var attOffset = cfg.attn_layer_offset||1;
+      var attPeriod = lcfgFull.attn_layer_period;
+      var attOffset = lcfgFull.attn_layer_offset||1;
       kvLayers = Math.floor((layers - attOffset) / attPeriod) + 1;
       archLabel='Hybrid SSM/Jamba ('+kvLayers+' attn of '+layers+' total)';
     }
@@ -4712,19 +4723,19 @@ function fetchHFModel(id,statusId,cb){
 
       // Pattern A: sliding_window_pattern array [true=global, false=sliding]
       // Used by: Mistral 3, some newer models
-      var swPattern = cfg.sliding_window_pattern;
+      var swPattern = lcfgFull.sliding_window_pattern;
       if(Array.isArray(swPattern) && swPattern.length > 0){
         kvArchType = 'hybrid_sliding';
         kvGlobalLayers  = swPattern.filter(function(x){ return x===true||x==='global'||x==='full'; }).length;
         kvSlidingLayers = swPattern.filter(function(x){ return x===false||x==='sliding'||x==='local'; }).length;
-        slidingWindow   = cfg.sliding_window_size || cfg.sliding_window || 1024;
+        slidingWindow   = lcfgFull.sliding_window_size || lcfgFull.sliding_window || 1024;
         kvLayers        = layers;
         archLabel = 'Hybrid sliding/global (pattern: '+kvGlobalLayers+'g+'+kvSlidingLayers+'s)';
       }
 
       // Pattern B: attention_layers_type array (alternative naming)
       // Used by: some Qwen and other models
-      var altLayerArr = cfg.attention_layers_type || cfg.attn_type_per_layer;
+      var altLayerArr = lcfgFull.attention_layers_type || lcfgFull.attn_type_per_layer;
       if(!kvGlobalLayers && Array.isArray(altLayerArr)){
         var altSet = {};
         altLayerArr.forEach(function(t){ altSet[t]=true; });
@@ -4732,7 +4743,7 @@ function fetchHFModel(id,statusId,cb){
           kvArchType = 'hybrid_sliding';
           kvGlobalLayers  = altLayerArr.filter(function(t){ return t==='full'||t==='global'; }).length;
           kvSlidingLayers = altLayerArr.filter(function(t){ return t==='sliding'||t==='local'; }).length;
-          slidingWindow   = cfg.sliding_window_size || cfg.sliding_window || 1024;
+          slidingWindow   = lcfgFull.sliding_window_size || lcfgFull.sliding_window || 1024;
           kvLayers        = layers;
           archLabel = 'Hybrid sliding/global ('+kvGlobalLayers+'g+'+kvSlidingLayers+'s)';
         }
@@ -4740,15 +4751,15 @@ function fetchHFModel(id,statusId,cb){
 
       // Pattern C: global_attn_every_n_layers + sliding_window_size (periodic pattern)
       // Used by: Gemma 3 and models with regular global/local alternation
-      var swSize   = cfg.sliding_window_size || cfg.sliding_window || 0;
-      var gPeriod  = cfg.global_attn_every_n_layers || cfg.full_attention_every_n_layers || 0;
+      var swSize   = lcfgFull.sliding_window_size || lcfgFull.sliding_window || 0;
+      var gPeriod  = lcfgFull.global_attn_every_n_layers || lcfgFull.full_attention_every_n_layers || 0;
       if(!kvGlobalLayers && swSize > 0 && gPeriod > 0){
         kvArchType      = 'hybrid_sliding';
         kvGlobalLayers  = Math.ceil(layers / gPeriod);
         kvSlidingLayers = layers - kvGlobalLayers;
         slidingWindow   = swSize;
-        globalKvHeads   = cfg.num_global_key_value_heads || kvHeads;
-        globalHeadDim   = cfg.global_head_dim || headDim;
+        globalKvHeads   = lcfgFull.num_global_key_value_heads || kvHeads;
+        globalHeadDim   = lcfgFull.global_head_dim || headDim;
         kvLayers        = layers;
         archLabel = 'Hybrid sliding/global (1 global per '+gPeriod+' layers, win='+swSize+')';
       }
@@ -4759,7 +4770,7 @@ function fetchHFModel(id,statusId,cb){
       if(!kvGlobalLayers && swSize > 0 && !layerArr){
         // All layers are sliding — this is still Cat 3 but global count = 0
         // (or every N layers is global per attention_bias_type if present)
-        var hasGlobalField = cfg.num_global_key_value_heads || cfg.global_head_dim;
+        var hasGlobalField = lcfgFull.num_global_key_value_heads || lcfgFull.global_head_dim;
         if(hasGlobalField){
           kvArchType      = 'hybrid_sliding';
           kvGlobalLayers  = Math.ceil(layers * 0.167); // default 1:5 global:sliding ratio
@@ -4774,7 +4785,7 @@ function fetchHFModel(id,statusId,cb){
       // Cat 6: Hybrid linear attention — linear layers have no KV cache
       // Used by: RWKV-Hybrid, future hybrid linear models
       // Config signal: linear_attn_layer_ids OR layer_types with 'linear'
-      var linIds = cfg.linear_attn_layer_ids || cfg.linear_layers;
+      var linIds = lcfgFull.linear_attn_layer_ids || cfg.linear_layers;
       if(Array.isArray(linIds) && linIds.length > 0){
         kvArchType = 'hybrid_linear';
         kvLayers   = layers - linIds.length; // only standard attn layers have KV
@@ -4783,9 +4794,9 @@ function fetchHFModel(id,statusId,cb){
     }
 
     // Cat 2: MoE — detected separately, doesn't change KV formula
-    if(cfg.num_local_experts||cfg.num_experts){
-      activeExperts = cfg.num_experts_per_tok||cfg.num_activated_experts||2;
-      totalExperts = cfg.num_local_experts||cfg.num_experts||8;
+    if(lcfgFull.num_local_experts||lcfgFull.num_experts){
+      activeExperts = lcfgFull.num_experts_per_tok||lcfgFull.num_activated_experts||2;
+      totalExperts = lcfgFull.num_local_experts||lcfgFull.num_experts||8;
       if(kvArchType==='standard') kvArchType='moe';
       archLabel += (archLabel!=='Standard'?' + ':'')+('MoE '+activeExperts+'/'+totalExperts);
     }
